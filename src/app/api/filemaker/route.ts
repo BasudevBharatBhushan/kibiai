@@ -13,7 +13,7 @@ interface FetchFmDataRequest {
   host: string;
   database: string;
   version: string; // e.g., "vLatest" or "v2"
-  data_fetching_protocol: "dataapi" | "odataapi"; // currently only dataapi
+  data_fetching_protocol: "dataapi" | "odataapi" | "o-data-api" | "data-api"; // currently only dataapi
   session_token?: string;
 }
 
@@ -52,10 +52,10 @@ export async function POST(req: NextRequest) {
     /**
      * Helper: Convert filter operators from Data API style to OData style
      */
-    function convertOperator(value: string) {
+    function convertOperator(value: string, key: string) {
       if (value.includes("...")) {
         const [d1, d2] = value.split("...").map((v) => v.trim());
-        return `ge ${d1} and le ${d2}`;
+        return `ge '${d1}' and ${key} le '${d2}'`;
       }
       if (value.startsWith(">=")) return `ge ${value.slice(2).trim()}`;
       if (value.startsWith(">")) return `gt ${value.slice(1).trim()}`;
@@ -65,13 +65,16 @@ export async function POST(req: NextRequest) {
       if (value.startsWith("=")) return `eq ${value.slice(1).trim()}`;
       if (value === "*") return `ne null`;
       if (value === "") return `eq null`;
-      return `eq ${value.trim()}`;
+      return `contains(${key},'${value.trim()}')`;
     }
 
     /**
      * ODATA API Flow
      */
-    if (data_fetching_protocol === "odataapi") {
+    if (
+      data_fetching_protocol === "odataapi" ||
+      data_fetching_protocol === "o-data-api"
+    ) {
       const batchBoundary = `b_${crypto.randomUUID()}`;
       let batchBody = "";
 
@@ -90,7 +93,7 @@ export async function POST(req: NextRequest) {
           if (filter) {
             for (const key in filter) {
               const val = filter[key];
-              queryParts.push(`${key} ${convertOperator(val)}`);
+              queryParts.push(`${key} ${convertOperator(val, key)}`);
             }
           }
           queryParts.push(`${p_key_field} eq '${pk}'`);
@@ -111,7 +114,7 @@ export async function POST(req: NextRequest) {
         if (filter) {
           for (const key in filter) {
             const val = filter[key];
-            queryParts.push(`${key} ${convertOperator(val)}`);
+            queryParts.push(`${key} ${convertOperator(val, key)}`);
           }
         }
         const filterQuery = queryParts.length
@@ -127,9 +130,9 @@ export async function POST(req: NextRequest) {
           `--${batchBoundary}--`;
       }
 
-      const odataUrl = `${host}/fmi/odata/${version}/${database}/$batch`;
+      const odataUrl = `https://${host}/fmi/odata/${version}/${database}/$batch`;
 
-      console.log(batchBody);
+      // console.log(batchBody);
 
       const odataRes = await fetch(odataUrl, {
         method: "POST",
@@ -148,7 +151,7 @@ export async function POST(req: NextRequest) {
       }
 
       const odataData = await odataRes.text(); // raw batch response
-      console.log(batchBody);
+      // console.log(batchBody);
 
       const parsedData = parseODataBatchResponse(odataData);
       return NextResponse.json({
@@ -160,7 +163,10 @@ export async function POST(req: NextRequest) {
     /**
      * DATA API Flow
      */
-    if (data_fetching_protocol !== "dataapi") {
+    if (
+      data_fetching_protocol !== "dataapi" &&
+      data_fetching_protocol !== "data-api"
+    ) {
       return NextResponse.json(
         { error: "Unsupported protocol" },
         { status: 400 }
@@ -172,7 +178,7 @@ export async function POST(req: NextRequest) {
     // Step 1: Validate token
     let isTokenValid = false;
     if (token) {
-      const validateUrl = `${host}/fmi/data/${version}/validateSession`;
+      const validateUrl = `https://${host}/fmi/data/${version}/validateSession`;
       const validateRes = await fetch(validateUrl, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
@@ -183,7 +189,7 @@ export async function POST(req: NextRequest) {
 
     // Step 2: Login if token is invalid or missing
     if (!isTokenValid) {
-      const loginUrl = `${host}/fmi/data/${version}/databases/${database}/sessions`;
+      const loginUrl = `https://${host}/fmi/data/${version}/databases/${database}/sessions`;
       const loginRes = await fetch(loginUrl, {
         method: "POST",
         headers: {
@@ -205,12 +211,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 3: Prepare find or get request
-    let fetchUrl = `${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records`;
+    let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records`;
     let method = "GET";
     let body: any = undefined;
 
     if (filter || (p_keys && p_keys.length > 0)) {
-      fetchUrl = `${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
+      fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
       method = "POST";
 
       if (p_keys && p_keys.length > 0) {

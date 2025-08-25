@@ -36,7 +36,7 @@ export default function HomePage() {
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4 bg-amber-700">Users</h1>
       <Link href="/reports">
-        <button>Go to Reports</button>
+        <button className=" border-2 bg-amber-300">Go to Reports</button>
       </Link>
 
       <form onSubmit={handleSubmit} className="mb-6">
@@ -58,11 +58,12 @@ export default function HomePage() {
       </form>
 
       <ul>
-        {users.map((user) => (
-          <li key={user._id}>
-            {user.name} - {user.email}
-          </li>
-        ))}
+        {Array.isArray(users) &&
+          users.map((user) => (
+            <li key={user._id}>
+              {user.name} - {user.email}
+            </li>
+          ))}
       </ul>
     </div>
   );

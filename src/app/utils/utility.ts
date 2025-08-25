@@ -1,72 +1,4 @@
-// /**
-//  * Parses a raw OData batch response into a flat JSON array of records
-//  * @param response - Raw OData batch response (as string)
-//  * @returns Array of parsed record objects
-//  */
-// export function parseODataBatchResponse(response: string): any[] {
-//   const boundaryRegex = /--b_[\w-]+/; // match boundary marker like --b_...
-//   const parts = response
-//     .split(boundaryRegex)
-//     .map((part) => part.trim())
-//     .filter(Boolean);
-
-//   const results: any[] = [];
-//   //   console.log(parts);
-
-//   for (const part of parts) {
-//     // Find the first JSON block in this part
-//     const startPos = part.indexOf("{");
-//     const endPos = part.lastIndexOf("}");
-
-//     if (startPos >= 0 && endPos > startPos) {
-//       const jsonBlock = part.substring(startPos, endPos + 1);
-
-//       try {
-//         const parsed = JSON.parse(jsonBlock);
-
-//         // Extract the "value" array if it exists
-//         if (parsed.value && Array.isArray(parsed.value)) {
-//           results.push(...parsed.value);
-//         }
-//       } catch (e) {
-//         // Ignore malformed JSON blocks
-//         console.log("Malformed JSON block, skipping:", e);
-//         continue;
-//       }
-//     }
-//   }
-
-//   return results;
-// }
-// export function parseODataBatchResponse(response: string): any[] {
-//   const boundaryRegex = /--b_[^\r\n]+/g; // match full boundary lines
-//   const parts = response
-//     .split(boundaryRegex)
-//     .map((part) => part.trim())
-//     .filter(Boolean);
-
-//   const results: any[] = [];
-
-//   for (const part of parts) {
-//     // Extract *all* JSON blocks inside the part
-//     const jsonMatches = part.match(/{[\s\S]*?}/g);
-//     if (!jsonMatches) continue;
-
-//     for (const match of jsonMatches) {
-//       try {
-//         const parsed = JSON.parse(match);
-
-//         if (parsed.value && Array.isArray(parsed.value)) {
-//           results.push(...parsed.value);
-//         }
-//       } catch (e) {
-//         console.log("Skipping malformed JSON:", e);
-//       }
-//     }
-//   }
-
-//   return results;
-// }
+// Utility functions for handling FileMaker records and OData batch responses
 
 interface FileMakerRecord {
   fieldData: Record<string, any>;
@@ -96,6 +28,8 @@ export function parseODataBatchResponse(response: string): {
   if (!boundaryMatch) {
     throw new Error("No boundary found in response");
   }
+
+  console.log(response);
 
   const boundary = boundaryMatch[0];
 
