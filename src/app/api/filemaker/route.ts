@@ -1,0 +1,213 @@
+import { NextRequest, NextResponse } from "next/server";
+
+interface FetchFmDataRequest {
+  raw_dataset: string;
+  p_key_field: string;
+  p_keys?: string[];
+  filter?: Record<string, any>;
+  table: string;
+  host: string;
+  database: string;
+  version: string; // e.g., "vLatest" or "v2"
+  data_fetching_protocol: "dataapi" | "odataapi"; // currently only dataapi
+  session_token?: string;
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { message: "FileMaker API endpoint is live" },
+    { status: 200 }
+  );
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const {
+      raw_dataset,
+      p_key_field,
+      p_keys,
+      filter,
+      table,
+      host,
+      database,
+      version,
+      data_fetching_protocol,
+      session_token,
+    }: FetchFmDataRequest = await req.json();
+
+    // Extract Basic token from Authorization header
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith("Basic ")) {
+      return NextResponse.json(
+        { error: "Missing or invalid Authorization header" },
+        { status: 400 }
+      );
+    }
+    const basic_token = authHeader.replace("Basic ", "");
+
+    /**
+     * 1) Handle Data API Flow
+     */
+    if (data_fetching_protocol === "dataapi") {
+      let token = session_token;
+
+      // Step 1: Validate token
+      let isTokenValid = false;
+      if (token) {
+        const validateUrl = `${host}/fmi/data/${version}/validateSession`;
+        const validateRes = await fetch(validateUrl, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        isTokenValid = validateRes.ok;
+      }
+
+      // Step 2: Login if token is invalid or missing
+      if (!isTokenValid) {
+        const loginUrl = `${host}/fmi/data/${version}/databases/${database}/sessions`;
+        const loginRes = await fetch(loginUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${basic_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (!loginRes.ok) {
+          return NextResponse.json(
+            { error: "Failed to authenticate with FileMaker Data API" },
+            { status: 401 }
+          );
+        }
+
+        const loginData = await loginRes.json();
+        token = loginData.response.token;
+      }
+
+      // Step 3: Prepare find or get request
+      let fetchUrl = `${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records`;
+      let method = "GET";
+      let body: any = undefined;
+
+      if (filter || (p_keys && p_keys.length > 0)) {
+        fetchUrl = `${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
+        method = "POST";
+
+        if (p_keys && p_keys.length > 0) {
+          const queries = p_keys.map((pk) => ({
+            [p_key_field]: pk,
+            ...(filter || {}),
+          }));
+          body = JSON.stringify({ query: queries });
+        } else {
+          body = JSON.stringify({ query: [filter || {}] });
+        }
+      }
+
+      // Step 4: Fetch data
+      const dataRes = await fetch(fetchUrl, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        ...(body ? { body } : {}),
+      });
+
+      if (!dataRes.ok) {
+        return NextResponse.json(
+          { error: "Failed to fetch data from FileMaker" },
+          { status: dataRes.status }
+        );
+      }
+
+      const data = await dataRes.json();
+
+      // Step 5: Return data + token
+      return NextResponse.json({
+        token,
+        data: data.response?.data || [],
+      });
+    }
+
+    /**
+     * 2) Handle OData Flow
+     */
+    if (data_fetching_protocol === "odataapi") {
+      const batchBoundary = `b_${crypto.randomUUID()}`;
+      let batchBody = "";
+
+      if (p_keys && p_keys.length > 0) {
+        // Multiple GET requests for OR-like operation
+        p_keys.forEach((pk, index) => {
+          const queryParts = [];
+          if (filter) {
+            for (const key in filter) {
+              queryParts.push(`${key} eq '${filter[key]}'`);
+            }
+          }
+          queryParts.push(`${p_key_field} eq '${pk}'`);
+          const filterQuery = queryParts.join(" and ");
+
+          batchBody +=
+            `--${batchBoundary}\n` +
+            `Content-Type: application/http\n` +
+            `Content-ID: ${index + 1}\n\n` +
+            `GET /fmi/odata/${version}/${database}/${table}?$filter=${filterQuery} HTTP/1.1\n` +
+            `Content-Length: 0\n\n\n`;
+        });
+        batchBody += `--${batchBoundary}--`;
+      } else {
+        // Single GET request (no p_keys)
+        const queryParts = [];
+        if (filter) {
+          for (const key in filter) {
+            queryParts.push(`${key} eq '${filter[key]}'`);
+          }
+        }
+        const filterQuery = queryParts.length
+          ? `?$filter=${queryParts.join(" and ")}`
+          : "";
+        batchBody =
+          `--${batchBoundary}\n` +
+          `Content-Type: application/http\n` +
+          `Content-ID: 1\n\n` +
+          `GET /fmi/odata/${version}/${database}/${table}${filterQuery} HTTP/1.1\n` +
+          `Content-Length: 0\n\n\n` +
+          `--${batchBoundary}--`;
+      }
+
+      const odataUrl = `${host}/fmi/odata/${version}/${database}/$batch`;
+
+      const odataRes = await fetch(odataUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${basic_token}`,
+          "Content-Type": `multipart/mixed; boundary=${batchBoundary}`,
+        },
+        body: batchBody,
+      });
+
+      if (!odataRes.ok) {
+        return NextResponse.json(
+          { error: "Failed to fetch data via OData" },
+          { status: odataRes.status }
+        );
+      }
+
+      const odataData = await odataRes.text();
+
+      return NextResponse.json({
+        data: odataData,
+      });
+    }
+
+    return NextResponse.json(
+      { error: "Unsupported data fetching protocol" },
+      { status: 400 }
+    );
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
