@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  parseODataBatchResponse,
+  flattenFileMakerRecords,
+} from "@/app/utils/utility";
 
 interface FetchFmDataRequest {
   raw_dataset: string;
@@ -46,129 +50,74 @@ export async function POST(req: NextRequest) {
     const basic_token = authHeader.replace("Basic ", "");
 
     /**
-     * 1) Handle Data API Flow
+     * Helper: Convert filter operators from Data API style to OData style
      */
-    if (data_fetching_protocol === "dataapi") {
-      let token = session_token;
-
-      // Step 1: Validate token
-      let isTokenValid = false;
-      if (token) {
-        const validateUrl = `${host}/fmi/data/${version}/validateSession`;
-        const validateRes = await fetch(validateUrl, {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        isTokenValid = validateRes.ok;
+    function convertOperator(value: string) {
+      if (value.includes("...")) {
+        const [d1, d2] = value.split("...").map((v) => v.trim());
+        return `ge ${d1} and le ${d2}`;
       }
-
-      // Step 2: Login if token is invalid or missing
-      if (!isTokenValid) {
-        const loginUrl = `${host}/fmi/data/${version}/databases/${database}/sessions`;
-        const loginRes = await fetch(loginUrl, {
-          method: "POST",
-          headers: {
-            Authorization: `Basic ${basic_token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        });
-
-        if (!loginRes.ok) {
-          return NextResponse.json(
-            { error: "Failed to authenticate with FileMaker Data API" },
-            { status: 401 }
-          );
-        }
-
-        const loginData = await loginRes.json();
-        token = loginData.response.token;
-      }
-
-      // Step 3: Prepare find or get request
-      let fetchUrl = `${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records`;
-      let method = "GET";
-      let body: any = undefined;
-
-      if (filter || (p_keys && p_keys.length > 0)) {
-        fetchUrl = `${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
-        method = "POST";
-
-        if (p_keys && p_keys.length > 0) {
-          const queries = p_keys.map((pk) => ({
-            [p_key_field]: pk,
-            ...(filter || {}),
-          }));
-          body = JSON.stringify({ query: queries });
-        } else {
-          body = JSON.stringify({ query: [filter || {}] });
-        }
-      }
-
-      // Step 4: Fetch data
-      const dataRes = await fetch(fetchUrl, {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        ...(body ? { body } : {}),
-      });
-
-      if (!dataRes.ok) {
-        return NextResponse.json(
-          { error: "Failed to fetch data from FileMaker" },
-          { status: dataRes.status }
-        );
-      }
-
-      const data = await dataRes.json();
-
-      // Step 5: Return data + token
-      return NextResponse.json({
-        token,
-        data: data.response?.data || [],
-      });
+      if (value.startsWith(">=")) return `ge ${value.slice(2).trim()}`;
+      if (value.startsWith(">")) return `gt ${value.slice(1).trim()}`;
+      if (value.startsWith("<=")) return `le ${value.slice(2).trim()}`;
+      if (value.startsWith("<")) return `lt ${value.slice(1).trim()}`;
+      if (value.startsWith("==")) return `eq ${value.slice(2).trim()}`;
+      if (value.startsWith("=")) return `eq ${value.slice(1).trim()}`;
+      if (value === "*") return `ne null`;
+      if (value === "") return `eq null`;
+      return `eq ${value.trim()}`;
     }
 
     /**
-     * 2) Handle OData Flow
+     * ODATA API Flow
      */
     if (data_fetching_protocol === "odataapi") {
       const batchBoundary = `b_${crypto.randomUUID()}`;
       let batchBody = "";
 
       if (p_keys && p_keys.length > 0) {
-        // Multiple GET requests for OR-like operation
+        if (!p_key_field) {
+          return NextResponse.json(
+            { error: "p_key_field is required when p_keys are provided" },
+            { status: 400 }
+          );
+        }
+
+        // Multiple GETs for OR operation
         p_keys.forEach((pk, index) => {
-          const queryParts = [];
+          const queryParts: string[] = [];
+
           if (filter) {
             for (const key in filter) {
-              queryParts.push(`${key} eq '${filter[key]}'`);
+              const val = filter[key];
+              queryParts.push(`${key} ${convertOperator(val)}`);
             }
           }
           queryParts.push(`${p_key_field} eq '${pk}'`);
+
           const filterQuery = queryParts.join(" and ");
 
           batchBody +=
             `--${batchBoundary}\n` +
             `Content-Type: application/http\n` +
             `Content-ID: ${index + 1}\n\n` +
-            `GET /fmi/odata/${version}/${database}/${table}?$filter=${filterQuery} HTTP/1.1\n` +
+            `GET /fmi/odata/${version}/${database}/${table}?filter=${filterQuery} HTTP/1.1\n` +
             `Content-Length: 0\n\n\n`;
         });
         batchBody += `--${batchBoundary}--`;
       } else {
-        // Single GET request (no p_keys)
-        const queryParts = [];
+        // Single GET if no p_keys
+        const queryParts: string[] = [];
         if (filter) {
           for (const key in filter) {
-            queryParts.push(`${key} eq '${filter[key]}'`);
+            const val = filter[key];
+            queryParts.push(`${key} ${convertOperator(val)}`);
           }
         }
         const filterQuery = queryParts.length
-          ? `?$filter=${queryParts.join(" and ")}`
+          ? `?filter=${queryParts.join(" and ")}`
           : "";
+
         batchBody =
           `--${batchBoundary}\n` +
           `Content-Type: application/http\n` +
@@ -179,6 +128,8 @@ export async function POST(req: NextRequest) {
       }
 
       const odataUrl = `${host}/fmi/odata/${version}/${database}/$batch`;
+
+      console.log(batchBody);
 
       const odataRes = await fetch(odataUrl, {
         method: "POST",
@@ -196,17 +147,119 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const odataData = await odataRes.text();
+      const odataData = await odataRes.text(); // raw batch response
+      console.log(batchBody);
 
+      const parsedData = parseODataBatchResponse(odataData);
       return NextResponse.json({
-        data: odataData,
+        data: parsedData.records,
+        recordCount: parsedData.recordCount,
       });
     }
 
-    return NextResponse.json(
-      { error: "Unsupported data fetching protocol" },
-      { status: 400 }
-    );
+    /**
+     * DATA API Flow
+     */
+    if (data_fetching_protocol !== "dataapi") {
+      return NextResponse.json(
+        { error: "Unsupported protocol" },
+        { status: 400 }
+      );
+    }
+
+    let token = session_token;
+
+    // Step 1: Validate token
+    let isTokenValid = false;
+    if (token) {
+      const validateUrl = `${host}/fmi/data/${version}/validateSession`;
+      const validateRes = await fetch(validateUrl, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      isTokenValid = validateRes.ok;
+    }
+
+    // Step 2: Login if token is invalid or missing
+    if (!isTokenValid) {
+      const loginUrl = `${host}/fmi/data/${version}/databases/${database}/sessions`;
+      const loginRes = await fetch(loginUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${basic_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!loginRes.ok) {
+        return NextResponse.json(
+          { error: "Failed to authenticate with FileMaker Data API" },
+          { status: 401 }
+        );
+      }
+
+      const loginData = await loginRes.json();
+      token = loginData.response.token;
+    }
+
+    // Step 3: Prepare find or get request
+    let fetchUrl = `${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records`;
+    let method = "GET";
+    let body: any = undefined;
+
+    if (filter || (p_keys && p_keys.length > 0)) {
+      fetchUrl = `${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
+      method = "POST";
+
+      if (p_keys && p_keys.length > 0) {
+        if (!p_key_field) {
+          return NextResponse.json(
+            { error: "p_key_field is required when p_keys are provided" },
+            { status: 400 }
+          );
+        }
+        const queries = p_keys.map((pk) => ({
+          [p_key_field]: pk,
+          ...(filter || {}),
+        }));
+        body = JSON.stringify({ query: queries });
+      } else {
+        body = JSON.stringify({ query: [filter || {}] });
+      }
+    }
+
+    // Step 4: Fetch data
+    const dataRes = await fetch(fetchUrl, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      ...(body ? { body } : {}),
+    });
+
+    if (!dataRes.ok) {
+      return NextResponse.json(
+        { error: "Failed to fetch data from FileMaker" },
+        { status: dataRes.status }
+      );
+    }
+
+    const data = await dataRes.json();
+
+    //Step 5: Extract the fieldData and put in a flat array of data:[{}, {}, ...]
+    const FlattenedRecord = data.response
+      ? flattenFileMakerRecords(data.response.data)
+      : [];
+
+    // Step 5: Return data + token
+    return NextResponse.json({
+      token,
+      data: FlattenedRecord,
+      recordCount: data.response?.dataInfo?.foundCount || 0,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

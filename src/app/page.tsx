@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type User = {
   _id: string;
@@ -34,6 +35,9 @@ export default function HomePage() {
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4 bg-amber-700">Users</h1>
+      <Link href="/reports">
+        <button>Go to Reports</button>
+      </Link>
 
       <form onSubmit={handleSubmit} className="mb-6">
         <input
