@@ -1,29 +1,71 @@
 "use client";
 import React, { useState } from "react";
+import DynamicReport from "../../components/DynamicReport";
+//Import the CSS
+import "./reports.css";
 
 interface ReportSetupJson {
-  host: string;
-  data_fetching_protocol: string;
-  tables: Record<string, any>;
-  relationships: Array<{
+  host?: string; // from old
+  data_fetching_protocol?: string; // from old
+  tables: Record<
+    string,
+    {
+      file: string;
+      username: string;
+      password: string;
+      layout?: string | null; // optional for new compatibility
+      fields?: Record<
+        string,
+        {
+          label: string;
+          prefix?: string;
+          suffix?: string;
+        }
+      >;
+    }
+  >; // merged: old had any, new has defined fields
+  relationships?: Array<{
     primary_table: string;
     joined_table: string;
-    source: string;
-    target: string;
+    source?: string; // optional for new compatibility
+    target?: string; // optional for new compatibility
   }>;
 }
-
 interface ReportConfigJson {
   db_defination: Array<{
     primary_table: string;
     joined_table: string;
-    source?: string;
-    target?: string;
+    source?: string; // optional for new
+    target?: string; // optional for new
     fetch_order: number;
   }>;
-  date_range_fields?: Record<string, Record<string, string>>;
-  filters?: Record<string, Record<string, any>>;
-  [key: string]: any;
+  report_columns?: Array<{
+    table: string;
+    field: string;
+  }>; // from new (optional to avoid breaking old)
+  group_by_fields?: Record<
+    string,
+    {
+      table: string;
+      field: string;
+      display?: Array<{ table: string; field: string }>;
+      group_total?: Array<{ table: string; field: string }>;
+    }
+  >; // from new
+  date_range_fields?: Record<string, Record<string, string>>; // from old
+  filters?: Record<string, Record<string, any>>; // from old
+  [key: string]: any; // to allow future extensions (from old)
+}
+
+interface FetchOrderDataset {
+  order: number;
+  data: Array<{
+    PrimaryKey: string;
+    [key: string]: any;
+  }>;
+}
+interface StitchResult {
+  BodyField: Record<string, any>[];
 }
 
 interface FetchStatus {
@@ -58,6 +100,10 @@ class IndexedDBManager {
         }
         if (!db.objectStoreNames.contains("pkeys")) {
           db.createObjectStore("pkeys", { keyPath: "fetch_order" });
+        }
+        // Create results store separately
+        if (!db.objectStoreNames.contains("results")) {
+          db.createObjectStore("results", { keyPath: "result_type" });
         }
       };
     });
@@ -122,6 +168,34 @@ class IndexedDBManager {
       datasetsRequest.onsuccess = pkeysRequest.onsuccess = complete;
     });
   }
+
+  async saveStitchResult(
+    dbManager: IndexedDBManager,
+    stitchResult: any,
+    resultType: string = "report_body_json"
+  ): Promise<void> {
+    if (!dbManager.db) throw new Error("Database not initialized");
+
+    return new Promise((resolve, reject) => {
+      const transaction = dbManager.db!.transaction(["results"], "readwrite");
+      const store = transaction.objectStore("results");
+
+      // Handle transaction errors
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(new Error("Transaction aborted"));
+
+      const request = store.put({
+        result_type: resultType,
+        data: stitchResult,
+      });
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        console.log("Stitch result saved to IndexedDB");
+        resolve();
+      };
+    });
+  }
 }
 
 const ReportDataFetcher: React.FC = () => {
@@ -131,6 +205,7 @@ const ReportDataFetcher: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [dbManager] = useState(() => new IndexedDBManager());
   const [logs, setLogs] = useState<string[]>([]);
+  const [reportStructuredData, setReportStructuredData] = useState<any>(null);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -382,6 +457,8 @@ const ReportDataFetcher: React.FC = () => {
       }
 
       addLog("✅ All fetch orders completed successfully!");
+      //Stich results
+      const stitchResult = await stitch(setupJson, configJson, dbManager);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -412,7 +489,7 @@ const ReportDataFetcher: React.FC = () => {
       data_fetching_protocol: "data-api",
       tables: {
         Contacts: {
-          file: "KibiAiDemo",
+          file: "KibiAIDemo",
           username: "Developer",
           password: "adminbiz",
           layout: "Contacts",
@@ -445,9 +522,37 @@ const ReportDataFetcher: React.FC = () => {
               type: "text",
               label: "Country",
             },
-            ContactType: {
+          },
+        },
+        Leads: {
+          file: "KibiAIDemo",
+          username: "Developer",
+          password: "adminbiz",
+          layout: "Leads",
+          fields: {
+            LeadID: {
               type: "text",
-              label: "ContactType",
+              label: "LeadID",
+            },
+            ContactID: {
+              type: "text",
+              label: "ContactID",
+            },
+            LeadSource: {
+              type: "text",
+              label: "LeadSource",
+            },
+            LeadStatus: {
+              type: "text",
+              label: "LeadStatus",
+            },
+            CreatedDate: {
+              type: "date",
+              label: "CreatedDate",
+            },
+            Notes: {
+              type: "text",
+              label: "Notes",
             },
           },
         },
@@ -455,7 +560,7 @@ const ReportDataFetcher: React.FC = () => {
           file: "KibiAIDemo",
           username: "Developer",
           password: "adminbiz",
-          layout: null,
+          layout: "Activity",
           fields: {
             ActivityID: {
               type: "text",
@@ -487,167 +592,43 @@ const ReportDataFetcher: React.FC = () => {
             },
           },
         },
-        Leads: {
-          file: "KibiAIDemo",
-          username: "Developer",
-          password: "adminbiz",
-          layout: null,
-          fields: {
-            LeadID: {
-              type: "text",
-              label: "LeadID",
-            },
-            ContactID: {
-              type: "text",
-              label: "ContactID",
-            },
-            LeadSource: {
-              type: "text",
-              label: "LeadSource",
-            },
-            LeadStatus: {
-              type: "text",
-              label: "LeadStatus",
-            },
-            CreatedDate: {
-              type: "date",
-              label: "CreatedDate",
-            },
-            Notes: {
-              type: "text",
-              label: "Notes",
-            },
-          },
-        },
         Opportunity: {
           file: "KibiAIDemo",
           username: "Developer",
           password: "adminbiz",
-          layout: null,
+          layout: "Opportunity",
           fields: {
             OpportunityID: {
               type: "text",
-              label: "OpportunityID",
+              label: "Opportunity ID",
             },
             ActivityID: {
               type: "text",
-              label: "ActivityID",
+              label: "Activity ID",
             },
             OpportunityStage: {
               type: "text",
-              label: "OpportunityStage",
+              label: "Opportunity Stage",
             },
             EstimatedValue: {
               type: "number",
-              label: "EstimatedValue",
+              label: "Estimated Value",
             },
             CloseDate: {
               type: "date",
-              label: "CloseDate",
+              label: "Close Date",
             },
             SalesID: {
               type: "text",
-              label: "SalesID",
-            },
-          },
-        },
-        Sales: {
-          file: "KibiAIDemo",
-          username: "Developer",
-          password: "adminbiz",
-          layout: null,
-          fields: {
-            SalesID: {
-              type: "text",
-              label: "SalesID",
-            },
-            ContactID: {
-              type: "text",
-              label: "ContactID",
-            },
-            SalesDate: {
-              type: "date",
-              label: "SalesDate",
-            },
-            PaymentStatus: {
-              type: "text",
-              label: "PaymentStatus",
-            },
-          },
-        },
-        Products: {
-          file: "KibiAIDemo",
-          username: "Developer",
-          password: "adminbiz",
-          layout: null,
-          fields: {
-            ItemNo: {
-              type: "text",
-              label: "ItemNo",
-            },
-            ItemName: {
-              type: "text",
-              label: "ItemName",
-            },
-            UnitPrice: {
-              type: "text",
-              label: "UnitPrice",
-            },
-            Inventory: {
-              type: "text",
-              label: "Inventory",
-            },
-            Category: {
-              type: "text",
-              label: "Category",
-            },
-            IsActive: {
-              type: "text",
-              label: "IsActive",
-            },
-          },
-        },
-        SalesLines: {
-          file: "KibiAIDemo",
-          username: "Developer",
-          password: "adminbiz",
-          layout: null,
-          fields: {
-            LineID: {
-              type: "text",
-              label: "LineID",
-            },
-            SalesID: {
-              type: "text",
-              label: "SalesID",
-            },
-            ItemNo: {
-              type: "text",
-              label: "ItemNo",
-            },
-            Quantity: {
-              type: "number",
-              label: "Quantity",
-            },
-            LinePrice: {
-              type: "number",
-              label: "LinePrice",
-            },
-            ProfitMargin: {
-              type: "number",
-              label: "ProfitMargin",
-            },
-            Tax: {
-              type: "number",
-              label: "Tax",
+              label: "Sales ID",
             },
           },
         },
       },
       relationships: [
         {
-          primary_table: "Contacts",
-          joined_table: "Leads",
+          primary_table: "Leads",
+          joined_table: "Contacts",
           source: "ContactID",
           target: "ContactID",
         },
@@ -663,24 +644,6 @@ const ReportDataFetcher: React.FC = () => {
           source: "ActivityID",
           target: "ActivityID",
         },
-        {
-          primary_table: "Opportunity",
-          joined_table: "Sales",
-          source: "SalesID",
-          target: "SalesID",
-        },
-        {
-          primary_table: "Sales",
-          joined_table: "SalesLines",
-          source: "SalesID",
-          target: "SalesID",
-        },
-        {
-          primary_table: "SalesLines",
-          joined_table: "Products",
-          source: "ItemNo",
-          target: "ItemNo",
-        },
       ],
     },
 
@@ -692,39 +655,635 @@ const ReportDataFetcher: React.FC = () => {
     {
       db_defination: [
         {
-          primary_table: "Activity",
+          primary_table: "Opportunity",
           joined_table: "",
           fetch_order: 1,
+        },
+        {
+          primary_table: "Opportunity",
+          joined_table: "Activity",
+          source: "ActivityID",
+          target: "ActivityID",
+          fetch_order: 2,
         },
         {
           primary_table: "Activity",
           joined_table: "Leads",
           source: "LeadID",
           target: "LeadID",
-          fetch_order: 2,
+          fetch_order: 3,
         },
         {
           primary_table: "Leads",
           joined_table: "Contacts",
           source: "ContactID",
           target: "ContactID",
-          fetch_order: 3,
+          fetch_order: 4,
         },
       ],
       date_range_fields: {
-        Activity: {
-          DueDate: "04/01/2025...04/30/2025",
+        Opportunity: {
+          CloseDate: "01/01/2025...12/31/2025",
         },
       },
       filters: {
-        Activity: {
-          ActivityType: "*",
+        Opportunity: {
+          OpportunityStage: "*",
         },
       },
+      group_by_fields: {
+        "Opportunity Stage": {
+          table: "Opportunity",
+          field: "OpportunityStage",
+          sort_order: "asc",
+          display: [
+            {
+              table: "Contacts",
+              field: "FullName",
+            },
+            {
+              table: "Leads",
+              field: "LeadSource",
+            },
+          ],
+          group_total: [
+            {
+              table: "Opportunity",
+              field: "EstimatedValue",
+            },
+          ],
+        },
+      },
+      report_columns: [
+        {
+          table: "Opportunity",
+          field: "OpportunityStage",
+        },
+        {
+          table: "Contacts",
+          field: "FullName",
+        },
+        {
+          table: "Leads",
+          field: "LeadSource",
+        },
+        {
+          table: "Opportunity",
+          field: "EstimatedValue",
+        },
+        {
+          table: "Opportunity",
+          field: "CloseDate",
+        },
+        {
+          table: "Opportunity",
+          field: "SalesID",
+        },
+      ],
+      body_sort_order: [
+        {
+          field: "Opportunity Stage",
+          sort_order: "asc",
+        },
+      ],
+      summary_fields: ["Estimated Value"],
+      report_header:
+        "Opportunity Pipeline by Stage with Customer and Lead Info - 2025",
+      response_to_user:
+        "Generating a detailed opportunity pipeline report for 2025, including customer names, lead sources, estimated values, and close dates categorized by opportunity stage.",
     },
     null,
     2
   );
+
+  async function stitch(
+    setupJson: ReportSetupJson,
+    reportStructure: ReportConfigJson,
+    dbManager: IndexedDBManager
+  ): Promise<StitchResult> {
+    try {
+      // Create field label mapping from setup JSON
+      const fieldLabelMap: Record<string, Record<string, string>> = {};
+      Object.keys(setupJson.tables).forEach((tableName) => {
+        const tableFields = setupJson.tables[tableName]?.fields;
+        if (tableFields) {
+          fieldLabelMap[tableName] = {};
+          Object.keys(tableFields).forEach((fieldName) => {
+            fieldLabelMap[tableName][fieldName] = tableFields[fieldName]?.label;
+          });
+        }
+      });
+
+      // Get all required fields from report structure
+      const requiredFields: Array<{
+        table: string;
+        field: string;
+        label: string;
+      }> = [];
+
+      // Add report columns
+      if (reportStructure.report_columns) {
+        reportStructure.report_columns.forEach((col) => {
+          const label =
+            fieldLabelMap[col.table] && fieldLabelMap[col.table][col.field]
+              ? fieldLabelMap[col.table][col.field]
+              : col.field;
+          requiredFields.push({
+            table: col.table,
+            field: col.field,
+            label: label,
+          });
+        });
+      }
+
+      // Add group by fields and their display fields
+      if (reportStructure.group_by_fields) {
+        Object.keys(reportStructure.group_by_fields).forEach((groupKey) => {
+          const group = reportStructure.group_by_fields![groupKey];
+
+          // Add the main group field
+          const mainLabel =
+            fieldLabelMap[group.table] &&
+            fieldLabelMap[group.table][group.field]
+              ? fieldLabelMap[group.table][group.field]
+              : group.field;
+          requiredFields.push({
+            table: group.table,
+            field: group.field,
+            label: mainLabel,
+          });
+
+          // Add display fields
+          if (group.display && Array.isArray(group.display)) {
+            group.display.forEach((displayField) => {
+              const displayLabel =
+                fieldLabelMap[displayField.table] &&
+                fieldLabelMap[displayField.table][displayField.field]
+                  ? fieldLabelMap[displayField.table][displayField.field]
+                  : displayField.field;
+              requiredFields.push({
+                table: displayField.table,
+                field: displayField.field,
+                label: displayLabel,
+              });
+            });
+          }
+
+          // Add group total fields
+          if (group.group_total && Array.isArray(group.group_total)) {
+            group.group_total.forEach((totalField) => {
+              const totalLabel =
+                fieldLabelMap[totalField.table] &&
+                fieldLabelMap[totalField.table][totalField.field]
+                  ? fieldLabelMap[totalField.table][totalField.field]
+                  : totalField.field;
+              requiredFields.push({
+                table: totalField.table,
+                field: totalField.field,
+                label: totalLabel,
+              });
+            });
+          }
+        });
+      }
+
+      // Remove duplicates
+      const uniqueFields = requiredFields.filter(
+        (field, index, self) =>
+          index ===
+          self.findIndex(
+            (f) => f.table === field.table && f.field === field.field
+          )
+      );
+
+      // Build relationship map from report structure
+      const relationshipMap: Record<
+        string,
+        {
+          source: string;
+          target: string;
+          fetchOrder: number;
+          tables: string[];
+        }
+      > = {};
+
+      if (reportStructure.db_defination) {
+        reportStructure.db_defination.forEach((def) => {
+          if (def.joined_table && def.source && def.target) {
+            const key = `${def.primary_table}_${def.joined_table}`;
+            relationshipMap[key] = {
+              source: def.source,
+              target: def.target,
+              fetchOrder: def.fetch_order,
+              tables: [def.primary_table, def.joined_table],
+            };
+          }
+        });
+      }
+
+      // Get datasets from IndexedDB by fetch order
+      const datasetsByOrder: Record<number, any[]> = {};
+
+      // Get sorted fetch orders
+      const fetchOrders = reportStructure.db_defination
+        .map((def) => def.fetch_order)
+        .sort((a, b) => a - b);
+
+      // Fetch datasets from IndexedDB
+      for (const order of fetchOrders) {
+        const dataset = await dbManager.getDataset(order);
+        if (dataset && Array.isArray(dataset)) {
+          // Transform the new data format - extract fields directly from the object
+          datasetsByOrder[order] = dataset.map((record) => ({
+            ...record,
+            _sourceTable: `fetch_order_${order}`,
+            _recordId:
+              record.PrimaryKey || record.recordId || `record_${Math.random()}`,
+          }));
+        }
+      }
+
+      // Start with fetch order 1 as base
+      let resultData: any[] = [];
+      const firstOrder = Math.min(...fetchOrders);
+
+      if (datasetsByOrder[firstOrder]) {
+        resultData = datasetsByOrder[firstOrder].map((record) => ({
+          ...record,
+          _sourceTable: `fetch_order_${firstOrder}`,
+          _recordId: record._recordId,
+        }));
+      }
+
+      // Join with other fetch orders based on relationships
+      for (let i = 1; i < fetchOrders.length; i++) {
+        const currentOrder = fetchOrders[i];
+        if (datasetsByOrder[currentOrder]) {
+          const joinDataset = datasetsByOrder[currentOrder];
+
+          // Find the relationship for this order
+          let relationship: any = null;
+          Object.keys(relationshipMap).forEach((key) => {
+            if (relationshipMap[key].fetchOrder === currentOrder) {
+              relationship = relationshipMap[key];
+            }
+          });
+
+          if (relationship) {
+            // Perform the join
+            const newResultData: any[] = [];
+            resultData.forEach((baseRecord) => {
+              const matchingRecords = joinDataset.filter((joinRecord) => {
+                const baseValue = baseRecord[relationship.source];
+                const joinValue = joinRecord[relationship.target];
+                return (
+                  baseValue !== undefined &&
+                  joinValue !== undefined &&
+                  baseValue.toString() === joinValue.toString()
+                );
+              });
+
+              if (matchingRecords.length > 0) {
+                matchingRecords.forEach((matchRecord) => {
+                  newResultData.push({
+                    ...baseRecord,
+                    ...matchRecord,
+                    _joinedTable: relationship.tables[1],
+                    _joinedRecordId: matchRecord._recordId,
+                  });
+                });
+              } else {
+                // Keep base record even if no matches found (left join behavior)
+                newResultData.push(baseRecord);
+              }
+            });
+            resultData = newResultData;
+          }
+        }
+      }
+
+      // Create final output with proper field labels
+      const bodyFields = resultData.map((record) => {
+        const outputRecord: Record<string, any> = {};
+        uniqueFields.forEach((field) => {
+          const value =
+            record[field.field] !== undefined ? record[field.field] : "--";
+          outputRecord[field.label] = value;
+        });
+        return outputRecord;
+      });
+
+      const stitchResult: StitchResult = {
+        BodyField: bodyFields,
+      };
+
+      // Save the stitched result to IndexedDB
+      console.log(stitchResult);
+      const report_structure_json = generateReportStructure(
+        stitchResult,
+        reportStructure,
+        setupJson
+      );
+
+      await dbManager.saveStitchResult(
+        dbManager,
+        stitchResult,
+        "report_body_json"
+      );
+      await dbManager.saveStitchResult(
+        dbManager,
+        report_structure_json,
+        "report_structure_json"
+      );
+
+      return stitchResult;
+    } catch (error) {
+      throw new Error(
+        `Data stitching failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  }
+
+  function generateReportStructure(
+    stitchResult: StitchResult,
+    reportStructure: ReportConfigJson,
+    setupJson: ReportSetupJson
+  ): any[] {
+    try {
+      // Create field label mapping from setup JSON
+      const fieldLabelMap: Record<string, Record<string, string>> = {};
+      const fieldPrefixMap: Record<string, Record<string, string>> = {};
+      const fieldSuffixMap: Record<string, Record<string, string>> = {};
+
+      // Fix: More explicit null checks for table.fields
+      Object.keys(setupJson.tables || {}).forEach((tableName) => {
+        const table = setupJson.tables?.[tableName];
+        const tableFields = table?.fields;
+
+        if (table && tableFields) {
+          fieldLabelMap[tableName] = {};
+          fieldPrefixMap[tableName] = {};
+          fieldSuffixMap[tableName] = {};
+
+          Object.keys(tableFields).forEach((fieldName) => {
+            const field = tableFields[fieldName];
+            if (field) {
+              fieldLabelMap[tableName][fieldName] = field.label || fieldName;
+              // Store prefix and suffix if they exist
+              if (field.prefix) {
+                fieldPrefixMap[tableName][fieldName] = field.prefix;
+              }
+              if (field.suffix) {
+                fieldSuffixMap[tableName][fieldName] = field.suffix;
+              }
+            }
+          });
+        }
+      });
+
+      // Helper function to get label for a field
+      function getFieldLabel(table: string, field: string): string {
+        return fieldLabelMap[table]?.[field] || field;
+      }
+
+      // Helper function to get prefix for a field label
+      function getFieldPrefix(fieldLabel: string): string | null {
+        for (const tableName in fieldPrefixMap) {
+          const tableFields = fieldPrefixMap[tableName];
+          if (tableFields) {
+            for (const fieldName in tableFields) {
+              if (fieldLabelMap[tableName]?.[fieldName] === fieldLabel) {
+                return tableFields[fieldName];
+              }
+            }
+          }
+        }
+        return null;
+      }
+
+      // Helper function to get suffix for a field label
+      function getFieldSuffix(fieldLabel: string): string | null {
+        for (const tableName in fieldSuffixMap) {
+          const tableFields = fieldSuffixMap[tableName];
+          if (tableFields) {
+            for (const fieldName in tableFields) {
+              if (fieldLabelMap[tableName]?.[fieldName] === fieldLabel) {
+                return tableFields[fieldName];
+              }
+            }
+          }
+        }
+        return null;
+      }
+
+      // Get BodyFieldOrder from report_columns (using labels)
+      const bodyFieldOrder = reportStructure.report_columns
+        ? reportStructure.report_columns.map((col) =>
+            getFieldLabel(col.table, col.field)
+          )
+        : [];
+
+      const result: any[] = [];
+
+      // 1. TitleHeader
+      result.push({
+        TitleHeader: {
+          MainHeading: reportStructure.report_header || "Report",
+          SubHeading: "Kibizsystems.com",
+        },
+      });
+
+      // 2. Subsummary - Handle multiple group_by_fields
+      const excludeLabelsSet = new Set<string>();
+      if (reportStructure.group_by_fields) {
+        Object.keys(reportStructure.group_by_fields).forEach((groupKey) => {
+          const group = reportStructure.group_by_fields?.[groupKey];
+          if (group) {
+            // Get the label for the main field
+            const mainFieldLabel = getFieldLabel(group.table, group.field);
+            excludeLabelsSet.add(mainFieldLabel);
+
+            // Get display field labels
+            const displayLabels: string[] = [];
+            if (group.display && Array.isArray(group.display)) {
+              group.display.forEach((displayField) => {
+                const displayLabel = getFieldLabel(
+                  displayField.table,
+                  displayField.field
+                );
+                excludeLabelsSet.add(displayLabel);
+                displayLabels.push(displayLabel);
+              });
+            }
+
+            // Get subsummary total fields (use labels)
+            const subsummaryTotal: string[] = [];
+            if (group.group_total && Array.isArray(group.group_total)) {
+              group.group_total.forEach((totalField) => {
+                const totalLabel = getFieldLabel(
+                  totalField.table,
+                  totalField.field
+                );
+                subsummaryTotal.push(totalLabel);
+              });
+            }
+
+            result.push({
+              Subsummary: {
+                Sorting: [mainFieldLabel],
+                SubsummaryFields: [mainFieldLabel],
+                SubsummaryTotal: subsummaryTotal,
+                SubsummaryDisplay: displayLabels,
+              },
+            });
+          }
+        });
+      }
+
+      // 3. Body
+      // Filter out fields used in subsummary and subsummary display
+      const filteredBodyFields = bodyFieldOrder.filter(
+        (label) => !excludeLabelsSet.has(label)
+      );
+
+      // Get BodySortOrder from body_sort_order in reportStructure (using labels)
+      const bodySortOrder: Array<{ Column: string; Order: string }> = [];
+      if (reportStructure.body_sort_order) {
+        reportStructure.body_sort_order.forEach((sortItem: any) => {
+          // Find the field label by matching the sort field name with setup labels
+          let fieldLabel: string | null = null;
+
+          // Fix: Separate table.fields check
+          Object.keys(setupJson.tables || {}).forEach((tableName) => {
+            const table = setupJson.tables?.[tableName];
+            const tableFields = table?.fields;
+
+            if (table && tableFields) {
+              Object.keys(tableFields).forEach((fieldName) => {
+                const field = tableFields[fieldName];
+                if (field && field.label === sortItem.field) {
+                  fieldLabel = sortItem.field;
+                }
+              });
+            }
+          });
+
+          // If not found by label, try to find by field name in report columns
+          if (!fieldLabel) {
+            const reportCol = reportStructure.report_columns?.find(
+              (col) => col.field === sortItem.field
+            );
+            if (reportCol) {
+              fieldLabel = getFieldLabel(reportCol.table, reportCol.field);
+            }
+          }
+
+          if (fieldLabel && !excludeLabelsSet.has(fieldLabel)) {
+            bodySortOrder.push({
+              Column: fieldLabel,
+              Order: sortItem.sort_order === "asc" ? "Asc" : "Desc",
+            });
+          }
+        });
+      }
+
+      // Build FieldPrefix and FieldSuffix objects for body fields
+      const fieldPrefix: Record<string, string> = {};
+      const fieldSuffix: Record<string, string> = {};
+      filteredBodyFields.forEach((fieldLabel) => {
+        const prefix = getFieldPrefix(fieldLabel);
+        const suffix = getFieldSuffix(fieldLabel);
+        if (prefix) {
+          fieldPrefix[fieldLabel] = prefix;
+        }
+        if (suffix) {
+          fieldSuffix[fieldLabel] = suffix;
+        }
+      });
+
+      const bodySection = {
+        Body: {
+          BodyField: stitchResult.BodyField,
+          BodyFieldOrder: filteredBodyFields,
+          BodySortOrder: bodySortOrder,
+          FieldPrefix: fieldPrefix,
+          FieldSuffix: fieldSuffix,
+          Sorting: [] as string[],
+        },
+      };
+
+      // Set Sorting from Subsummary.Sorting (if still applicable)
+      if (reportStructure.group_by_fields) {
+        Object.keys(reportStructure.group_by_fields).forEach((groupKey) => {
+          const group = reportStructure.group_by_fields?.[groupKey];
+          if (group) {
+            const mainFieldLabel = getFieldLabel(group.table, group.field);
+            if (filteredBodyFields.includes(mainFieldLabel)) {
+              bodySection.Body.Sorting.push(mainFieldLabel);
+            }
+          }
+        });
+      }
+
+      result.push(bodySection);
+
+      // 4. TrailingGrandSummary
+      const trailingGrandSummary: string[] = [];
+      if (reportStructure.summary_fields) {
+        reportStructure.summary_fields.forEach((summaryField: any) => {
+          // Find the field label by matching the summary field name with setup labels
+          let fieldLabel: string | null = null;
+
+          // Fix: Separate table.fields check here too
+          Object.keys(setupJson.tables || {}).forEach((tableName) => {
+            const table = setupJson.tables?.[tableName];
+            const tableFields = table?.fields;
+
+            if (table && tableFields) {
+              Object.keys(tableFields).forEach((fieldName) => {
+                const field = tableFields[fieldName];
+                if (field && field.label === summaryField) {
+                  fieldLabel = summaryField;
+                }
+              });
+            }
+          });
+
+          // If not found by label, try to find by field name in report columns
+          if (!fieldLabel) {
+            const reportCol = reportStructure.report_columns?.find(
+              (col) => col.field === summaryField
+            );
+            if (reportCol) {
+              fieldLabel = getFieldLabel(reportCol.table, reportCol.field);
+            }
+          }
+
+          if (fieldLabel) {
+            trailingGrandSummary.push(fieldLabel);
+          }
+        });
+      }
+
+      result.push({
+        TrailingGrandSummary: {
+          TrailingGrandSummary: trailingGrandSummary,
+        },
+      });
+
+      setReportStructuredData(result);
+
+      return result;
+    } catch (error) {
+      throw new Error(
+        `Report structure generation failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -824,6 +1383,10 @@ const ReportDataFetcher: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="report-preview">
+        <DynamicReport report_structure_json={reportStructuredData} />
       </div>
     </div>
   );
