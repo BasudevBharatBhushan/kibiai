@@ -1,9 +1,12 @@
 # ===============================
 # 1. Base image
 # ===============================
-FROM node:20-alpine AS base
+FROM node:20-bullseye AS base
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Upgrade npm to latest stable version
+RUN npm install -g npm@11.5.2
 
 # ===============================
 # 2. Install dependencies
@@ -16,16 +19,20 @@ RUN npm ci --legacy-peer-deps
 # 3. Build stage
 # ===============================
 FROM base AS builder
+# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js build (src-based project)
-RUN npm run build
+# Disable Turbopack to avoid internal build errors
+ENV NEXT_PRIVATE_TURBOPACK=false
+
+# Run Next.js build
+RUN npm run build --webpack
 
 # ===============================
 # 4. Production image
 # ===============================
-FROM node:20-alpine AS runner
+FROM node:20-bullseye AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -39,5 +46,8 @@ COPY --from=builder /app/src ./src
 # Expose Next.js port
 EXPOSE 3000
 
-# Start the Next.js production server
+# Run as non-root for safety
+USER node
+
+# Start Next.js production server
 CMD ["npm", "start"]
