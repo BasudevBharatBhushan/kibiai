@@ -1,318 +1,257 @@
-// Utility functions for handling FileMaker records and OData batch responses
-import { InMemoryDataManager } from "@/lib/DataManager";
-import {
-  ReportSetupJson,
-  ReportConfigJson,
-  FetchOrderDataset,
-  StitchResult,
-  ApiResponse,
-  reportSetupSchema,
-  reportConfigSchema,
-} from "@/lib/types";
+// pages/api/generate-report.ts or app/api/generate-report/route.ts (depending on your Next.js setup)
 
-interface FileMakerRecord {
-  fieldData: Record<string, any>;
-  portalData: Record<string, any>;
-  recordId: string;
-  modId: string;
-}
+import { NextApiRequest, NextApiResponse } from "next";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { fetchFmRecord } from "@/app/utils/utility";
 
-interface FlattenedRecord extends Record<string, any> {
-  recordId: string;
-}
-
-import { NextRequest } from "next/server";
-
-export interface FetchFmDataRequest {
-  raw_dataset?: any;
-  p_key_field?: string;
-  p_keys?: string[];
-  filter?: Record<string, string>;
-  table: string;
-  host: string;
-  database: string;
-  version: string;
-  data_fetching_protocol: string;
-  session_token?: string;
-}
-
-export function flattenFileMakerRecords(
-  records: FileMakerRecord[]
-): FlattenedRecord[] {
-  return records.map((record) => ({
-    ...record.fieldData,
-    recordId: record.recordId,
-  }));
-}
-
-export function parseODataBatchResponse(response: string): {
-  records: any[];
-  recordCount: number;
-} {
-  // Extract boundary from the response (looks for --b_ pattern)
-  const boundaryMatch = response.match(/--b_[^\n\r]+/);
-  if (!boundaryMatch) {
-    throw new Error("No boundary found in response");
-  }
-
-  // console.log(response);
-
-  const boundary = boundaryMatch[0];
-
-  // Split response by boundary
-  const parts = response.split(boundary);
-
-  // Array to store all flattened records
-  const results = [];
-  let recordCount = 0;
-
-  // Process each part
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-
-    // Find JSON block (content between first { and last })
-    const startPos = part.indexOf("{");
-    const lastBracePos = part.lastIndexOf("}");
-
-    if (startPos === -1 || lastBracePos === -1 || startPos >= lastBracePos) {
-      continue; // Skip parts without valid JSON
+// Types
+interface ReportSetupJson {
+  host?: string;
+  data_fetching_protocol?: string;
+  tables: Record<
+    string,
+    {
+      file: string;
+      username: string;
+      password: string;
+      layout?: string | null;
+      fields?: Record<
+        string,
+        {
+          label: string;
+          prefix?: string;
+          suffix?: string;
+        }
+      >;
     }
+  >;
+  relationships?: Array<{
+    primary_table: string;
+    joined_table: string;
+    source?: string;
+    target?: string;
+  }>;
+}
 
-    const jsonBlock = part.substring(startPos, lastBracePos + 1);
-
-    try {
-      // Clean the JSON block by replacing invalid '?' values with null
-      // This handles cases where '?' appears as a value (e.g., "QtyAvailable": ?)
-      const cleanedJsonBlock = jsonBlock.replace(
-        /:\s*\?(?=\s*[,}])/g,
-        ": null"
-      );
-
-      // Parse the cleaned JSON block
-      const parsedJson = JSON.parse(cleanedJsonBlock);
-
-      // Extract the "value" array if it exists
-      if (parsedJson.value && Array.isArray(parsedJson.value)) {
-        // Add all records from this part's "value" array to results
-        results.push(...parsedJson.value);
-      }
-      recordCount++;
-    } catch (error: any) {
-      // Skip invalid JSON blocks
-      console.warn("Invalid JSON block found, skipping:", error.message);
-      continue;
+interface ReportConfigJson {
+  db_defination: Array<{
+    primary_table: string;
+    joined_table: string;
+    source?: string;
+    target?: string;
+    fetch_order: number;
+  }>;
+  report_columns?: Array<{
+    table: string;
+    field: string;
+  }>;
+  group_by_fields?: Record<
+    string,
+    {
+      table: string;
+      field: string;
+      display?: Array<{ table: string; field: string }>;
+      group_total?: Array<{ table: string; field: string }>;
     }
-  }
-
-  let result: any = {};
-  result.json = { records: results, recordCount };
-  return result.json;
+  >;
+  date_range_fields?: Record<string, Record<string, string>>;
+  filters?: Record<string, Record<string, any>>;
+  body_sort_order?: Array<{
+    field: string;
+    sort_order: string;
+  }>;
+  summary_fields?: string[];
+  report_header?: string;
+  response_to_user?: string;
+  [key: string]: any;
 }
 
-function convertOperator(value: string, key: string) {
-  if (value.includes("...")) {
-    const [d1, d2] = value.split("...").map((v) => v.trim());
-    return `ge '${d1}' and ${key} le '${d2}'`;
-  }
-  if (value.startsWith(">=")) return `ge ${value.slice(2).trim()}`;
-  if (value.startsWith(">")) return `gt ${value.slice(1).trim()}`;
-  if (value.startsWith("<=")) return `le ${value.slice(2).trim()}`;
-  if (value.startsWith("<")) return `lt ${value.slice(1).trim()}`;
-  if (value.startsWith("==")) return `eq ${value.slice(2).trim()}`;
-  if (value.startsWith("=")) return `eq ${value.slice(1).trim()}`;
-  if (value === "*") return `ne null`;
-  if (value === "") return `eq null`;
-  return `contains(${key},'${value.trim()}')`;
+interface FetchOrderDataset {
+  order: number;
+  data: Array<{
+    PrimaryKey: string;
+    [key: string]: any;
+  }>;
 }
 
-export async function fetchFmRecord(
-  reqBody: FetchFmDataRequest,
-  basic_token: string
+interface StitchResult {
+  BodyField: Record<string, any>[];
+}
+
+interface ApiResponse {
+  status: "ok" | "error";
+  detail?: string;
+  nextJSError?: any;
+  report_structure_json?: any;
+  stitch_result?: StitchResult;
+  processing_logs?: string[];
+}
+
+// Validation Schemas
+const reportSetupSchema = z.object({
+  host: z.string().optional(),
+  data_fetching_protocol: z.string().optional(),
+  tables: z.record(
+    z.string(),
+    z.object({
+      file: z.string(),
+      username: z.string(),
+      password: z.string(),
+      layout: z.string().nullable().optional(),
+      fields: z
+
+        .record(
+          z.string(),
+          z.object({
+            label: z.string(),
+            prefix: z.string().optional(),
+            suffix: z.string().optional(),
+          })
+        )
+        .optional(),
+    })
+  ),
+  relationships: z
+    .array(
+      z.object({
+        primary_table: z.string(),
+        joined_table: z.string(),
+        source: z.string().optional(),
+        target: z.string().optional(),
+      })
+    )
+    .optional(),
+});
+
+const reportConfigSchema = z.object({
+  db_defination: z.array(
+    z.object({
+      primary_table: z.string(),
+      joined_table: z.string(),
+      source: z.string().optional(),
+      target: z.string().optional(),
+      fetch_order: z.number(),
+    })
+  ),
+  report_columns: z
+    .array(
+      z.object({
+        table: z.string(),
+        field: z.string(),
+      })
+    )
+    .optional(),
+  group_by_fields: z
+    .record(
+      z.string(),
+      z.object({
+        table: z.string(),
+        field: z.string(),
+        display: z
+          .array(
+            z.object({
+              table: z.string(),
+              field: z.string(),
+            })
+          )
+          .optional(),
+        group_total: z
+          .array(
+            z.object({
+              table: z.string(),
+              field: z.string(),
+            })
+          )
+          .optional(),
+      })
+    )
+    .optional(),
+  date_range_fields: z
+    .record(z.string(), z.record(z.string(), z.string()))
+    .optional(),
+  filters: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+  body_sort_order: z
+    .array(
+      z.object({
+        field: z.string(),
+        sort_order: z.string(),
+      })
+    )
+    .optional(),
+  summary_fields: z.array(z.string()).optional(),
+  report_header: z.string().optional(),
+  response_to_user: z.string().optional(),
+});
+
+// In-memory storage for processing
+class InMemoryDataManager {
+  private datasets: Record<number, any[]> = {};
+  private pkeys: Record<number, string[]> = {};
+  private results: Record<string, any> = {};
+  private logs: string[] = [];
+
+  storeDataset(fetchOrder: number, data: any[]): void {
+    this.datasets[fetchOrder] = data;
+  }
+
+  storePkeys(fetchOrder: number, pkeys: string[]): void {
+    this.pkeys[fetchOrder] = pkeys;
+  }
+
+  getDataset(fetchOrder: number): any[] | null {
+    return this.datasets[fetchOrder] || null;
+  }
+
+  getPkeys(fetchOrder: number): string[] | null {
+    return this.pkeys[fetchOrder] || null;
+  }
+
+  saveResult(resultType: string, data: any): void {
+    this.results[resultType] = data;
+  }
+
+  getResult(resultType: string): any | null {
+    return this.results[resultType] || null;
+  }
+
+  addLog(message: string): void {
+    const timestamp = new Date().toLocaleTimeString();
+    this.logs.push(`[${timestamp}] ${message}`);
+  }
+
+  getLogs(): string[] {
+    return this.logs;
+  }
+
+  clearAll(): void {
+    this.datasets = {};
+    this.pkeys = {};
+    this.results = {};
+    this.logs = [];
+  }
+}
+
+// Helper Functions
+function buildFilters(
+  table: string,
+  configFilters?: Record<string, Record<string, any>>,
+  dateRangeFields?: Record<string, Record<string, string>>
 ) {
-  const {
-    p_key_field,
-    p_keys,
-    filter,
-    table,
-    host,
-    database,
-    version,
-    data_fetching_protocol,
-    session_token,
-  } = reqBody;
+  const filters: Record<string, any> = {};
 
-  // console.log(reqBody);
-  // --- ODATA API Flow ---
-  if (
-    data_fetching_protocol === "odataapi" ||
-    data_fetching_protocol === "o-data-api"
-  ) {
-    const batchBoundary = `b_${crypto.randomUUID()}`;
-    let batchBody = "";
-
-    if (p_keys && p_keys.length > 0) {
-      if (!p_key_field)
-        throw new Error("p_key_field is required when p_keys are provided");
-
-      p_keys.forEach((pk, index) => {
-        const queryParts: string[] = [];
-
-        if (filter) {
-          for (const key in filter) {
-            const val = filter[key];
-            queryParts.push(`${key} ${convertOperator(val, key)}`);
-          }
-        }
-        queryParts.push(`${p_key_field} eq '${pk}'`);
-
-        const filterQuery = queryParts.join(" and ");
-
-        batchBody +=
-          `--${batchBoundary}\n` +
-          `Content-Type: application/http\n` +
-          `Content-ID: ${index + 1}\n\n` +
-          `GET /fmi/odata/${version}/${database}/${table}?filter=${filterQuery} HTTP/1.1\n` +
-          `Content-Length: 0\n\n\n`;
-      });
-      batchBody += `--${batchBoundary}--`;
-    } else {
-      const queryParts: string[] = [];
-      if (filter) {
-        for (const key in filter) {
-          const val = filter[key];
-          queryParts.push(`${key} ${convertOperator(val, key)}`);
-        }
-      }
-      const filterQuery = queryParts.length
-        ? `?filter=${queryParts.join(" and ")}`
-        : "";
-
-      batchBody =
-        `--${batchBoundary}\n` +
-        `Content-Type: application/http\n` +
-        `Content-ID: 1\n\n` +
-        `GET /fmi/odata/${version}/${database}/${table}${filterQuery} HTTP/1.1\n` +
-        `Content-Length: 0\n\n\n` +
-        `--${batchBoundary}--`;
-    }
-
-    const odataUrl = `https://${host}/fmi/odata/${version}/${database}/$batch`;
-
-    const odataRes = await fetch(odataUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${basic_token}`,
-        "Content-Type": `multipart/mixed; boundary=${batchBoundary}`,
-      },
-      body: batchBody,
-    });
-
-    if (!odataRes.ok)
-      throw new Error(`Failed to fetch data via OData: ${odataRes.status}`);
-
-    const odataData = await odataRes.text();
-    const parsedData = parseODataBatchResponse(odataData);
-
-    return {
-      data: parsedData.records,
-      recordCount: parsedData.recordCount,
-    };
+  if (configFilters && configFilters[table]) {
+    Object.assign(filters, configFilters[table]);
   }
 
-  // --- DATA API Flow ---
-  if (
-    data_fetching_protocol !== "dataapi" &&
-    data_fetching_protocol !== "data-api"
-  ) {
-    throw new Error("Unsupported protocol");
+  if (dateRangeFields && dateRangeFields[table]) {
+    Object.assign(filters, dateRangeFields[table]);
   }
 
-  let token = session_token;
-
-  // Step 1: Validate token
-  let isTokenValid = false;
-  if (token) {
-    const validateUrl = `https://${host}/fmi/data/${version}/validateSession`;
-    const validateRes = await fetch(validateUrl, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    isTokenValid = validateRes.ok;
-  }
-
-  // Step 2: Login if token is invalid or missing
-  if (!isTokenValid) {
-    const loginUrl = `https://${host}/fmi/data/${version}/databases/${database}/sessions`;
-    const loginRes = await fetch(loginUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${basic_token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
-    });
-
-    if (!loginRes.ok)
-      throw new Error("Failed to authenticate with FileMaker Data API");
-
-    const loginData = await loginRes.json();
-    token = loginData.response.token;
-  }
-
-  // Step 3: Prepare find or get request
-  let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records`;
-  let method = "GET";
-  let body: any = undefined;
-
-  if (filter || (p_keys && p_keys.length > 0)) {
-    fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
-    method = "POST";
-
-    if (p_keys && p_keys.length > 0) {
-      if (!p_key_field)
-        throw new Error("p_key_field is required when p_keys are provided");
-      const queries = p_keys.map((pk) => ({
-        [p_key_field]: pk,
-        ...(filter || {}),
-      }));
-      body = JSON.stringify({ query: queries });
-    } else {
-      body = JSON.stringify({ query: [filter || {}] });
-    }
-  }
-
-  // Step 4: Fetch data
-  const dataRes = await fetch(fetchUrl, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body } : {}),
-  });
-
-  if (!dataRes.ok)
-    throw new Error(`Failed to fetch data from FileMaker: ${dataRes.status}`);
-
-  const data = await dataRes.json();
-
-  // Step 5: Extract the fieldData and put in a flat array
-  const FlattenedRecord = data.response
-    ? flattenFileMakerRecords(data.response.data)
-    : [];
-
-  return {
-    token,
-    data: FlattenedRecord,
-    recordCount: data.response?.dataInfo?.foundCount || 0,
-  };
+  return Object.keys(filters).length > 0 ? filters : {};
 }
 
-export function extractPkeysFromData(
-  data: any[],
-  sourceField: string
-): string[] {
+function extractPkeysFromData(data: any[], sourceField: string): string[] {
   const pkeys = data
     .map((record) => record[sourceField])
     .filter((key) => key != null && key !== "")
@@ -321,7 +260,126 @@ export function extractPkeysFromData(
   return [...new Set(pkeys)];
 }
 
-export async function stitch(
+async function fetchDataFromAPI(
+  table: string,
+  setupJson: ReportSetupJson,
+  filters: Record<string, any>,
+  pKeyField?: string,
+  pKeys?: string[]
+): Promise<any[]> {
+  const tableConfig = setupJson.tables[table];
+  if (!tableConfig) {
+    throw new Error(`Table configuration not found: ${table}`);
+  }
+
+  const isDataApi =
+    setupJson.data_fetching_protocol === "dataapi" ||
+    setupJson.data_fetching_protocol === "data-api";
+
+  const payload = {
+    raw_dataset: "",
+    p_key_field: pKeyField ?? "",
+    p_keys: Array.isArray(pKeys) ? pKeys : [],
+    filter: filters ?? {},
+    table: isDataApi ? tableConfig.layout?.trim() || table : table,
+    host: setupJson.host ?? "",
+    database: tableConfig.file ?? "",
+    version: isDataApi ? "vLatest" : "v4",
+    data_fetching_protocol: setupJson.data_fetching_protocol ?? "",
+    session_token: isDataApi ? "" : "", // always empty string, safe default
+  };
+
+  const token = Buffer.from(
+    `${tableConfig.username}:${tableConfig.password}`
+  ).toString("base64");
+
+  //   const response = await fetch(
+  //     `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/filemaker`,
+  //     {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Authorization: `Basic ${Buffer.from(
+  //           `${tableConfig.username}:${tableConfig.password}`
+  //         ).toString("base64")}`,
+  //       },
+  //       body: JSON.stringify(payload),
+  //     }
+  //   );
+
+  const response = await fetchFmRecord(payload, token);
+
+  //   if (!response.ok) {
+  //     throw new Error(
+  //       `API call failed: ${response.status} ${response.statusText}`
+  //     );
+  //   }
+
+  const result = response;
+  return result.data || [];
+}
+
+async function processFetchOrder(
+  fetchDef: ReportConfigJson["db_defination"][0],
+  setupJson: ReportSetupJson,
+  configJson: ReportConfigJson,
+  dataManager: InMemoryDataManager,
+  previousDataset?: any[]
+): Promise<{ data: any[]; nextPkeys: string[] }> {
+  const { fetch_order, primary_table, joined_table, source, target } = fetchDef;
+  const mainTable = fetch_order === 1 ? primary_table : joined_table;
+
+  dataManager.addLog(
+    `Processing fetch order ${fetch_order} for table: ${mainTable}`
+  );
+
+  const filters = buildFilters(
+    mainTable,
+    configJson.filters,
+    configJson.date_range_fields
+  );
+
+  try {
+    let pKeyField: string | undefined;
+    let pKeysToUse: string[] | undefined;
+
+    if (fetch_order === 1) {
+      pKeyField = undefined;
+      pKeysToUse = undefined;
+    } else {
+      pKeyField = source;
+      if (previousDataset && source) {
+        pKeysToUse = extractPkeysFromData(previousDataset, source);
+        dataManager.addLog(
+          `Using ${pKeysToUse.length} pkeys from previous dataset field: ${source}`
+        );
+      } else {
+        pKeysToUse = [];
+      }
+    }
+
+    const data = await fetchDataFromAPI(
+      mainTable,
+      setupJson,
+      filters,
+      pKeyField,
+      pKeysToUse
+    );
+
+    dataManager.storeDataset(fetch_order, data);
+    dataManager.addLog(
+      `Stored ${data.length} records for fetch order ${fetch_order}`
+    );
+
+    return { data, nextPkeys: [] };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    throw new Error(`Fetch order ${fetch_order} failed: ${errorMessage}`);
+  }
+}
+
+async function stitch(
   setupJson: ReportSetupJson,
   reportStructure: ReportConfigJson,
   dataManager: InMemoryDataManager
@@ -551,144 +609,7 @@ export async function stitch(
   }
 }
 
-export async function processFetchOrder(
-  fetchDef: ReportConfigJson["db_defination"][0],
-  setupJson: ReportSetupJson,
-  configJson: ReportConfigJson,
-  dataManager: InMemoryDataManager,
-  previousDataset?: any[]
-): Promise<{ data: any[]; nextPkeys: string[] }> {
-  const { fetch_order, primary_table, joined_table, source, target } = fetchDef;
-  const mainTable = fetch_order === 1 ? primary_table : joined_table;
-
-  dataManager.addLog(
-    `Processing fetch order ${fetch_order} for table: ${mainTable}`
-  );
-
-  const filters = buildFilters(
-    mainTable,
-    configJson.filters,
-    configJson.date_range_fields
-  );
-
-  try {
-    let pKeyField: string | undefined;
-    let pKeysToUse: string[] | undefined;
-
-    if (fetch_order === 1) {
-      pKeyField = undefined;
-      pKeysToUse = undefined;
-    } else {
-      pKeyField = source;
-      if (previousDataset && source) {
-        pKeysToUse = extractPkeysFromData(previousDataset, source);
-        dataManager.addLog(
-          `Using ${pKeysToUse.length} pkeys from previous dataset field: ${source}`
-        );
-      } else {
-        pKeysToUse = [];
-      }
-    }
-
-    async function fetchDataFromAPI(
-      table: string,
-      setupJson: ReportSetupJson,
-      filters: Record<string, any>,
-      pKeyField?: string,
-      pKeys?: string[]
-    ): Promise<any[]> {
-      const tableConfig = setupJson.tables[table];
-      if (!tableConfig) {
-        throw new Error(`Table configuration not found: ${table}`);
-      }
-
-      const isDataApi =
-        setupJson.data_fetching_protocol === "dataapi" ||
-        setupJson.data_fetching_protocol === "data-api";
-
-      const payload = {
-        raw_dataset: "",
-        p_key_field: pKeyField ?? "",
-        p_keys: Array.isArray(pKeys) ? pKeys : [],
-        filter: filters ?? {},
-        table: isDataApi ? tableConfig.layout?.trim() || table : table,
-        host: setupJson.host ?? "",
-        database: tableConfig.file ?? "",
-        version: isDataApi ? "vLatest" : "v4",
-        data_fetching_protocol: setupJson.data_fetching_protocol ?? "",
-        session_token: isDataApi ? "" : "", // always empty string, safe default
-      };
-
-      const token = Buffer.from(
-        `${tableConfig.username}:${tableConfig.password}`
-      ).toString("base64");
-
-      //   const response = await fetch(
-      //     `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/filemaker`,
-      //     {
-      //       method: "POST",
-      //       headers: {
-      //         "Content-Type": "application/json",
-      //         Authorization: `Basic ${Buffer.from(
-      //           `${tableConfig.username}:${tableConfig.password}`
-      //         ).toString("base64")}`,
-      //       },
-      //       body: JSON.stringify(payload),
-      //     }
-      //   );
-
-      const response = await fetchFmRecord(payload, token);
-
-      //   if (!response.ok) {
-      //     throw new Error(
-      //       `API call failed: ${response.status} ${response.statusText}`
-      //     );
-      //   }
-
-      const result = response;
-      return result.data || [];
-    }
-
-    const data = await fetchDataFromAPI(
-      mainTable,
-      setupJson,
-      filters,
-      pKeyField,
-      pKeysToUse
-    );
-
-    dataManager.storeDataset(fetch_order, data);
-    dataManager.addLog(
-      `Stored ${data.length} records for fetch order ${fetch_order}`
-    );
-
-    return { data, nextPkeys: [] };
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    throw new Error(`Fetch order ${fetch_order} failed: ${errorMessage}`);
-  }
-}
-
-export function buildFilters(
-  table: string,
-  configFilters?: Record<string, Record<string, any>>,
-  dateRangeFields?: Record<string, Record<string, string>>
-) {
-  const filters: Record<string, any> = {};
-
-  if (configFilters && configFilters[table]) {
-    Object.assign(filters, configFilters[table]);
-  }
-
-  if (dateRangeFields && dateRangeFields[table]) {
-    Object.assign(filters, dateRangeFields[table]);
-  }
-
-  return Object.keys(filters).length > 0 ? filters : {};
-}
-
-export function generateReportStructure(
+function generateReportStructure(
   stitchResult: StitchResult,
   reportStructure: ReportConfigJson,
   setupJson: ReportSetupJson
@@ -957,6 +878,160 @@ export function generateReportStructure(
       `Report structure generation failed: ${
         error instanceof Error ? error.message : "Unknown error"
       }`
+    );
+  }
+}
+
+// Main API Handler
+
+export async function POST(req: NextRequest) {
+  const dataManager = new InMemoryDataManager();
+
+  try {
+    const body = await req.json();
+
+    const { report_setup, report_config } = body;
+
+    if (!report_setup || !report_config) {
+      return NextResponse.json(
+        {
+          status: "error",
+          detail: "Both report_setup and report_config are required",
+          nextJSError: "Missing required fields: report_setup, report_config",
+        },
+        { status: 400 }
+      );
+    }
+
+    let setupJson: ReportSetupJson;
+    let configJson: ReportConfigJson;
+
+    try {
+      setupJson =
+        typeof report_setup === "string"
+          ? JSON.parse(report_setup)
+          : report_setup;
+      configJson =
+        typeof report_config === "string"
+          ? JSON.parse(report_config)
+          : report_config;
+    } catch (error) {
+      return NextResponse.json(
+        {
+          status: "error",
+          detail: "Invalid JSON format in request body",
+          nextJSError:
+            error instanceof Error ? error.message : "JSON parsing failed",
+        },
+        { status: 400 }
+      );
+    }
+
+    // validate schemas
+    const setupValidation = reportSetupSchema.safeParse(setupJson);
+    if (!setupValidation.success) {
+      return NextResponse.json(
+        {
+          status: "error",
+          detail: "Invalid report_setup structure",
+          nextJSError: setupValidation.error.issues,
+        },
+        { status: 400 }
+      );
+    }
+
+    const configValidation = reportConfigSchema.safeParse(configJson);
+    if (!configValidation.success) {
+      return NextResponse.json(
+        {
+          status: "error",
+          detail: "Invalid report_config structure",
+          nextJSError: configValidation.error.issues,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Initialize data manager
+    dataManager.clearAll();
+    dataManager.addLog("Data manager initialized and cleared");
+
+    // Sort and process fetch orders
+    const sortedFetchDefs = [...configJson.db_defination].sort(
+      (a, b) => a.fetch_order - b.fetch_order
+    );
+
+    let currentDataset: any[] = [];
+
+    for (let i = 0; i < sortedFetchDefs.length; i++) {
+      const fetchDef = sortedFetchDefs[i];
+
+      const result = await processFetchOrder(
+        fetchDef,
+        setupJson,
+        configJson,
+        dataManager,
+        currentDataset
+      );
+
+      currentDataset = result.data;
+
+      if (i < sortedFetchDefs.length - 1) {
+        const nextFetchDef = sortedFetchDefs[i + 1];
+        if (nextFetchDef.source && currentDataset.length > 0) {
+          const nextPkeys = extractPkeysFromData(
+            currentDataset,
+            nextFetchDef.source
+          );
+          dataManager.storePkeys(nextFetchDef.fetch_order, nextPkeys);
+          dataManager.addLog(
+            `Extracted ${nextPkeys.length} pkeys for next fetch order`
+          );
+
+          if (nextPkeys.length === 0) {
+            dataManager.addLog(`Warning: No pkeys found for next fetch order`);
+          }
+        }
+      }
+    }
+
+    dataManager.addLog("✅ All fetch orders completed successfully!");
+
+    const stitchResult = await stitch(setupJson, configJson, dataManager);
+    dataManager.addLog("✅ Data stitching completed successfully!");
+
+    const reportStructureJson = generateReportStructure(
+      stitchResult,
+      configJson,
+      setupJson
+    );
+    dataManager.addLog(
+      "✅ Report structure generation completed successfully!"
+    );
+    dataManager.saveResult("report_structure_json", reportStructureJson);
+
+    return NextResponse.json(
+      {
+        status: "ok",
+        report_structure_json: reportStructureJson,
+        // stitch_result: stitchResult,
+        processing_logs: dataManager.getLogs(),
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    dataManager.addLog(`❌ Process failed: ${errorMessage}`);
+
+    return NextResponse.json(
+      {
+        status: "error",
+        detail: errorMessage,
+        nextJSError: error instanceof Error ? error : "Unknown server error",
+        processing_logs: dataManager.getLogs(),
+      },
+      { status: 500 }
     );
   }
 }

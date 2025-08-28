@@ -191,7 +191,7 @@ class IndexedDBManager {
 
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
-        console.log("Stitch result saved to IndexedDB");
+        // console.log("Stitch result saved to IndexedDB");
         resolve();
       };
     });
@@ -978,7 +978,7 @@ const ReportDataFetcher: React.FC = () => {
       };
 
       // Save the stitched result to IndexedDB
-      console.log(stitchResult);
+      // console.log(stitchResult);
       const report_structure_json = generateReportStructure(
         stitchResult,
         reportStructure,
