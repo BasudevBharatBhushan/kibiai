@@ -1,53 +1,56 @@
 # ===============================
-# 1. Base image
+# 1. Base + deps stage
 # ===============================
-FROM node:20-bullseye AS base
+FROM node:20-bullseye AS deps
 WORKDIR /app
-ENV NODE_ENV=production
 
-# Upgrade npm to latest stable version
+# Copy lock files and package.json
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+
+# Install dependencies inside Linux container
+RUN npm ci --legacy-peer-deps
+
+# Upgrade npm (optional, can be done here)
 RUN npm install -g npm@11.5.2
 
 # ===============================
-# 2. Install dependencies
+# 2. Build stage
 # ===============================
-FROM base AS deps
-COPY package.json package-lock.json* pnpm-lock.yaml* ./
-RUN npm ci --legacy-peer-deps
+FROM node:20-bullseye AS builder
+WORKDIR /app
 
-# ===============================
-# 3. Build stage
-# ===============================
-FROM base AS builder
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Disable Turbopack to avoid internal build errors
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PRIVATE_TURBOPACK=false
 
-# Run Next.js build
-RUN npm run build --webpack
+# Build Next.js
+RUN npm run build
 
 # ===============================
-# 4. Production image
+# 3. Production image
 # ===============================
 FROM node:20-bullseye AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
 # Copy build output and necessary files
-COPY --from=builder /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/src ./src
+COPY --from=builder /app/public ./public
 
-# Expose Next.js port
+# Use non-root user
+USER nextjs
+
 EXPOSE 3000
+ENV PORT=3000
 
-# Run as non-root for safety
-USER node
-
-# Start Next.js production server
 CMD ["npm", "start"]
