@@ -65,7 +65,7 @@ export async function fmGetRecordById(
   token: string
 ): Promise<any> {
   const url = `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}/layouts/${layout}/records/${recordId}`;
-  console.log("Fetch URL:", url);
+  // console.log("Fetch URL:", url);
   const response = await fetch(url, {
     method: "GET",
     headers: {
@@ -79,7 +79,7 @@ export async function fmGetRecordById(
   }
 
   const data = await response.json();
-  console.log("Fetch response:", data);
+  // console.log("Fetch response:", data);
 
   return data?.response?.data?.[0]?.fieldData ?? null;
 }
@@ -102,7 +102,7 @@ export async function fmSetRecordById(
 
   const url = `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}/layouts/${layout}/records/${recordId}`;
 
-  console.log("Update URL:", url);
+  // console.log("Update URL:", url);
 
   const response = await fetch(url, {
     method: "PATCH",

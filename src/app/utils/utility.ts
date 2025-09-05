@@ -260,14 +260,18 @@ export async function fetchFmRecord(
     token = loginData.response.token;
   }
 
-  console.log("Using token:", token);
+  // console.log("Using token:", token);
+  // console.log(filter);
 
   // Step 3: Prepare find or get request
-  let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records?_offset=1&limit=5000`;
+  let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records?_offset=1&_limit=5000`;
   let method = "GET";
   let body: any = undefined;
 
-  if (filter || (p_keys && p_keys.length > 0)) {
+  if (
+    (filter && Object.keys(filter).length > 0) ||
+    (p_keys && p_keys.length > 0)
+  ) {
     fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
     method = "POST";
 
@@ -280,10 +284,14 @@ export async function fetchFmRecord(
       }));
       body = JSON.stringify({ query: queries, offset: 1, limit: 5000 });
     } else {
-      body = JSON.stringify({ query: [filter || {}], offset: 1, limit: 5000 });
+      body = JSON.stringify({
+        query: [filter || {}],
+        offset: 1,
+        limit: 5000,
+      });
     }
   }
-
+  // console.log("Fetch URL:", fetchUrl);
   // Step 4: Fetch data
   const dataRes = await fetch(fetchUrl, {
     method,
@@ -297,7 +305,7 @@ export async function fetchFmRecord(
   if (!dataRes.ok)
     throw new Error(`Failed to fetch data from FileMaker: ${dataRes.status}`);
 
-  console.log(body);
+  // console.log(body);
 
   const data = await dataRes.json();
 

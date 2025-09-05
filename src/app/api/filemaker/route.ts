@@ -3,6 +3,7 @@ import {
   parseODataBatchResponse,
   flattenFileMakerRecords,
 } from "@/app/utils/utility";
+import { url } from "inspector";
 
 interface FetchFmDataRequest {
   raw_dataset: string;
@@ -215,7 +216,10 @@ export async function POST(req: NextRequest) {
     let method = "GET";
     let body: any = undefined;
 
-    if (filter || (p_keys && p_keys.length > 0)) {
+    if (
+      (filter && Object.keys(filter).length > 0) ||
+      (p_keys && p_keys.length > 0)
+    ) {
       fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
       method = "POST";
 
@@ -239,6 +243,8 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+
+    // console.log(fetchUrl);
 
     // Step 4: Fetch data
     const dataRes = await fetch(fetchUrl, {
