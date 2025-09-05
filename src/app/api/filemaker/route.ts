@@ -211,7 +211,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 3: Prepare find or get request
-    let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records`;
+    let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records?_offset=1&limit=5000`;
     let method = "GET";
     let body: any = undefined;
 
@@ -230,9 +230,13 @@ export async function POST(req: NextRequest) {
           [p_key_field]: pk,
           ...(filter || {}),
         }));
-        body = JSON.stringify({ query: queries });
+        body = JSON.stringify({ query: queries, offset: 1, limit: 5000 });
       } else {
-        body = JSON.stringify({ query: [filter || {}] });
+        body = JSON.stringify({
+          query: [filter || {}],
+          offset: 1,
+          limit: 5000,
+        });
       }
     }
 

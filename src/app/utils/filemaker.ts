@@ -65,7 +65,7 @@ export async function fmGetRecordById(
   token: string
 ): Promise<any> {
   const url = `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}/layouts/${layout}/records/${recordId}`;
-
+  console.log("Fetch URL:", url);
   const response = await fetch(url, {
     method: "GET",
     headers: {
