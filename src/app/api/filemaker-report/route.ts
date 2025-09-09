@@ -18,15 +18,20 @@ import {
   fmVerifySession,
   fmGetRecordById,
   fmSetRecordById,
+  fmSignOut
 } from "@/app/utils/filemaker";
 
 const FM_LAYOUT = "MultiTableReport Filtered Datas";
 
 export async function POST(req: NextRequest) {
   const dataManager = new InMemoryDataManager();
+  let token: string | null = null;
+  let kibiai_server: string = 'kibiz.smtech.cloud';
+
+
 
   try {
-    const { recordId, username, password, existingToken } = await req.json();
+    const { recordId, username, password, existingToken, server } = await req.json();
 
     if (!recordId || !username || !password) {
       return NextResponse.json(
@@ -38,20 +43,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let token = existingToken ?? null;
+    token = existingToken ?? null;
+
+    kibiai_server = server ?? kibiai_server;
+
 
     // Step 1: Sign in or validate existing token
     if (token) {
-      const isValid = await fmVerifySession(token);
+      const isValid = await fmVerifySession(token, kibiai_server);
       if (!isValid) {
-        token = await fmSignIn(username, password);
+        token = await fmSignIn(username, password, kibiai_server);
       }
     } else {
-      token = await fmSignIn(username, password);
+      token = await fmSignIn(username, password, kibiai_server);
     }
 
     // Step 2: Fetch FileMaker record
-    const fieldData = await fmGetRecordById(FM_LAYOUT, recordId, token);
+    const fieldData = await fmGetRecordById(FM_LAYOUT, recordId, token, kibiai_server);
 
     if (!fieldData?.SetupJson || !fieldData?.AIResponseJson) {
       return NextResponse.json(
@@ -189,7 +197,8 @@ export async function POST(req: NextRequest) {
         "RawDataSet(4)": JSON.stringify(dataManager.getDataset(4)) || "",
         "RawDataSet(5)": JSON.stringify(dataManager.getDataset(5)) || "",
       },
-      token
+      token,
+      kibiai_server
     );
 
     return NextResponse.json(
@@ -214,5 +223,13 @@ export async function POST(req: NextRequest) {
       },
       { status: 500 }
     );
+  } finally {
+    if(token){
+      try {
+        await fmSignOut(token, kibiai_server);
+      } catch (e) {
+        console.error("Failed to sign out FileMaker session:", e);
+      }
+    }
   }
 }
