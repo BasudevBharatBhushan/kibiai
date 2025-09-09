@@ -1,6 +1,6 @@
 // utils/filemaker.ts
 
-const FM_HOST = "kibiz.smtech.cloud";
+var FM_HOST = "kibiz.smtech.cloud";
 const FM_VERSION = "vLatest";
 const FM_DATABASE = "KibiAI";
 
@@ -12,8 +12,14 @@ const FM_DATABASE = "KibiAI";
  */
 export async function fmSignIn(
   username: string,
-  password: string
+  password: string,
+  server?:string,
 ): Promise<string> {
+
+  if (server) {
+    FM_HOST = server;
+  }
+
   const url = `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}/sessions`;
 
   //Base64 encode username:password
@@ -41,7 +47,13 @@ export async function fmSignIn(
  * @param token - FileMaker session token
  * @returns {Promise<boolean>} - Whether the token is valid
  */
-export async function fmVerifySession(token: string): Promise<boolean> {
+export async function fmVerifySession(token: string, server?:string): Promise<boolean> {
+
+  if (server) {
+    FM_HOST = server;
+  }
+
+
   const url = `https://${FM_HOST}/fmi/data/${FM_VERSION}/validateSession`;
 
   const response = await fetch(url, {
@@ -62,8 +74,14 @@ export async function fmVerifySession(token: string): Promise<boolean> {
 export async function fmGetRecordById(
   layout: string,
   recordId: string,
-  token: string
+  token: string,
+  server?: string
 ): Promise<any> {
+
+  if(server){
+    FM_HOST = server;
+  }
+
   const url = `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}/layouts/${layout}/records/${recordId}`;
   // console.log("Fetch URL:", url);
   const response = await fetch(url, {
@@ -96,10 +114,13 @@ export async function fmSetRecordById(
   layout: string,
   recordId: string,
   fieldData: Record<string, any>,
-  token: string
+  token: string,
+  server?:string,
 ): Promise<any> {
   //   console.log("Update fieldData:", fieldData);
-
+  if(server){
+    FM_HOST = server
+  }
   const url = `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}/layouts/${layout}/records/${recordId}`;
 
   // console.log("Update URL:", url);
@@ -125,7 +146,11 @@ export async function fmSetRecordById(
  * @param token - FileMaker session token
  * @returns {Promise<boolean>} - Whether sign-out succeeded
  */
-export async function fmSignOut(token: string): Promise<boolean> {
+export async function fmSignOut(token: string, server?:string): Promise<boolean> {
+  if (server) {
+  FM_HOST = server;
+}
+
   const url = `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}/sessions/${token}`;
 
   const response = await fetch(url, {
