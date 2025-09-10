@@ -120,7 +120,7 @@ export const reportConfigSchema = z.object({
   db_defination: z.array(
     z.object({
       primary_table: z.string(),
-      joined_table: z.string(),
+      joined_table: z.string().optional(),
       source: z.string().optional(),
       target: z.string().optional(),
       fetch_order: z.number(),
