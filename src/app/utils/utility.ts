@@ -556,12 +556,17 @@ export async function processFetchOrder(
     }
 
     async function fetchDataFromAPI(
-      table: string,
+      table: string | undefined,
       setupJson: ReportSetupJson,
       filters: Record<string, any>,
       pKeyField?: string,
       pKeys?: string[]
     ): Promise<any[]> {
+
+        if (!table) {
+          return [];
+        }
+
       const tableConfig = setupJson.tables[table];
       if (!tableConfig) {
         throw new Error(`Table configuration not found: ${table}`);
@@ -636,11 +641,16 @@ export async function processFetchOrder(
 }
 
 export function buildFilters(
-  table: string,
+  table: string | undefined,
   configFilters?: Record<string, Record<string, any>>,
   dateRangeFields?: Record<string, Record<string, string>>
 ) {
+
+    if (!table) {
+    return {};
+  }
   const filters: Record<string, any> = {};
+
 
   if (configFilters && configFilters[table]) {
     Object.assign(filters, configFilters[table]);
