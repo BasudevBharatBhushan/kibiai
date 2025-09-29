@@ -351,73 +351,39 @@ export async function stitch(
       }
     });
 
-    // Get all required fields from report structure
-    const requiredFields: Array<{
-      table: string;
-      field: string;
-      label: string;
-    }> = [];
+    // Collect all required fields
+    const requiredFields: Array<{ table: string; field: string; label: string }> = [];
 
-    // Add report columns
+    // Report columns
     if (reportStructure.report_columns) {
       reportStructure.report_columns.forEach((col) => {
         const label =
-          fieldLabelMap[col.table] && fieldLabelMap[col.table][col.field]
-            ? fieldLabelMap[col.table][col.field]
-            : col.field;
-        requiredFields.push({
-          table: col.table,
-          field: col.field,
-          label: label,
-        });
+          fieldLabelMap[col.table]?.[col.field] ?? col.field;
+        requiredFields.push({ table: col.table, field: col.field, label });
       });
     }
 
-    // Add group by fields and their display fields
+    // Group by fields
     if (reportStructure.group_by_fields) {
       Object.keys(reportStructure.group_by_fields).forEach((groupKey) => {
         const group = reportStructure.group_by_fields![groupKey];
 
-        // Add the main group field
-        const mainLabel =
-          fieldLabelMap[group.table] && fieldLabelMap[group.table][group.field]
-            ? fieldLabelMap[group.table][group.field]
-            : group.field;
-        requiredFields.push({
-          table: group.table,
-          field: group.field,
-          label: mainLabel,
-        });
+        const mainLabel = fieldLabelMap[group.table]?.[group.field] ?? group.field;
+        requiredFields.push({ table: group.table, field: group.field, label: mainLabel });
 
-        // Add display fields
-        if (group.display && Array.isArray(group.display)) {
+        if (group.display) {
           group.display.forEach((displayField) => {
             const displayLabel =
-              fieldLabelMap[displayField.table] &&
-              fieldLabelMap[displayField.table][displayField.field]
-                ? fieldLabelMap[displayField.table][displayField.field]
-                : displayField.field;
-            requiredFields.push({
-              table: displayField.table,
-              field: displayField.field,
-              label: displayLabel,
-            });
+              fieldLabelMap[displayField.table]?.[displayField.field] ?? displayField.field;
+            requiredFields.push({ table: displayField.table, field: displayField.field, label: displayLabel });
           });
         }
 
-        // Add group total fields
-        if (group.group_total && Array.isArray(group.group_total)) {
+        if (group.group_total) {
           group.group_total.forEach((totalField) => {
             const totalLabel =
-              fieldLabelMap[totalField.table] &&
-              fieldLabelMap[totalField.table][totalField.field]
-                ? fieldLabelMap[totalField.table][totalField.field]
-                : totalField.field;
-            requiredFields.push({
-              table: totalField.table,
-              field: totalField.field,
-              label: totalLabel,
-            });
+              fieldLabelMap[totalField.table]?.[totalField.field] ?? totalField.field;
+            requiredFields.push({ table: totalField.table, field: totalField.field, label: totalLabel });
           });
         }
       });
@@ -426,21 +392,13 @@ export async function stitch(
     // Remove duplicates
     const uniqueFields = requiredFields.filter(
       (field, index, self) =>
-        index ===
-        self.findIndex(
-          (f) => f.table === field.table && f.field === field.field
-        )
+        index === self.findIndex((f) => f.table === field.table && f.field === field.field)
     );
 
-    // Build relationship map from report structure
+    // Relationship map
     const relationshipMap: Record<
       string,
-      {
-        source: string;
-        target: string;
-        fetchOrder: number;
-        tables: string[];
-      }
+      { source: string; target: string; fetchOrder: number; tables: string[]; joinType: string }
     > = {};
 
     if (reportStructure.db_defination) {
@@ -452,49 +410,47 @@ export async function stitch(
             target: def.target,
             fetchOrder: def.fetch_order,
             tables: [def.primary_table, def.joined_table],
+            joinType: def.join_type?.toLowerCase() === "inner" ? "inner" : "left"
           };
         }
       });
     }
 
-    // Get datasets from dataManager by fetch order
+    // Fetch datasets
     const datasetsByOrder: Record<number, any[]> = {};
     const fetchOrders = reportStructure.db_defination
       .map((def) => def.fetch_order)
       .sort((a, b) => a - b);
 
-    // Fetch datasets from dataManager
     for (const order of fetchOrders) {
       const dataset = dataManager.getDataset(order);
       if (dataset && Array.isArray(dataset)) {
         datasetsByOrder[order] = dataset.map((record) => ({
           ...record,
           _sourceTable: `fetch_order_${order}`,
-          _recordId:
-            record.PrimaryKey || record.recordId || `record_${Math.random()}`,
+          _recordId: record.PrimaryKey || record.recordId || `record_${Math.random()}`
         }));
       }
     }
 
-    // Start with fetch order 1 as base
+    // Base dataset
     let resultData: any[] = [];
     const firstOrder = Math.min(...fetchOrders);
-
     if (datasetsByOrder[firstOrder]) {
       resultData = datasetsByOrder[firstOrder].map((record) => ({
         ...record,
         _sourceTable: `fetch_order_${firstOrder}`,
-        _recordId: record._recordId,
+        _recordId: record._recordId
       }));
     }
 
-    // Join with other fetch orders based on relationships
+    // Perform joins
     for (let i = 1; i < fetchOrders.length; i++) {
       const currentOrder = fetchOrders[i];
       if (datasetsByOrder[currentOrder]) {
         const joinDataset = datasetsByOrder[currentOrder];
 
-        // Find the relationship for this order
+        // Find relationship
         let relationship: any = null;
         Object.keys(relationshipMap).forEach((key) => {
           if (relationshipMap[key].fetchOrder === currentOrder) {
@@ -503,12 +459,13 @@ export async function stitch(
         });
 
         if (relationship) {
-          // Perform the join
+          const { source, target, tables, joinType } = relationship;
+
           const newResultData: any[] = [];
           resultData.forEach((baseRecord) => {
             const matchingRecords = joinDataset.filter((joinRecord) => {
-              const baseValue = baseRecord[relationship.source];
-              const joinValue = joinRecord[relationship.target];
+              const baseValue = baseRecord[source];
+              const joinValue = joinRecord[target];
               return (
                 baseValue !== undefined &&
                 joinValue !== undefined &&
@@ -521,47 +478,43 @@ export async function stitch(
                 newResultData.push({
                   ...baseRecord,
                   ...matchRecord,
-                  _joinedTable: relationship.tables[1],
-                  _joinedRecordId: matchRecord._recordId,
+                  _joinedTable: tables[1],
+                  _joinedRecordId: matchRecord._recordId
                 });
               });
             } else {
-              // Keep base record even if no matches found (left join behavior)
-              newResultData.push(baseRecord);
+              if (joinType === "left") {
+                // keep base record (left join)
+                newResultData.push(baseRecord);
+              }
+              // inner join skips unmatched records
             }
           });
+
           resultData = newResultData;
         }
       }
     }
 
-    // Create final output with proper field labels
+    // Final output
     const bodyFields = resultData.map((record) => {
       const outputRecord: Record<string, any> = {};
       uniqueFields.forEach((field) => {
-        const value =
-          record[field.field] !== undefined ? record[field.field] : "--";
+        const value = record[field.field] !== undefined ? record[field.field] : "--";
         outputRecord[field.label] = value;
       });
       return outputRecord;
     });
 
-    const stitchResult: StitchResult = {
-      BodyField: bodyFields,
-    };
-
-    // Save the stitched result
+    const stitchResult: StitchResult = { BodyField: bodyFields };
     dataManager.saveResult("report_body_json", stitchResult);
 
     return stitchResult;
   } catch (error) {
-    throw new Error(
-      `Data stitching failed: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`
-    );
+    throw new Error(`Data stitching failed: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 }
+
 
 export async function processFetchOrder(
   fetchDef: ReportConfigJson["db_defination"][0],

@@ -30,10 +30,11 @@ export interface ReportSetupJson {
 export interface ReportConfigJson {
   db_defination: Array<{
     primary_table: string;
-    joined_table: string;
+    joined_table?: string;
     source?: string;
     target?: string;
     fetch_order: number;
+    join_type?: "left" | "inner";
   }>;
   report_columns?: Array<{
     table: string;
@@ -46,13 +47,14 @@ export interface ReportConfigJson {
       field: string;
       display?: Array<{ table: string; field: string }>;
       group_total?: Array<{ table: string; field: string }>;
+      sort_order?: "asc" | "desc";
     }
   >;
   date_range_fields?: Record<string, Record<string, string>>;
   filters?: Record<string, Record<string, any>>;
   body_sort_order?: Array<{
     field: string;
-    sort_order: string;
+    sort_order: "asc" | "desc";
   }>;
   summary_fields?: string[];
   report_header?: string;
