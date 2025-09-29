@@ -410,7 +410,7 @@ export async function stitch(
             target: def.target,
             fetchOrder: def.fetch_order,
             tables: [def.primary_table, def.joined_table],
-            joinType: def.join_type?.toLowerCase() === "inner" ? "inner" : "left"
+            joinType: def.join_type?.toLowerCase() === "left" ? "left" : "inner"
           };
         }
       });
