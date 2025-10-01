@@ -37,10 +37,11 @@ interface ReportSetupJson {
 interface ReportConfigJson {
   db_defination: Array<{
     primary_table: string;
-    joined_table: string;
+    joined_table?: string;
     source?: string;
     target?: string;
     fetch_order: number;
+    join_type?:"left" | "inner" | "";
   }>;
   report_columns?: Array<{
     table: string;
@@ -234,10 +235,15 @@ class InMemoryDataManager {
 
 // Helper Functions
 function buildFilters(
-  table: string,
+  table: string | undefined,
   configFilters?: Record<string, Record<string, any>>,
   dateRangeFields?: Record<string, Record<string, string>>
 ) {
+
+  if (!table) {
+    return {};
+  }
+
   const filters: Record<string, any> = {};
 
   if (configFilters && configFilters[table]) {
@@ -261,12 +267,19 @@ function extractPkeysFromData(data: any[], sourceField: string): string[] {
 }
 
 async function fetchDataFromAPI(
-  table: string,
+  table: string | undefined,
   setupJson: ReportSetupJson,
   filters: Record<string, any>,
   pKeyField?: string,
   pKeys?: string[]
 ): Promise<any[]> {
+
+
+      if(!table){
+      return []
+    }
+
+
   const tableConfig = setupJson.tables[table];
   if (!tableConfig) {
     throw new Error(`Table configuration not found: ${table}`);
@@ -340,6 +353,7 @@ async function processFetchOrder(
   );
 
   try {
+
     let pKeyField: string | undefined;
     let pKeysToUse: string[] | undefined;
 
@@ -365,6 +379,7 @@ async function processFetchOrder(
       pKeyField,
       pKeysToUse
     );
+
 
     dataManager.storeDataset(fetch_order, data);
     dataManager.addLog(
@@ -486,6 +501,7 @@ async function stitch(
         target: string;
         fetchOrder: number;
         tables: string[];
+        joinType:string
       }
     > = {};
 
@@ -498,6 +514,7 @@ async function stitch(
             target: def.target,
             fetchOrder: def.fetch_order,
             tables: [def.primary_table, def.joined_table],
+            joinType: def.join_type?.toLowerCase() === "left" ? "left" : "inner"
           };
         }
       });
@@ -549,6 +566,8 @@ async function stitch(
         });
 
         if (relationship) {
+          const { source, target, tables, joinType } = relationship;
+
           // Perform the join
           const newResultData: any[] = [];
           resultData.forEach((baseRecord) => {
@@ -572,8 +591,14 @@ async function stitch(
                 });
               });
             } else {
-              // Keep base record even if no matches found (left join behavior)
-              newResultData.push(baseRecord);
+                if (joinType === "left") {
+              // console.log(joinType === "left" , baseRecord)
+
+                // keep base record (left join)
+                newResultData.push(baseRecord);
+              }
+              // inner join skips unmatched records
+              
             }
           });
           resultData = newResultData;

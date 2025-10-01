@@ -487,6 +487,7 @@ export async function stitch(
                 // keep base record (left join)
                 newResultData.push(baseRecord);
               }
+              // console.log('inner - joining')
               // inner join skips unmatched records
             }
           });

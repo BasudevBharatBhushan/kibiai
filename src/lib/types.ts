@@ -34,7 +34,7 @@ export interface ReportConfigJson {
     source?: string;
     target?: string;
     fetch_order: number;
-    join_type?: "left" | "inner";
+    join_type?: "left" | "inner" | "";
   }>;
   report_columns?: Array<{
     table: string;
