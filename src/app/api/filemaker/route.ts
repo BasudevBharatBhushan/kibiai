@@ -175,6 +175,7 @@ export async function POST(req: NextRequest) {
     }
 
     let token = session_token;
+    console.log(p_key_field, "--------pey field")
 
     // Step 1: Validate token
     let isTokenValid = false;
@@ -256,10 +257,14 @@ export async function POST(req: NextRequest) {
       ...(body ? { body } : {}),
     });
 
+
     if (!dataRes.ok) {
+      console.log(dataRes);
+      console.log(body)
       return NextResponse.json(
         { error: "Failed to fetch data from FileMaker" },
         { status: dataRes.status }
+        
       );
     }
 
