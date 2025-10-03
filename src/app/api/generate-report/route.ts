@@ -347,7 +347,7 @@ async function processFetchOrder(
       pKeyField = undefined;
       pKeysToUse = undefined;
     } else {
-      pKeyField = source;
+      pKeyField = target;
       if (previousDataset && source) {
         pKeysToUse = extractPkeysFromData(previousDataset, source);
         dataManager.addLog(
