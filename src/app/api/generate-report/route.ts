@@ -573,7 +573,7 @@ async function stitch(
               });
             } else {
               // Keep base record even if no matches found (left join behavior)
-              newResultData.push(baseRecord);
+              // newResultData.push(baseRecord);
             }
           });
           resultData = newResultData;
