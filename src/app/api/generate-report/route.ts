@@ -966,7 +966,7 @@ export async function POST(req: NextRequest) {
         },
         {
           status: 400,
-          headers: { "Access-Control-Allow-Origin": "*" },
+          headers: {  "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         }
       );
     }
@@ -982,7 +982,7 @@ export async function POST(req: NextRequest) {
         },
         {
           status: 400,
-          headers: { "Access-Control-Allow-Origin": "*" },
+          headers: {  "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         }
       );
     }
@@ -997,7 +997,7 @@ export async function POST(req: NextRequest) {
         },
         {
           status: 400,
-          headers: { "Access-Control-Allow-Origin": "*" },
+          headers: {   "Content-Type": "application/json","Access-Control-Allow-Origin": "*" },
         }
       );
     }
@@ -1069,7 +1069,7 @@ export async function POST(req: NextRequest) {
       },
       {
         status: 200,
-        headers: { "Access-Control-Allow-Origin": "*" },
+        headers: {  "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       }
     );
   } catch (error) {
@@ -1086,7 +1086,7 @@ export async function POST(req: NextRequest) {
       },
       {
         status: 500,
-        headers: { "Access-Control-Allow-Origin": "*" },
+        headers: {  "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       }
     );
   }
