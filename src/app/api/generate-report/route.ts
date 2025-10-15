@@ -922,9 +922,6 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   const dataManager = new InMemoryDataManager();
 
-
-
-
   try {
     const body = await req.json();
 
@@ -937,9 +934,10 @@ export async function POST(req: NextRequest) {
           detail: "Both report_setup and report_config are required",
           nextJSError: "Missing required fields: report_setup, report_config",
         },
-        { status: 400, 
-           headers: { "Access-Control-Allow-Origin": "*" }
-         }
+        {
+          status: 400,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        }
       );
     }
 
@@ -963,9 +961,9 @@ export async function POST(req: NextRequest) {
           nextJSError:
             error instanceof Error ? error.message : "JSON parsing failed",
         },
-        { status: 400 , 
-
-           headers: { "Access-Control-Allow-Origin": "*" },
+        {
+          status: 400,
+          headers: { "Access-Control-Allow-Origin": "*" },
         }
       );
     }
@@ -979,7 +977,10 @@ export async function POST(req: NextRequest) {
           detail: "Invalid report_setup structure",
           nextJSError: setupValidation.error.issues,
         },
-        { status: 400 }
+        {
+          status: 400,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        }
       );
     }
 
@@ -991,7 +992,10 @@ export async function POST(req: NextRequest) {
           detail: "Invalid report_config structure",
           nextJSError: configValidation.error.issues,
         },
-        { status: 400 }
+        {
+          status: 400,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        }
       );
     }
 
@@ -1060,12 +1064,10 @@ export async function POST(req: NextRequest) {
         // stitch_result: stitchResult,
         processing_logs: dataManager.getLogs(),
       },
-      { status: 200, 
-
-        headers:{
-           "Access-Control-Allow-Origin": "*",
-        }
-       }
+      {
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      }
     );
   } catch (error) {
     const errorMessage =
@@ -1079,7 +1081,10 @@ export async function POST(req: NextRequest) {
         nextJSError: error instanceof Error ? error : "Unknown server error",
         processing_logs: dataManager.getLogs(),
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      }
     );
   }
 }
