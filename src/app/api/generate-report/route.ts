@@ -910,15 +910,18 @@ function generateReportStructure(
 // Main API Handler
 
 // 🟩 Added at the very top of the file
-export async function OPTIONS() {
-  return NextResponse.json({}, {
-    headers: {
-      "Access-Control-Allow-Origin": "*",              // allow all origins
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
-  });
-}
+// ✅ Minimal & correct OPTIONS handler (no body, correct status)
+  export async function OPTIONS() {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    });
+  }
+
 export async function POST(req: NextRequest) {
   const dataManager = new InMemoryDataManager();
 
