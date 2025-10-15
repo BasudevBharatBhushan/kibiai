@@ -909,8 +909,21 @@ function generateReportStructure(
 
 // Main API Handler
 
+// 🟩 Added at the very top of the file
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",              // allow all origins
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
+}
 export async function POST(req: NextRequest) {
   const dataManager = new InMemoryDataManager();
+
+
+
 
   try {
     const body = await req.json();
@@ -1042,7 +1055,12 @@ export async function POST(req: NextRequest) {
         // stitch_result: stitchResult,
         processing_logs: dataManager.getLogs(),
       },
-      { status: 200 }
+      { status: 200, 
+
+        headers:{
+           "Access-Control-Allow-Origin": "*",
+        }
+       }
     );
   } catch (error) {
     const errorMessage =
