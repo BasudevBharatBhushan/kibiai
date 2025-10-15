@@ -1,5 +1,16 @@
 import { NextResponse } from 'next/server';
 
+// 🟩 Handles preflight CORS requests
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const { openAIKey, assistantId, threadId, prompt } = await req.json();
@@ -7,7 +18,10 @@ export async function POST(req: Request) {
     if (!openAIKey || !assistantId || !prompt) {
       return NextResponse.json(
         { error: 'Missing required fields: openAIKey, assistantId, prompt' },
-        { status: 400 }
+        {
+          status: 400,
+          headers: { "Access-Control-Allow-Origin": "*" }, // 🟩 added
+        }
       );
     }
 
@@ -85,7 +99,10 @@ export async function POST(req: Request) {
           runId,
           runStatus,
         },
-        { status: 504 }
+        {
+          status: 504,
+          headers: { "Access-Control-Allow-Origin": "*" }, // 🟩 added
+        }
       );
     }
 
@@ -99,16 +116,25 @@ export async function POST(req: Request) {
 
     const latestMessage = messagesData.data[0]?.content?.[0]?.text?.value || '';
 
-    return NextResponse.json({
-      latestMessage,
-      threadId: currentThreadId,
-      runId,
-    });
+    return NextResponse.json(
+      {
+        latestMessage,
+        threadId: currentThreadId,
+        runId,
+      },
+      {
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" }, // 🟩 added
+      }
+    );
   } catch (err: any) {
     console.error(err);
     return NextResponse.json(
       { error: err.message || 'Unexpected error occurred' },
-      { status: 500 }
+      {
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" }, // 🟩 added
+      }
     );
   }
 }

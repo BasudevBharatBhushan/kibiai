@@ -937,7 +937,9 @@ export async function POST(req: NextRequest) {
           detail: "Both report_setup and report_config are required",
           nextJSError: "Missing required fields: report_setup, report_config",
         },
-        { status: 400 }
+        { status: 400, 
+           headers: { "Access-Control-Allow-Origin": "*" }
+         }
       );
     }
 
@@ -961,7 +963,10 @@ export async function POST(req: NextRequest) {
           nextJSError:
             error instanceof Error ? error.message : "JSON parsing failed",
         },
-        { status: 400 }
+        { status: 400 , 
+
+           headers: { "Access-Control-Allow-Origin": "*" },
+        }
       );
     }
 
