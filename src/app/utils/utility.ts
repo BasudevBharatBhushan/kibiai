@@ -352,13 +352,16 @@ export async function stitch(
     });
 
     // Collect all required fields
-    const requiredFields: Array<{ table: string; field: string; label: string }> = [];
+    const requiredFields: Array<{
+      table: string;
+      field: string;
+      label: string;
+    }> = [];
 
     // Report columns
     if (reportStructure.report_columns) {
       reportStructure.report_columns.forEach((col) => {
-        const label =
-          fieldLabelMap[col.table]?.[col.field] ?? col.field;
+        const label = fieldLabelMap[col.table]?.[col.field] ?? col.field;
         requiredFields.push({ table: col.table, field: col.field, label });
       });
     }
@@ -368,22 +371,37 @@ export async function stitch(
       Object.keys(reportStructure.group_by_fields).forEach((groupKey) => {
         const group = reportStructure.group_by_fields![groupKey];
 
-        const mainLabel = fieldLabelMap[group.table]?.[group.field] ?? group.field;
-        requiredFields.push({ table: group.table, field: group.field, label: mainLabel });
+        const mainLabel =
+          fieldLabelMap[group.table]?.[group.field] ?? group.field;
+        requiredFields.push({
+          table: group.table,
+          field: group.field,
+          label: mainLabel,
+        });
 
         if (group.display) {
           group.display.forEach((displayField) => {
             const displayLabel =
-              fieldLabelMap[displayField.table]?.[displayField.field] ?? displayField.field;
-            requiredFields.push({ table: displayField.table, field: displayField.field, label: displayLabel });
+              fieldLabelMap[displayField.table]?.[displayField.field] ??
+              displayField.field;
+            requiredFields.push({
+              table: displayField.table,
+              field: displayField.field,
+              label: displayLabel,
+            });
           });
         }
 
         if (group.group_total) {
           group.group_total.forEach((totalField) => {
             const totalLabel =
-              fieldLabelMap[totalField.table]?.[totalField.field] ?? totalField.field;
-            requiredFields.push({ table: totalField.table, field: totalField.field, label: totalLabel });
+              fieldLabelMap[totalField.table]?.[totalField.field] ??
+              totalField.field;
+            requiredFields.push({
+              table: totalField.table,
+              field: totalField.field,
+              label: totalLabel,
+            });
           });
         }
       });
@@ -392,13 +410,22 @@ export async function stitch(
     // Remove duplicates
     const uniqueFields = requiredFields.filter(
       (field, index, self) =>
-        index === self.findIndex((f) => f.table === field.table && f.field === field.field)
+        index ===
+        self.findIndex(
+          (f) => f.table === field.table && f.field === field.field
+        )
     );
 
     // Relationship map
     const relationshipMap: Record<
       string,
-      { source: string; target: string; fetchOrder: number; tables: string[]; joinType: string }
+      {
+        source: string;
+        target: string;
+        fetchOrder: number;
+        tables: string[];
+        joinType: string;
+      }
     > = {};
 
     if (reportStructure.db_defination) {
@@ -410,7 +437,8 @@ export async function stitch(
             target: def.target,
             fetchOrder: def.fetch_order,
             tables: [def.primary_table, def.joined_table],
-            joinType: def.join_type?.toLowerCase() === "left" ? "left" : "inner"
+            joinType:
+              def.join_type?.toLowerCase() === "left" ? "left" : "inner",
           };
         }
       });
@@ -428,7 +456,8 @@ export async function stitch(
         datasetsByOrder[order] = dataset.map((record) => ({
           ...record,
           _sourceTable: `fetch_order_${order}`,
-          _recordId: record.PrimaryKey || record.recordId || `record_${Math.random()}`
+          _recordId:
+            record.PrimaryKey || record.recordId || `record_${Math.random()}`,
         }));
       }
     }
@@ -440,7 +469,7 @@ export async function stitch(
       resultData = datasetsByOrder[firstOrder].map((record) => ({
         ...record,
         _sourceTable: `fetch_order_${firstOrder}`,
-        _recordId: record._recordId
+        _recordId: record._recordId,
       }));
     }
 
@@ -479,7 +508,7 @@ export async function stitch(
                   ...baseRecord,
                   ...matchRecord,
                   _joinedTable: tables[1],
-                  _joinedRecordId: matchRecord._recordId
+                  _joinedRecordId: matchRecord._recordId,
                 });
               });
             } else {
@@ -501,7 +530,8 @@ export async function stitch(
     const bodyFields = resultData.map((record) => {
       const outputRecord: Record<string, any> = {};
       uniqueFields.forEach((field) => {
-        const value = record[field.field] !== undefined ? record[field.field] : "--";
+        const value =
+          record[field.field] !== undefined ? record[field.field] : "--";
         outputRecord[field.label] = value;
       });
       return outputRecord;
@@ -512,10 +542,13 @@ export async function stitch(
 
     return stitchResult;
   } catch (error) {
-    throw new Error(`Data stitching failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    throw new Error(
+      `Data stitching failed: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
 }
-
 
 export async function processFetchOrder(
   fetchDef: ReportConfigJson["db_defination"][0],
@@ -545,7 +578,7 @@ export async function processFetchOrder(
       pKeyField = undefined;
       pKeysToUse = undefined;
     } else {
-      pKeyField = source;
+      pKeyField = target;
       if (previousDataset && source) {
         pKeysToUse = extractPkeysFromData(previousDataset, source);
         dataManager.addLog(
@@ -563,10 +596,9 @@ export async function processFetchOrder(
       pKeyField?: string,
       pKeys?: string[]
     ): Promise<any[]> {
-
-        if (!table) {
-          return [];
-        }
+      if (!table) {
+        return [];
+      }
 
       const tableConfig = setupJson.tables[table];
       if (!tableConfig) {
@@ -646,12 +678,10 @@ export function buildFilters(
   configFilters?: Record<string, Record<string, any>>,
   dateRangeFields?: Record<string, Record<string, string>>
 ) {
-
-    if (!table) {
+  if (!table) {
     return {};
   }
   const filters: Record<string, any> = {};
-
 
   if (configFilters && configFilters[table]) {
     Object.assign(filters, configFilters[table]);
@@ -935,4 +965,44 @@ export function generateReportStructure(
       }`
     );
   }
+}
+
+export function jsonResponse(status: number, body: unknown) {
+  return new Response(JSON.stringify(body, null, 2), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function parseBasicAuth(header?: string | null) {
+  if (!header || !header.startsWith("Basic ")) return null;
+  const base64 = header.split(" ")[1];
+  try {
+    const decoded = Buffer.from(base64, "base64").toString("utf8");
+    const idx = decoded.indexOf(":");
+    if (idx === -1) return null;
+    return {
+      username: decoded.slice(0, idx),
+      password: decoded.slice(idx + 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function requireEnv(name: string) {
+  console.log(`Requiring env: ${name}`);
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env: ${name}`);
+  return v;
+}
+
+export function newLicenseId() {
+  // Short, human-friendly ID. Adjust as needed.
+  const rnd = Math.random().toString(36).slice(2, 10).toUpperCase();
+  return `LIC-${rnd}`;
+}
+
+export function nowISO() {
+  return new Date().toISOString();
 }

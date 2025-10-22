@@ -41,7 +41,7 @@ interface ReportConfigJson {
     source?: string;
     target?: string;
     fetch_order: number;
-    join_type?:"left" | "inner" | "";
+    join_type?: "left" | "inner" | "";
   }>;
   report_columns?: Array<{
     table: string;
@@ -239,7 +239,6 @@ function buildFilters(
   configFilters?: Record<string, Record<string, any>>,
   dateRangeFields?: Record<string, Record<string, string>>
 ) {
-
   if (!table) {
     return {};
   }
@@ -273,12 +272,9 @@ async function fetchDataFromAPI(
   pKeyField?: string,
   pKeys?: string[]
 ): Promise<any[]> {
-
-
-      if(!table){
-      return []
-    }
-
+  if (!table) {
+    return [];
+  }
 
   const tableConfig = setupJson.tables[table];
   if (!tableConfig) {
@@ -353,7 +349,6 @@ async function processFetchOrder(
   );
 
   try {
-
     let pKeyField: string | undefined;
     let pKeysToUse: string[] | undefined;
 
@@ -361,7 +356,7 @@ async function processFetchOrder(
       pKeyField = undefined;
       pKeysToUse = undefined;
     } else {
-      pKeyField = source;
+      pKeyField = target;
       if (previousDataset && source) {
         pKeysToUse = extractPkeysFromData(previousDataset, source);
         dataManager.addLog(
@@ -379,7 +374,6 @@ async function processFetchOrder(
       pKeyField,
       pKeysToUse
     );
-
 
     dataManager.storeDataset(fetch_order, data);
     dataManager.addLog(
@@ -501,7 +495,7 @@ async function stitch(
         target: string;
         fetchOrder: number;
         tables: string[];
-        joinType:string
+        joinType: string;
       }
     > = {};
 
@@ -514,7 +508,8 @@ async function stitch(
             target: def.target,
             fetchOrder: def.fetch_order,
             tables: [def.primary_table, def.joined_table],
-            joinType: def.join_type?.toLowerCase() === "left" ? "left" : "inner"
+            joinType:
+              def.join_type?.toLowerCase() === "left" ? "left" : "inner",
           };
         }
       });
@@ -591,14 +586,13 @@ async function stitch(
                 });
               });
             } else {
-                if (joinType === "left") {
-              // console.log(joinType === "left" , baseRecord)
+              if (joinType === "left") {
+                // console.log(joinType === "left" , baseRecord)
 
                 // keep base record (left join)
                 newResultData.push(baseRecord);
               }
               // inner join skips unmatched records
-              
             }
           });
           resultData = newResultData;
@@ -911,16 +905,16 @@ function generateReportStructure(
 
 // 🟩 Added at the very top of the file
 // ✅ Minimal & correct OPTIONS handler (no body, correct status)
-  export async function OPTIONS() {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      },
-    });
-  }
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
+}
 
 export async function POST(req: NextRequest) {
   const dataManager = new InMemoryDataManager();
@@ -966,7 +960,10 @@ export async function POST(req: NextRequest) {
         },
         {
           status: 400,
-          headers: {  "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
         }
       );
     }
@@ -982,7 +979,10 @@ export async function POST(req: NextRequest) {
         },
         {
           status: 400,
-          headers: {  "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
         }
       );
     }
@@ -997,7 +997,10 @@ export async function POST(req: NextRequest) {
         },
         {
           status: 400,
-          headers: {   "Content-Type": "application/json","Access-Control-Allow-Origin": "*" },
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
         }
       );
     }
@@ -1069,7 +1072,10 @@ export async function POST(req: NextRequest) {
       },
       {
         status: 200,
-        headers: {  "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
       }
     );
   } catch (error) {
@@ -1086,7 +1092,10 @@ export async function POST(req: NextRequest) {
       },
       {
         status: 500,
-        headers: {  "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
       }
     );
   }
