@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "KiBiAI",
   description: "KiBiAI",
+  icons: {
+    icon: "/favicon.ico", // Path relative to public/
+  },
 };
 
 export default function RootLayout({

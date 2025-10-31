@@ -27,6 +27,7 @@ interface License {
 interface CompanyDetailsProps {
   company: Company;
   license: License | null;
+  licenseDefaults?: Record<string, Partial<License>>;
   onUpdateCompany: (
     companyId: string,
     updates: any
@@ -39,6 +40,7 @@ interface CompanyDetailsProps {
 export default function CompanyDetails({
   company,
   license,
+  licenseDefaults = {},
   onUpdateCompany,
   onCreateLicense,
 }: CompanyDetailsProps) {
@@ -47,6 +49,8 @@ export default function CompanyDetails({
   const [editedPassword, setEditedPassword] = useState(company.CompanyPassword);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+
+  console.log("License Data:", license);
 
   useEffect(() => {
     setEditedAuthId(company.CompanyAuthID);
@@ -190,10 +194,23 @@ export default function CompanyDetails({
 
         {/* Buttons */}
         <div className="flex flex-wrap gap-3">
-          {!license?.licenseId && (
+          {!(license && license.licenseId) && (
             <button
-              onClick={() => onCreateLicense({ companyId: company.CompanyID })}
-              className="flex items-center gap-2 px-5 py-2.5  text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all text-sm font-medium"
+              onClick={() => {
+                const freeTrialDefaults = licenseDefaults["Free Trial"] || {};
+                const expiryDate = new Date(
+                  Date.now() + 7 * 24 * 60 * 60 * 1000
+                ).toLocaleDateString("en-US"); // +7 days
+
+                onCreateLicense({
+                  companyId: company.CompanyID,
+                  plan: "Free Trial",
+                  isActive: 1,
+                  expiryDate,
+                  ...freeTrialDefaults, // pull from props
+                });
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r bg-indigo-600 hover:bg-indigo-700  text-white rounded-lg transition-all text-sm font-medium"
             >
               <CheckCircle2 className="w-4 h-4" />
               New License

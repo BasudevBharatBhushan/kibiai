@@ -21,20 +21,83 @@ interface Company {
 }
 
 interface License {
-  licenseId: string;
-  companyId: string;
-  plan: string;
-  price: string;
-  users: string;
-  workspaces: string;
-  reports: string;
-  charts: string;
-  AI_Features: string;
-  licensingTerms: string;
-  support: string;
-  isActive: number;
-  expiryDate: string;
+  licenseId?: string;
+  companyId?: string;
+  plan?: string;
+  price?: string;
+  users?: string;
+  workspaces?: string;
+  reports?: string;
+  charts?: string;
+  AI_Features?: string;
+  licensingTerms?: string;
+  support?: string;
+  isActive?: number;
+  expiryDate?: string;
 }
+
+const PLAN_DEFAULTS: Record<string, Partial<License>> = {
+  "Free Trial": {
+    price: "0",
+    users: "1",
+    workspaces: "1",
+    reports: "3",
+    charts: "Default Charts",
+    AI_Features: "Basic only",
+    licensingTerms: "7 days, no CC needed",
+    support: "Community",
+  },
+  "Single End User": {
+    price: "49",
+    users: "1",
+    workspaces: "1",
+    reports: "5",
+    charts: "Yes",
+    AI_Features: "Full (core/AI)",
+    licensingTerms: "Monthly/Annual",
+    support: "Email",
+  },
+  Pro: {
+    price: "100",
+    users: "4",
+    workspaces: "4",
+    reports: "10",
+    charts: "Yes",
+    AI_Features: "All & Custom",
+    licensingTerms: "Annual contract",
+    support: "Priority",
+  },
+  Teams: {
+    price: "149",
+    users: "10",
+    workspaces: "5",
+    reports: "Unlimited",
+    charts: "Yes",
+    AI_Features: "Full (core/AI)",
+    licensingTerms: "Monthly/Annual",
+    support: "Priority",
+  },
+  "Custom/Enterprise": {
+    price: "299",
+    users: "Unlimited",
+    workspaces: "Unlimited",
+    reports: "Unlimited",
+    charts: "Yes",
+    AI_Features: "All & Custom",
+    licensingTerms: "Annual contract",
+    support: "Premium",
+  },
+  Private: {
+    price: "499",
+    users: "Unlimited",
+    workspaces: "Unlimited",
+    reports: "Unlimited",
+    charts: "Yes",
+    AI_Features: "All & Custom",
+    licensingTerms: "Annual contract",
+    support: "24/7",
+  },
+};
 
 export default function AdminPage() {
   // -------------------- LOGIN HOOKS --------------------
@@ -444,6 +507,7 @@ export default function AdminPage() {
                       license={license}
                       onUpdateCompany={updateCompany}
                       onCreateLicense={createLicense}
+                      licenseDefaults={PLAN_DEFAULTS}
                     />
 
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -452,6 +516,7 @@ export default function AdminPage() {
                         company={selectedCompany}
                         onUpdateLicense={updateLicense}
                         loading={licenseLoading}
+                        licenseDefaults={PLAN_DEFAULTS}
                       />
                     </div>
                   </>
