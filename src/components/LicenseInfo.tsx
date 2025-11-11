@@ -53,14 +53,7 @@ interface LicenseInfoProps {
   licenseDefaults?: Record<string, Partial<License>>;
 }
 
-const PLAN_OPTIONS = [
-  "Free Trial",
-  "Single End User",
-  "Pro",
-  "Teams",
-  "Custom/Enterprise",
-  "Private",
-];
+const PLAN_OPTIONS = ["FREE TRIAL", "SINGLE USER", "PRO", "TEAMS", "CUSTOM"];
 
 const CHARTS_OPTIONS = ["Default Charts", "Yes"];
 const AI_FEATURES_OPTIONS = ["Basic only", "Full (core/AI)", "All & Custom"];

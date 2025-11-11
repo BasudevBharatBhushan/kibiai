@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import CompanyList from "@/components/CompanyList";
 import CompanyDetails from "@/components/CompanyDetails";
 import LicenseInfo from "@/components/LicenseInfo";
+import PaymentSection from "@/components/PaymentSection";
 import Logo from "../../assets/kibiai.png";
 import Image from "next/image";
 
@@ -99,17 +100,17 @@ interface License {
 //   },
 // };
 const PLAN_DEFAULTS: Record<string, Partial<License>> = {
-  Free: {
+  "FREE TRIAL": {
     price: "0",
-    users: "1",
+    users: "2", // 1 Admin + 1 End User
     workspaces: "1",
-    reports: "3",
-    charts: "Default Charts",
+    reports: "Unlimited",
+    charts: "Yes",
     AI_Features: "Basic only",
     licensingTerms: "7 days Free Trial",
-    support: "Email",
+    support: "Email Support",
   },
-  "Single User": {
+  "SINGLE USER": {
     price: "19",
     users: "2", // 1 Admin + 1 End User
     workspaces: "1",
@@ -117,9 +118,9 @@ const PLAN_DEFAULTS: Record<string, Partial<License>> = {
     charts: "Yes",
     AI_Features: "Full (core/AI)",
     licensingTerms: "Monthly/Annual",
-    support: "Email",
+    support: "Email Support",
   },
-  Pro: {
+  PRO: {
     price: "79",
     users: "6", // 1 Admin + 5 End Users
     workspaces: "2",
@@ -127,9 +128,9 @@ const PLAN_DEFAULTS: Record<string, Partial<License>> = {
     charts: "Yes",
     AI_Features: "All & Custom",
     licensingTerms: "Monthly/Annual",
-    support: "Priority",
+    support: "Priority Support",
   },
-  Teams: {
+  TEAMS: {
     price: "149",
     users: "12", // 2 Admin + 10 End Users
     workspaces: "5",
@@ -137,17 +138,17 @@ const PLAN_DEFAULTS: Record<string, Partial<License>> = {
     charts: "Yes",
     AI_Features: "Full (core/AI)",
     licensingTerms: "Monthly/Annual",
-    support: "Priority",
+    support: "Priority Support",
   },
-  Custom: {
-    price: "499",
-    users: "50",
-    workspaces: "20",
+  CUSTOM: {
+    price: "Custom Quote",
+    users: "Unlimited",
+    workspaces: "Unlimited",
     reports: "Unlimited",
     charts: "Yes",
     AI_Features: "All & Custom",
-    licensingTerms: "Annual contract",
-    support: "Premium",
+    licensingTerms: "Annual Contract",
+    support: "Premium Support",
   },
 };
 
@@ -571,6 +572,14 @@ export default function AdminPage() {
                         licenseDefaults={PLAN_DEFAULTS}
                       />
                     </div>
+                    {!licenseLoading && license && (
+                      <div className="mt-8">
+                        <PaymentSection
+                          company={selectedCompany}
+                          license={license}
+                        />
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-16 text-center">
