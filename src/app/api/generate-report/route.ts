@@ -33,6 +33,12 @@ interface ReportSetupJson {
     target?: string;
   }>;
 }
+interface CustomCalculatedField {
+  field_name: string;
+  formula: string;
+  dependencies: string[];
+  format?: "currency" | "percentage" | "number";
+}
 
 interface ReportConfigJson {
   db_defination: Array<{
@@ -63,6 +69,7 @@ interface ReportConfigJson {
     sort_order: string;
   }>;
   summary_fields?: string[];
+  custom_calculated_fields?: CustomCalculatedField[];
   report_header?: string;
   response_to_user?: string;
   [key: string]: any;
@@ -388,6 +395,239 @@ async function processFetchOrder(
   }
 }
 
+/**
+ * ✅ Calculates custom fields using HyperFormula for Excel-style formulas
+ *
+ * @param bodyFields - Array of stitched row objects (with label keys)
+ * @param customFields - Array of custom calculated field definitions
+ * @param fieldLabelMap - Mapping of table.field -> label (for reverse lookup)
+ * @returns Modified bodyFields with calculated fields added
+ *
+ * Time Complexity: O(n × m) where n = rows, m = calculated fields
+ * Space Complexity: O(n × m) for HyperFormula sheet data
+ */
+function calculateCustomFields(
+  bodyFields: Record<string, any>[],
+  customFields: CustomCalculatedField[],
+  fieldLabelMap: Record<string, Record<string, string>>
+): Record<string, any>[] {
+  // Early return if no custom fields defined
+  if (!customFields || customFields.length === 0) {
+    return bodyFields;
+  }
+
+  // Early return if no data to process
+  if (!bodyFields || bodyFields.length === 0) {
+    return bodyFields;
+  }
+
+  try {
+    // Import HyperFormula (dynamic import for Next.js compatibility)
+    const { HyperFormula } = require("hyperformula");
+
+    // Create reverse mapping: label -> original field name
+    // This is needed because dependencies use field names, but bodyFields use labels
+    const labelToFieldMap: Record<string, string> = {};
+    Object.keys(fieldLabelMap).forEach((tableName) => {
+      Object.keys(fieldLabelMap[tableName]).forEach((fieldName) => {
+        const label = fieldLabelMap[tableName][fieldName];
+        labelToFieldMap[label] = fieldName;
+      });
+    });
+
+    // Process each calculated field
+    customFields.forEach((calcField) => {
+      const { field_name, formula, dependencies, format } = calcField;
+
+      // Validate required fields
+      if (
+        !field_name ||
+        !formula ||
+        !dependencies ||
+        dependencies.length === 0
+      ) {
+        console.warn(`⚠️ Skipping invalid calculated field: ${field_name}`);
+        return;
+      }
+
+      // Map dependency field names to their corresponding labels in bodyFields
+      const dependencyLabels: string[] = [];
+      const missingDeps: string[] = [];
+
+      dependencies.forEach((depFieldName) => {
+        // Find the label for this dependency field name
+        let foundLabel: string | null = null;
+
+        // Search through all tables to find the label
+        Object.keys(fieldLabelMap).forEach((tableName) => {
+          if (fieldLabelMap[tableName][depFieldName]) {
+            foundLabel = fieldLabelMap[tableName][depFieldName];
+          }
+        });
+
+        if (foundLabel) {
+          dependencyLabels.push(foundLabel);
+        } else {
+          missingDeps.push(depFieldName);
+        }
+      });
+
+      // Skip if critical dependencies are missing
+      if (missingDeps.length > 0) {
+        console.warn(
+          `⚠️ Cannot calculate "${field_name}": Missing dependencies [${missingDeps.join(
+            ", "
+          )}]`
+        );
+        return;
+      }
+
+      // Build HyperFormula sheet data
+      // Row 0: Headers (dependency labels)
+      // Row 1+: Data rows with values
+      const sheetData: any[][] = [];
+
+      // Header row
+      sheetData.push(dependencyLabels);
+
+      // Data rows
+      bodyFields.forEach((row) => {
+        const dataRow: any[] = [];
+        dependencyLabels.forEach((label) => {
+          let value = row[label];
+
+          // Handle missing or invalid values
+          if (
+            value === undefined ||
+            value === null ||
+            value === "--" ||
+            value === ""
+          ) {
+            value = 0; // Default to 0 for calculations
+          }
+
+          // Clean string values (remove prefixes/suffixes like $, %)
+          if (typeof value === "string") {
+            value = value.replace(/[^0-9.-]/g, "");
+            value = parseFloat(value);
+            if (isNaN(value)) {
+              value = 0;
+            }
+          }
+
+          dataRow.push(value);
+        });
+        sheetData.push(dataRow);
+      });
+
+      // Initialize HyperFormula instance
+      const hfInstance = HyperFormula.buildEmpty({
+        licenseKey: "gpl-v3", // Open source license
+      });
+
+      // Add sheet with data
+      const sheetName = "CalcSheet";
+      hfInstance.addSheet(sheetName);
+      hfInstance.setSheetContent(hfInstance.getSheetId(sheetName)!, sheetData);
+
+      // Build formula that references the correct columns
+      // Example: "=A2*B2" where A and B are dependency columns
+      let processedFormula = formula.trim();
+
+      // Remove leading "=" if present (HyperFormula requires it, but we'll add it back)
+      if (processedFormula.startsWith("=")) {
+        processedFormula = processedFormula.substring(1);
+      }
+
+      // Replace field names in formula with Excel column references
+      // Example: "UnitPrice * Quantity" -> "A2 * B2" (for row 2)
+      dependencies.forEach((depFieldName, index) => {
+        const colLetter = String.fromCharCode(65 + index); // A, B, C, ...
+
+        // Create regex to match whole word only (avoid partial matches)
+        const regex = new RegExp(`\\b${depFieldName}\\b`, "g");
+
+        // For now, use row 2 as template (we'll evaluate per row later)
+        processedFormula = processedFormula.replace(regex, `${colLetter}2`);
+      });
+
+      // Calculate values for each row
+      bodyFields.forEach((row, rowIndex) => {
+        try {
+          // Adjust formula for current row (row 2, 3, 4, ... in Excel)
+          const rowFormula = processedFormula.replace(/(\d+)/g, (match) => {
+            return String(rowIndex + 2); // +2 because row 0 is header, row 1 is first data
+          });
+
+          // Add formula cell to sheet
+          const resultCol = String.fromCharCode(65 + dependencies.length); // Next column after dependencies
+          const resultCell = `${resultCol}${rowIndex + 2}`;
+
+          hfInstance.setCellContents(
+            {
+              sheet: hfInstance.getSheetId(sheetName)!,
+              col: dependencies.length,
+              row: rowIndex + 1,
+            },
+            [["=" + rowFormula]]
+          );
+
+          // Get calculated value
+          const cellValue = hfInstance.getCellValue({
+            sheet: hfInstance.getSheetId(sheetName)!,
+            col: dependencies.length,
+            row: rowIndex + 1,
+          });
+
+          // Format the result
+          let formattedValue: any = cellValue;
+
+          if (typeof cellValue === "number" && !isNaN(cellValue)) {
+            switch (format) {
+              case "currency":
+                formattedValue = `$${cellValue.toFixed(2)}`;
+                break;
+              case "percentage":
+                formattedValue = `${cellValue.toFixed(2)}%`;
+                break;
+              case "number":
+              default:
+                formattedValue = cellValue.toFixed(2);
+                break;
+            }
+          } else if (cellValue instanceof Error) {
+            // Handle formula errors
+            formattedValue = "--";
+            console.warn(
+              `⚠️ Formula error for "${field_name}" in row ${rowIndex}:`,
+              cellValue.message
+            );
+          } else {
+            formattedValue = "--";
+          }
+
+          // Add calculated field to row
+          row[field_name] = formattedValue;
+        } catch (error) {
+          console.error(
+            `❌ Error calculating "${field_name}" for row ${rowIndex}:`,
+            error
+          );
+          row[field_name] = "--";
+        }
+      });
+
+      console.log(`✅ Successfully calculated field: ${field_name}`);
+    }); // End forEach customFields
+
+    return bodyFields;
+  } catch (error) {
+    console.error("❌ HyperFormula calculation failed:", error);
+    // Return original data if calculation fails
+    return bodyFields;
+  }
+}
+
 async function stitch(
   setupJson: ReportSetupJson,
   reportStructure: ReportConfigJson,
@@ -416,10 +656,21 @@ async function stitch(
     // Add report columns
     if (reportStructure.report_columns) {
       reportStructure.report_columns.forEach((col) => {
+        // ✅ Skip empty/invalid columns
+        if (
+          !col.table ||
+          !col.field ||
+          col.table.trim() === "" ||
+          col.field.trim() === ""
+        ) {
+          return; // Skip this entry
+        }
+
         const label =
           fieldLabelMap[col.table] && fieldLabelMap[col.table][col.field]
             ? fieldLabelMap[col.table][col.field]
             : col.field;
+
         requiredFields.push({
           table: col.table,
           field: col.field,
@@ -611,8 +862,14 @@ async function stitch(
       return outputRecord;
     });
 
+    const bodyFieldsWithCalculations = calculateCustomFields(
+      bodyFields,
+      reportStructure.custom_calculated_fields || [],
+      fieldLabelMap
+    );
+
     const stitchResult: StitchResult = {
-      BodyField: bodyFields,
+      BodyField: bodyFieldsWithCalculations,
     };
 
     // Save the stitched result
@@ -704,6 +961,15 @@ function generateReportStructure(
           getFieldLabel(col.table, col.field)
         )
       : [];
+
+    if (reportStructure.custom_calculated_fields) {
+      reportStructure.custom_calculated_fields.forEach((calcField) => {
+        // Only add if not already in bodyFieldOrder
+        if (!bodyFieldOrder.includes(calcField.field_name)) {
+          bodyFieldOrder.push(calcField.field_name);
+        }
+      });
+    }
 
     const result: any[] = [];
 
@@ -821,6 +1087,17 @@ function generateReportStructure(
         fieldSuffix[fieldLabel] = suffix;
       }
     });
+
+    if (reportStructure.custom_calculated_fields) {
+      reportStructure.custom_calculated_fields.forEach((calcField) => {
+        if (filteredBodyFields.includes(calcField.field_name)) {
+          // Auto-add prefix/suffix based on format type
+          // Note: Calculated fields already have formatting applied in calculateCustomFields()
+          // So we don't add prefix/suffix here to avoid double formatting
+          // If you want to add custom prefix/suffix, define them in report_config
+        }
+      });
+    }
 
     const bodySection = {
       Body: {
