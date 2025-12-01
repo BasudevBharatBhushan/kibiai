@@ -465,6 +465,13 @@ function calculateCustomFields(
           }
         });
 
+        // 2. If not found, but bodyFields already contain this as a calculated field
+        if (!foundLabel) {
+          if (bodyFields[0] && bodyFields[0][depFieldName] !== undefined) {
+            foundLabel = depFieldName; // use raw field_name
+          }
+        }
+
         if (foundLabel) {
           dependencyLabels.push(foundLabel);
         } else {
@@ -555,9 +562,14 @@ function calculateCustomFields(
       bodyFields.forEach((row, rowIndex) => {
         try {
           // Adjust formula for current row (row 2, 3, 4, ... in Excel)
-          const rowFormula = processedFormula.replace(/(\d+)/g, (match) => {
-            return String(rowIndex + 2); // +2 because row 0 is header, row 1 is first data
-          });
+          // const rowFormula = processedFormula.replace(/(\d+)/g, (match) => {
+          //   return String(rowIndex + 2); // +2 because row 0 is header, row 1 is first data
+          // });
+
+          const rowFormula = processedFormula.replace(
+            /([A-Z]+)(\d+)/g,
+            (match, col, row) => `${col}${rowIndex + 2}`
+          );
 
           // Add formula cell to sheet
           const resultCol = String.fromCharCode(65 + dependencies.length); // Next column after dependencies
@@ -580,34 +592,71 @@ function calculateCustomFields(
           });
 
           // Format the result
-          let formattedValue: any = cellValue;
+          // let formattedValue: any = cellValue;
+
+          // if (typeof cellValue === "number" && !isNaN(cellValue)) {
+          //   switch (format) {
+          //     case "currency":
+          //       formattedValue = `$${cellValue.toFixed(2)}`;
+          //       break;
+          //     case "percentage":
+          //       formattedValue = `${cellValue.toFixed(2)}%`;
+          //       break;
+          //     case "number":
+          //     default:
+          //       formattedValue = cellValue.toFixed(2);
+          //       break;
+          //   }
+          // } else if (cellValue instanceof Error) {
+          //   // Handle formula errors
+          //   formattedValue = "--";
+          //   console.warn(
+          //     `⚠️ Formula error for "${field_name}" in row ${rowIndex}:`,
+          //     cellValue.message
+          //   );
+          // } else {
+          //   formattedValue = "--";
+          // }
+
+          let finalValue: any = cellValue;
 
           if (typeof cellValue === "number" && !isNaN(cellValue)) {
             switch (format) {
-              case "currency":
-                formattedValue = `$${cellValue.toFixed(2)}`;
-                break;
               case "percentage":
-                formattedValue = `${cellValue.toFixed(2)}%`;
+                // Convert decimal → percent and round (0.01156 → 1.16)
+                finalValue = Math.round(cellValue * 10000) / 100;
                 break;
+
+              case "currency":
+                // Keep numeric value, rounded (UI layer adds currency symbol)
+                finalValue = Math.round(cellValue * 100) / 100;
+                break;
+
               case "number":
               default:
-                formattedValue = cellValue.toFixed(2);
+                // Standard numeric rounding
+                finalValue = Math.round(cellValue * 100) / 100;
                 break;
             }
           } else if (cellValue instanceof Error) {
-            // Handle formula errors
-            formattedValue = "--";
+            finalValue = "--";
             console.warn(
               `⚠️ Formula error for "${field_name}" in row ${rowIndex}:`,
               cellValue.message
             );
           } else {
-            formattedValue = "--";
+            finalValue = "--";
           }
 
           // Add calculated field to row
-          row[field_name] = formattedValue;
+          //Store the trimmed final value
+
+          // row[field_name] = finalValue;
+          // Add calculated field to row
+          row[field_name] =
+            typeof finalValue === "string"
+              ? finalValue.replace(/\u00A0/g, " ").trim()
+              : finalValue;
         } catch (error) {
           console.error(
             `❌ Error calculating "${field_name}" for row ${rowIndex}:`,
@@ -1091,14 +1140,26 @@ function generateReportStructure(
     if (reportStructure.custom_calculated_fields) {
       reportStructure.custom_calculated_fields.forEach((calcField) => {
         if (filteredBodyFields.includes(calcField.field_name)) {
+          const { field_name, format } = calcField;
+
           // Auto-add prefix/suffix based on format type
-          // Note: Calculated fields already have formatting applied in calculateCustomFields()
-          // So we don't add prefix/suffix here to avoid double formatting
-          // If you want to add custom prefix/suffix, define them in report_config
+          switch (format) {
+            case "currency":
+              fieldPrefix[field_name] = "$";
+              break;
+            case "percentage":
+              fieldSuffix[field_name] = "%";
+              break;
+            case "number":
+              // No prefix/suffix for plain numbers
+              break;
+            default:
+              // No formatting if format is not specified
+              break;
+          }
         }
       });
     }
-
     const bodySection = {
       Body: {
         BodyField: stitchResult.BodyField,
