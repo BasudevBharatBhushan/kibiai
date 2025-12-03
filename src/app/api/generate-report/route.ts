@@ -408,27 +408,262 @@ async function processFetchOrder(
  * Time Complexity: O(n × m) where n = rows, m = calculated fields
  * Space Complexity: O(n × m) for HyperFormula sheet data
  */
+
+// function calculateCustomFields(
+//   bodyFields: Record<string, any>[],
+//   customFields: CustomCalculatedField[],
+//   fieldLabelMap: Record<string, Record<string, string>>
+// ): Record<string, any>[] {
+//   if (!customFields || customFields.length === 0) return bodyFields;
+//   if (!bodyFields || bodyFields.length === 0) return bodyFields;
+
+//   try {
+//     const { HyperFormula } = require("hyperformula");
+
+//     // Reverse map: label → fieldName
+//     const labelToFieldMap: Record<string, string> = {};
+//     Object.keys(fieldLabelMap).forEach((tableName) => {
+//       Object.keys(fieldLabelMap[tableName]).forEach((fieldName) => {
+//         const label = fieldLabelMap[tableName][fieldName];
+//         labelToFieldMap[label] = fieldName;
+//       });
+//     });
+
+//     customFields.forEach((calcField) => {
+//       const { field_name, formula, dependencies, format } = calcField;
+
+//       if (
+//         !field_name ||
+//         !formula ||
+//         !dependencies ||
+//         dependencies.length === 0
+//       ) {
+//         console.warn("⚠️ Invalid calculated field:", calcField);
+//         return;
+//       }
+
+//       console.log("\n==============================");
+//       console.log("🧮 Processing Calculated Field:", field_name);
+//       console.log("==============================");
+
+//       const dependencyLabels: string[] = [];
+//       const missingDeps: string[] = [];
+
+//       // Resolve dependency labels
+//       dependencies.forEach((dep) => {
+//         let foundLabel: string | null = null;
+
+//         Object.keys(fieldLabelMap).forEach((table) => {
+//           if (fieldLabelMap[table][dep]) {
+//             foundLabel = fieldLabelMap[table][dep];
+//           }
+//         });
+
+//         if (!foundLabel) {
+//           const matchingCalc = customFields.find((cf) => cf.field_name === dep);
+//           if (matchingCalc) {
+//             const calcLabel = matchingCalc.label || matchingCalc.field_name;
+//             if (bodyFields[0][calcLabel] !== undefined) {
+//               foundLabel = calcLabel;
+//             }
+//           }
+//         }
+
+//         if (foundLabel) dependencyLabels.push(foundLabel);
+//         else {
+//           console.log("❌ Missing dependency:", dep);
+//           missingDeps.push(dep);
+//         }
+//       });
+
+//       if (missingDeps.length > 0) return;
+
+//       // Build sheet input
+//       const sheetData: any[][] = [];
+//       sheetData.push(dependencyLabels);
+
+//       bodyFields.forEach((row, rowIndex) => {
+//         const dataRow: any[] = [];
+
+//         dependencyLabels.forEach((label) => {
+//           let rawValue = row[label];
+//           let value = rawValue;
+
+//           console.log(`\n🔹 Row ${rowIndex}, Field "${label}"`);
+//           console.log(
+//             "   🔍 Raw incoming value:",
+//             rawValue,
+//             `typeof=${typeof rawValue}`
+//           );
+
+//           // Handle empty
+//           if (
+//             value === undefined ||
+//             value === null ||
+//             value === "" ||
+//             value === "--"
+//           ) {
+//             console.log("   ⚠️ Empty → using 0");
+//             value = 0;
+//           }
+
+//           if (typeof value === "string") {
+//             const trimmed = value.trim();
+//             console.log("   ✂ Trimmed:", trimmed);
+
+//             // Detect hidden chars
+//             if (/[\u00A0\r\n\t]/.test(trimmed)) {
+//               console.log(
+//                 "   ❗ Hidden whitespace detected:",
+//                 JSON.stringify(trimmed)
+//               );
+//             }
+
+//             // Detect MM/DD/YYYY (02/15/2025)
+
+//             const mmddyyyy = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
+//             if (mmddyyyy.test(trimmed)) {
+//               const match = trimmed.match(mmddyyyy);
+
+//               if (match) {
+//                 const [, mm, dd, yyyy] = match;
+//                 const iso = `${yyyy}-${mm}-${dd}`;
+//                 console.log(
+//                   "   ✔ MM/DD/YYYY detected → converting to ISO:",
+//                   trimmed,
+//                   "→",
+//                   iso
+//                 );
+//                 value = iso;
+//               } else {
+//                 console.log(
+//                   "   ❌ MM/DD/YYYY regex matched but trimmed.match() returned null. Value:",
+//                   trimmed
+//                 );
+//               }
+//             }
+//           }
+
+//           console.log(
+//             "   🔎 FINAL value sent to HF:",
+//             value,
+//             `typeof=${typeof value}`
+//           );
+//           dataRow.push(value);
+//         });
+
+//         sheetData.push(dataRow);
+//       });
+
+//       console.log("\n📄 Final Sheet Data sent to HyperFormula:");
+//       console.log(JSON.stringify(sheetData, null, 2));
+
+//       // Initialize HF
+//       const hfInstance = HyperFormula.buildEmpty({ licenseKey: "gpl-v3" });
+//       const sheetName = "CalcSheet";
+//       hfInstance.addSheet(sheetName);
+//       const sheetId = hfInstance.getSheetId(sheetName)!;
+//       hfInstance.setSheetContent(sheetId, sheetData);
+
+//       // pre-process formula
+//       let processedFormula = formula.trim();
+//       if (processedFormula.startsWith("="))
+//         processedFormula = processedFormula.substring(1);
+
+//       dependencies.forEach((dep, index) => {
+//         const colLetter = String.fromCharCode(65 + index);
+//         const regex = new RegExp(`\\b${dep}\\b`, "g");
+//         // processedFormula = processedFormula.replace(regex, `${colLetter}2`);
+//         processedFormula = processedFormula.replace(
+//           regex,
+//           `CONCAT("\\"", TEXT(${colLetter}2,"yyyy-mm-dd"), "\\"")`
+//         );
+//       });
+
+//       console.log("\n🧪 Formula Template:", processedFormula);
+
+//       // Calculate per row
+//       bodyFields.forEach((row, rowIndex) => {
+//         const rowFormula = processedFormula.replace(
+//           /([A-Z]+)(\d+)/g,
+//           (match, col) => `${col}${rowIndex + 2}`
+//         );
+
+//         // console.log(`\n➡ Row ${rowIndex} → Evaluating: =${rowFormula}`);
+
+//         hfInstance.setCellContents(
+//           { sheet: sheetId, col: dependencyLabels.length, row: rowIndex + 1 },
+//           [["=" + rowFormula]]
+//         );
+
+//         const cellValue = hfInstance.getCellValue({
+//           sheet: sheetId,
+//           col: dependencyLabels.length,
+//           row: rowIndex + 1,
+//         });
+
+//         // console.log("   ↪ HF Output:", cellValue);
+
+//         let finalValue = cellValue;
+
+//         if (typeof cellValue !== "number" || isNaN(cellValue)) {
+//           // console.log("   ❗ INVALID result → '--'");
+//           finalValue = "--";
+//         }
+
+//         const displayLabel = calcField.label || field_name;
+//         row[displayLabel] = finalValue;
+//       });
+
+//       console.log(`\n✅ Completed Calculated Field: ${field_name}`);
+//     });
+
+//     return bodyFields;
+//   } catch (error) {
+//     console.error("❌ HyperFormula calculation failed:", error);
+//     return bodyFields;
+//   }
+// }
+
 function calculateCustomFields(
   bodyFields: Record<string, any>[],
   customFields: CustomCalculatedField[],
   fieldLabelMap: Record<string, Record<string, string>>
 ): Record<string, any>[] {
-  // Early return if no custom fields defined
-  if (!customFields || customFields.length === 0) {
-    return bodyFields;
-  }
-
-  // Early return if no data to process
-  if (!bodyFields || bodyFields.length === 0) {
-    return bodyFields;
-  }
+  if (!customFields || customFields.length === 0) return bodyFields;
+  if (!bodyFields || bodyFields.length === 0) return bodyFields;
 
   try {
-    // Import HyperFormula (dynamic import for Next.js compatibility)
     const { HyperFormula } = require("hyperformula");
 
-    // Create reverse mapping: label -> original field name
-    // This is needed because dependencies use field names, but bodyFields use labels
+    // Helper: Convert date string to Excel serial number
+    const dateToExcelSerial = (dateStr: string): number | null => {
+      // Handle MM/DD/YYYY format
+      const mmddyyyy = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+      let isoDate = dateStr;
+
+      if (mmddyyyy.test(dateStr.trim())) {
+        const match = dateStr.trim().match(mmddyyyy);
+        if (match) {
+          const [, mm, dd, yyyy] = match;
+          isoDate = `${yyyy}-${mm}-${dd}`;
+        }
+      }
+
+      // Parse ISO date (YYYY-MM-DD) to Date object
+      const parsed = new Date(isoDate);
+      if (isNaN(parsed.getTime())) return null;
+
+      // Excel serial: days since December 30, 1899 (Excel's epoch)
+      const excelEpoch = new Date(1899, 11, 30);
+      const diffMs = parsed.getTime() - excelEpoch.getTime();
+      const excelSerial = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      return excelSerial;
+    };
+
+    // Reverse map: label → fieldName
     const labelToFieldMap: Record<string, string> = {};
     Object.keys(fieldLabelMap).forEach((tableName) => {
       Object.keys(fieldLabelMap[tableName]).forEach((fieldName) => {
@@ -437,270 +672,225 @@ function calculateCustomFields(
       });
     });
 
-    // Process each calculated field
     customFields.forEach((calcField) => {
       const { field_name, formula, dependencies, format } = calcField;
 
-      // Validate required fields
       if (
         !field_name ||
         !formula ||
         !dependencies ||
         dependencies.length === 0
       ) {
-        console.warn(`⚠️ Skipping invalid calculated field: ${field_name}`);
+        console.warn("⚠️ Invalid calculated field:", calcField);
         return;
       }
 
-      // Map dependency field names to their corresponding labels in bodyFields
+      console.log(`\n🧮 Processing: ${field_name}`);
+      console.log(`📝 Formula: ${formula}`);
+
       const dependencyLabels: string[] = [];
       const missingDeps: string[] = [];
 
-      dependencies.forEach((depFieldName) => {
-        // Find the label for this dependency field name
+      // Resolve dependency labels
+      dependencies.forEach((dep) => {
         let foundLabel: string | null = null;
 
-        // Search through all tables to find the label
-        Object.keys(fieldLabelMap).forEach((tableName) => {
-          if (fieldLabelMap[tableName][depFieldName]) {
-            foundLabel = fieldLabelMap[tableName][depFieldName];
+        Object.keys(fieldLabelMap).forEach((table) => {
+          if (fieldLabelMap[table][dep]) {
+            foundLabel = fieldLabelMap[table][dep];
           }
         });
 
-        // 2. If not found, but bodyFields already contain this as a calculated field
         if (!foundLabel) {
-          // if (bodyFields[0] && bodyFields[0][depFieldName] !== undefined) {
-          //   foundLabel = depFieldName; // use raw field_name
-          // }
-          const matchingCalcField = customFields.find(
-            (cf) => cf.field_name === depFieldName
-          );
-          if (matchingCalcField) {
-            const calcLabel =
-              matchingCalcField.label || matchingCalcField.field_name;
+          const matchingCalc = customFields.find((cf) => cf.field_name === dep);
+          if (matchingCalc) {
+            const calcLabel = matchingCalc.label || matchingCalc.field_name;
             if (bodyFields[0][calcLabel] !== undefined) {
               foundLabel = calcLabel;
             }
           }
         }
 
-        if (foundLabel) {
-          dependencyLabels.push(foundLabel);
-        } else {
-          missingDeps.push(depFieldName);
-        }
+        if (foundLabel) dependencyLabels.push(foundLabel);
+        else missingDeps.push(dep);
       });
 
-      // Skip if critical dependencies are missing
       if (missingDeps.length > 0) {
-        console.warn(
-          `⚠️ Cannot calculate "${field_name}": Missing dependencies [${missingDeps.join(
-            ", "
-          )}]`
-        );
+        console.warn(`⚠️ Missing dependencies:`, missingDeps);
         return;
       }
 
-      // Build HyperFormula sheet data
-      // Row 0: Headers (dependency labels)
-      // Row 1+: Data rows with values
+      // Build sheet input with date conversion
       const sheetData: any[][] = [];
-
-      // Header row
       sheetData.push(dependencyLabels);
 
-      // Data rows
       bodyFields.forEach((row) => {
         const dataRow: any[] = [];
+
         dependencyLabels.forEach((label) => {
           let value = row[label];
 
-          // Handle missing or invalid values
+          // Handle empty/null values
           if (
             value === undefined ||
             value === null ||
-            value === "--" ||
-            value === ""
+            value === "" ||
+            value === "--"
           ) {
-            value = 0; // Default to 0 for calculations
+            value = 0;
+            dataRow.push(value);
+            return;
           }
 
-          // Clean string values (remove prefixes/suffixes like $, %)
+          // If it's a string, check if it's a date
           if (typeof value === "string") {
-            // If it looks like a date (has "/" or "-"), pass as string (no sanitization)
-            if (/^\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4}$/.test(value.trim())) {
-              // leave it as raw date string
+            const trimmed = value.trim();
+
+            // Detect date patterns (MM/DD/YYYY or YYYY-MM-DD)
+            const datePattern = /^\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4}$/;
+
+            if (datePattern.test(trimmed)) {
+              // Convert date string to Excel serial number
+              const excelSerial = dateToExcelSerial(trimmed);
+
+              if (excelSerial !== null) {
+                console.log(`📅 Converted "${trimmed}" → ${excelSerial}`);
+                value = excelSerial;
+              } else {
+                console.warn(`⚠️ Failed to convert date: "${trimmed}"`);
+                value = 0;
+              }
             } else {
-              // Numeric string cleaning
-              const cleaned = value.replace(/[^0-9.-]/g, "");
-              value = parseFloat(cleaned);
-              if (isNaN(value)) value = 0;
+              // Not a date - clean numeric string
+              const cleaned = trimmed.replace(/[^0-9.-]/g, "");
+              const parsed = parseFloat(cleaned);
+              value = isNaN(parsed) ? 0 : parsed;
             }
           }
 
           dataRow.push(value);
         });
+
         sheetData.push(dataRow);
       });
 
-      // Initialize HyperFormula instance
+      // Initialize HyperFormula with proper configuration
       const hfInstance = HyperFormula.buildEmpty({
-        licenseKey: "gpl-v3", // Open source license
+        licenseKey: "gpl-v3",
+        // Set null date to December 30, 1899 (Excel standard)
+        nullDate: { year: 1899, month: 12, day: 30 },
       });
 
-      // Add sheet with data
       const sheetName = "CalcSheet";
       hfInstance.addSheet(sheetName);
-      hfInstance.setSheetContent(hfInstance.getSheetId(sheetName)!, sheetData);
+      const sheetId = hfInstance.getSheetId(sheetName)!;
+      hfInstance.setSheetContent(sheetId, sheetData);
 
-      // Build formula that references the correct columns
-      // Example: "=A2*B2" where A and B are dependency columns
+      // DEBUG: Test TODAY() function
+      console.log("\n🔍 DEBUG: Testing TODAY() function...");
+      hfInstance.setCellContents(
+        { sheet: sheetId, col: dependencyLabels.length + 1, row: 0 },
+        [["=TODAY()"]]
+      );
+      const todayValue = hfInstance.getCellValue({
+        sheet: sheetId,
+        col: dependencyLabels.length + 1,
+        row: 0,
+      });
+      console.log(
+        `📅 TODAY() returns: ${todayValue} (type: ${typeof todayValue})`
+      );
+
+      // Convert today to readable date for verification
+      if (typeof todayValue === "number") {
+        const todayDate = new Date(1899, 11, 30 + todayValue);
+        console.log(
+          `📅 TODAY() as date: ${todayDate.toISOString().split("T")[0]}`
+        );
+      }
+
+      // Pre-process formula (replace field names with column references)
       let processedFormula = formula.trim();
-
-      // Remove leading "=" if present (HyperFormula requires it, but we'll add it back)
       if (processedFormula.startsWith("=")) {
         processedFormula = processedFormula.substring(1);
       }
 
-      // Replace field names in formula with Excel column references
-      // Example: "UnitPrice * Quantity" -> "A2 * B2" (for row 2)
-      dependencies.forEach((depFieldName, index) => {
-        const colLetter = String.fromCharCode(65 + index); // A, B, C, ...
-
-        // Create regex to match whole word only (avoid partial matches)
-        const regex = new RegExp(`\\b${depFieldName}\\b`, "g");
-
-        // For now, use row 2 as template (we'll evaluate per row later)
+      dependencies.forEach((dep, index) => {
+        const colLetter = String.fromCharCode(65 + index);
+        const regex = new RegExp(`\\b${dep}\\b`, "g");
         processedFormula = processedFormula.replace(regex, `${colLetter}2`);
       });
 
-      // Calculate values for each row
+      console.log(`🧪 Processed formula: ${processedFormula}`);
+
+      // Calculate per row
       bodyFields.forEach((row, rowIndex) => {
         try {
-          // Adjust formula for current row (row 2, 3, 4, ... in Excel)
-          // const rowFormula = processedFormula.replace(/(\d+)/g, (match) => {
-          //   return String(rowIndex + 2); // +2 because row 0 is header, row 1 is first data
-          // });
-
           const rowFormula = processedFormula.replace(
             /([A-Z]+)(\d+)/g,
-            (match, col, row) => `${col}${rowIndex + 2}`
+            (match, col) => `${col}${rowIndex + 2}`
           );
 
-          // Add formula cell to sheet
-          const resultCol = String.fromCharCode(65 + dependencies.length); // Next column after dependencies
-          const resultCell = `${resultCol}${rowIndex + 2}`;
+          console.log(`\n📊 Row ${rowIndex}: =${rowFormula}`);
 
           hfInstance.setCellContents(
-            {
-              sheet: hfInstance.getSheetId(sheetName)!,
-              col: dependencies.length,
-              row: rowIndex + 1,
-            },
+            { sheet: sheetId, col: dependencyLabels.length, row: rowIndex + 1 },
             [["=" + rowFormula]]
           );
 
-          // Get calculated value
           const cellValue = hfInstance.getCellValue({
-            sheet: hfInstance.getSheetId(sheetName)!,
-            col: dependencies.length,
+            sheet: sheetId,
+            col: dependencyLabels.length,
             row: rowIndex + 1,
           });
 
-          // Format the result
-          // let formattedValue: any = cellValue;
-
-          // if (typeof cellValue === "number" && !isNaN(cellValue)) {
-          //   switch (format) {
-          //     case "currency":
-          //       formattedValue = `$${cellValue.toFixed(2)}`;
-          //       break;
-          //     case "percentage":
-          //       formattedValue = `${cellValue.toFixed(2)}%`;
-          //       break;
-          //     case "number":
-          //     default:
-          //       formattedValue = cellValue.toFixed(2);
-          //       break;
-          //   }
-          // } else if (cellValue instanceof Error) {
-          //   // Handle formula errors
-          //   formattedValue = "--";
-          //   console.warn(
-          //     `⚠️ Formula error for "${field_name}" in row ${rowIndex}:`,
-          //     cellValue.message
-          //   );
-          // } else {
-          //   formattedValue = "--";
-          // }
+          console.log(`   Result: ${cellValue} (type: ${typeof cellValue})`);
 
           let finalValue: any = cellValue;
 
           if (typeof cellValue === "number" && !isNaN(cellValue)) {
             switch (format) {
               case "percentage":
-                // Convert decimal → percent and round (0.01156 → 1.16)
                 finalValue = Math.round(cellValue * 10000) / 100;
                 break;
-
               case "currency":
-                // Keep numeric value, rounded (UI layer adds currency symbol)
                 finalValue = Math.round(cellValue * 100) / 100;
                 break;
-
               case "number":
               default:
-                // Standard numeric rounding
                 finalValue = Math.round(cellValue * 100) / 100;
                 break;
             }
           } else if (cellValue instanceof Error) {
             finalValue = "--";
-            console.warn(
-              `⚠️ Formula error for "${field_name}" in row ${rowIndex}:`,
-              cellValue.message
-            );
+            console.warn(`⚠️ Formula error:`, cellValue.message);
           } else {
             finalValue = "--";
           }
 
-          // Add calculated field to row
-          //Store the trimmed final value
-
-          // row[field_name] = finalValue;
-          // Add calculated field to row
-          // row[field_name] =
-          //   typeof finalValue === "string"
-          //     ? finalValue.replace(/\u00A0/g, " ").trim()
-          //     : finalValue;
-          const displayLabel = calcField.label || field_name; // Use label if available, fallback to field_name
+          const displayLabel = calcField.label || field_name;
           row[displayLabel] =
             typeof finalValue === "string"
               ? finalValue.replace(/\u00A0/g, " ").trim()
               : finalValue;
-        } catch (error) {
-          const displayLabel = calcField.label || field_name; // Use label if available, fallback to field_name
 
-          console.error(
-            `❌ Error calculating "${field_name}" for row ${rowIndex}:`,
-            error
-          );
-          // row[field_name] = "--";
+          console.log(`   ✅ Final value: ${finalValue}`);
+        } catch (error) {
+          const displayLabel = calcField.label || field_name;
+          console.error(`❌ Error in row ${rowIndex}:`, error);
           row[displayLabel] = "--";
         }
       });
 
-      console.log(`✅ Successfully calculated field: ${field_name}`);
-    }); // End forEach customFields
+      console.log(`\n✅ Completed: ${field_name}`);
+    });
 
     return bodyFields;
   } catch (error) {
     console.error("❌ HyperFormula calculation failed:", error);
-    // Return original data if calculation fails
     return bodyFields;
   }
 }
-
 async function stitch(
   setupJson: ReportSetupJson,
   reportStructure: ReportConfigJson,
