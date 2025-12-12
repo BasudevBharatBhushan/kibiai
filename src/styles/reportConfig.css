@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* The standard white box container */
+  .card-base {
+    @apply bg-white border border-slate-200 rounded-lg shadow-sm mb-6 transition-all;
+  }
+  
+  /* The header inside a collapsible card */
+  .card-header-wrapper {
+    @apply flex justify-between items-center px-6 py-4 cursor-pointer select-none 
+    border-b border-transparent hover:bg-slate-50 transition-colors;
+  }
+  
+  .card-title {
+    @apply text-lg font-semibold text-slate-800 flex items-center gap-2;
+  }
+
+  .card-content {
+    @apply p-6 border-t border-slate-100 ;
+  }
+
+  /* The container for a single row (like a column or filter) */
+  .draggable-row {
+    @apply border border-slate-200 rounded-lg p-3 bg-slate-50 transition-colors flex gap-3 items-center;
+  }
+  
+  /* Visual pop effect when dragging */
+  .draggable-row-active {
+    @apply bg-indigo-50 shadow-lg z-50 border-indigo-300;
+  }
+  
+  /* Section inside a card (e.g., Display Fields area) */
+  .nested-section {
+    @apply bg-white p-3 rounded border border-slate-200 mb-4 ml-8;
+  }
+
+  /* Table Header */
+  .table-header {
+    @apply px-4 py-3 font-medium text-xs text-slate-500 uppercase bg-slate-50 border-b text-left;
+  }
+  
+  /* Table Cell */
+  .table-cell {
+    @apply p-3 align-middle border-b border-slate-100;
+  }
+
+}
+
+@layer utilities {
+  .form-input {
+    @apply w-full p-2 border border-slate-300 text-black rounded text-sm 
+    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent 
+    transition-all disabled:bg-slate-100 disabled:text-slate-400;
+  }
+  
+  .form-label {
+    @apply block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wide;
+  }
+
+  .btn-primary {
+    @apply bg-indigo-600 text-white px-4 py-2 rounded text-sm 
+    hover:bg-indigo-700 shadow-sm transition-colors flex items-center gap-2 font-medium;
+  }
+
+  .btn-small {
+    @apply px-3 py-1.5 text-xs;
+  }
+  
+  .btn-ghost-add {
+    @apply text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded 
+    border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer;
+  }
+
+  .btn-danger-icon {
+    @apply text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded transition-colors;
+  }
+}
