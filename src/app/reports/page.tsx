@@ -336,7 +336,7 @@ const ReportDataFetcher: React.FC = () => {
         pKeysToUse = undefined;
       } else {
         // For subsequent orders, use source field as p_key_field and extract pkeys from previous dataset
-        pKeyField = source;
+        pKeyField = target;
         if (previousDataset && source) {
           pKeysToUse = extractPkeysFromData(previousDataset, source);
           addLog(
