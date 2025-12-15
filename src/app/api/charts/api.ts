@@ -1,4 +1,3 @@
-import { get, method } from 'lodash';
 import { ReportChartSchema } from '@/lib/ChartTypes';
 
 const API_URL = process.env.API_URL || 'http://localhost:3001/api/dataApi';
