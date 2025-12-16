@@ -1,5 +1,5 @@
-import { get, method } from 'lodash';
 import { ReportChartSchema } from '@/lib/ChartTypes';
+import { NextResponse } from 'next/server';
 
 const API_URL = process.env.API_URL || 'http://localhost:3001/api/dataApi';
 
@@ -10,6 +10,11 @@ interface ApiResponse {
     JS_ReportID: string;
   }>;
   messages?: Array<{ code: string; message: string }>;
+}
+
+interface ChartUpdateParams {
+  isActive?: boolean;
+  type?: string;
 }
 
 //Authentication
@@ -31,8 +36,7 @@ export async function fetchChartConfiguration(reportId: string): Promise<ReportC
             layout: process.env.FM_CHARTS_LAYOUT,
             query: [
                 {
-                    "JS_ReportID": `==${reportId}`,
-                    "isActive": "1"
+                    "JS_ReportID": `==${reportId}`
                 }
             ],
             limit: 50
@@ -81,7 +85,9 @@ export async function fetchChartConfiguration(reportId: string): Promise<ReportC
         const parsed = JSON.parse(record.AI_JSONResponse_Chart);
         return { 
           ...parsed, 
-          pKey: record.PrimaryKey || parsed.pKey 
+          pKey: record.PrimaryKey || parsed.pKey,
+          isActive: record.isActive || parsed.isActive,
+          fmRecordId: record.recordId || parsed.fmRecordId,
         };
       } catch (e) {
         console.error("Failed to parse chart config for record:", record.recordId, e);
@@ -96,6 +102,33 @@ export async function fetchChartConfiguration(reportId: string): Promise<ReportC
     return [];
   }
 }
+//Update Chart Active Status
+export async function updateChartStatus(fmRecordId: string, params: ChartUpdateParams): Promise<boolean> {
+  if (!fmRecordId) return false;
+
+  try {
+    const res = await fetch('/api/charts/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          fmRecordId, 
+        isActive: params.isActive,
+          chartType: params.type
+        }),
+    });
+
+    if (!res.ok) {
+        console.error("Failed to update status");
+        return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Update Status Error:", error);
+    return false;
+  }
+}
+
 function normalizeRecord(record: any): any {
   const normalized: any = { ...record };
 

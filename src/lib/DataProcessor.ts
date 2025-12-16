@@ -71,12 +71,15 @@ export function processData(
   aiConfigs.forEach((aiResponse) => {
     const newId = aiResponse.pKey || uuidv4();
 
+    const activeStatus = String(aiResponse.isActive) === '1';
+
     // 1. Handle Insight Cards
     if (aiResponse.business_insights) {
       results.push({
         id: newId,
         kind: 'insight',
         title: 'Business Insights',
+        isActive: activeStatus,
         categories: [],
         series: [],
         insights: aiResponse.business_insights,
@@ -181,6 +184,8 @@ export function processData(
       id: newId,
       kind: mapChartType(chart_type),
       title: chart_title,
+      isActive: activeStatus,
+      fmRecordId: aiResponse.fmRecordId,
       categories: labels,
       series: series,     
       layout

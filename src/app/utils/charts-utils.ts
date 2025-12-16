@@ -13,10 +13,13 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
 
     return {
       chart: { type: 'pie' },
-
+      colors: config.colors,
       title: { text: config.title, align: 'center' },
 
       credits: { enabled: false },
+
+      xAxis: { visible: false },
+      yAxis: { visible: false },
 
       plotOptions: {
         pie: {
@@ -45,15 +48,17 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
 //non-pie charts
   return {
     chart: { type: config.kind },
-
+    colors: config.colors,
     title: { text: config.title },
 
     xAxis: {
+      visible: true,
       categories: config.categories,
       title: { text: undefined },
     },
 
     yAxis: {
+      visible: true,
       title: { text: 'Value' },
       min: 0,
     },

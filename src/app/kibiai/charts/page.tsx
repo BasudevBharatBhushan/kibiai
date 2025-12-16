@@ -32,7 +32,7 @@ export default async function ChartsPage({ searchParams }: PageProps) {
     <main className="min-h-screen w-full bg-slate-50">
       <Dashboard 
         initialSchemas={schemas} 
-        initialDataset={dataset} 
+        initialDataset={dataset}
       />
     </main>
   );
