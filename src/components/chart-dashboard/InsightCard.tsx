@@ -37,11 +37,11 @@ export default function InsightCard({ config, onRemove }: Props) {
             const content = rest.join(' - ');
             return (
               <div key={idx} className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
-                <h4 className="text-xs font-bold text-blue-600 mb-1 flex items-center gap-1.5">
+                <h4 className="text-12 font-bold text-blue-600 mb-1 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                   {content ? heading : 'Insight'}
                 </h4>
-                <p className="text-xs text-slate-600 leading-relaxed">
+                <p className="text-12 text-slate-600 leading-relaxed">
                   {content || heading}
                 </p>
               </div>

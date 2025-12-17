@@ -23,7 +23,7 @@ export default async function ChartsPage({ searchParams }: PageProps) {
     );
   }
 
-  const [schemas, dataset] = await Promise.all([
+  const [schemas, dataResponse] = await Promise.all([
     fetchChartConfiguration(reportId),
     fetchReportData(reportId)
   ]);
@@ -32,7 +32,10 @@ export default async function ChartsPage({ searchParams }: PageProps) {
     <main className="min-h-screen w-full bg-slate-50">
       <Dashboard 
         initialSchemas={schemas} 
-        initialDataset={dataset}
+        initialDataset={dataResponse.rows} 
+        initialCanvasState={dataResponse.canvasState}
+        initialLayoutMode={dataResponse.layoutMode} 
+        reportRecordId={dataResponse.reportRecordId}
       />
     </main>
   );

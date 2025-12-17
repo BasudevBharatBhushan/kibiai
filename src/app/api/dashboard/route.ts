@@ -23,9 +23,9 @@ export async function POST(request: Request) {
       method: "updateRecord",
       methodBody: {
         database: process.env.FM_DATABASE,
-        layout: "MultiTableReport Filtered Datas", // The layout where ChartCanvasState exists
-        recordId: reportRecordId,
-        fieldData: {
+        layout: "MultiTableReport Filtered Datas", 
+        recordId: reportRecordId, 
+        record: {
           "ChartCanvasState": jsonString
         }
       },
@@ -43,8 +43,8 @@ export async function POST(request: Request) {
     });
 
     if (!res.ok) {
-        const err = await res.text();
-        return NextResponse.json({ error: err }, { status: res.status });
+        const errText = await res.text();
+        return NextResponse.json({ error: errText }, { status: res.status });
     }
 
     return NextResponse.json({ success: true });

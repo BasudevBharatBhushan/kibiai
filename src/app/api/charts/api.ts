@@ -1,5 +1,4 @@
 import { ReportChartSchema } from '@/lib/ChartTypes';
-import { NextResponse } from 'next/server';
 
 const API_URL = process.env.API_URL || 'http://localhost:3001/api/dataApi';
 
@@ -151,9 +150,9 @@ function normalizeRecord(record: any): any {
 
   return normalized;
 }
-
 //Report Data Fetcher
-export async function fetchReportData(reportId: string): Promise<any[]> {
+export async function fetchReportData(reportId: string): Promise<{ rows: any[], canvasState: any, layoutMode: string,reportRecordId: string }> {
+
   try {
     const res = await fetch(API_URL, {
         method: 'POST',
@@ -174,32 +173,76 @@ export async function fetchReportData(reportId: string): Promise<any[]> {
 
     if (!res.ok) throw new Error(`Data Fetch Failed: ${res.status}`);
     const data = await res.json();
-
     const record = data.records?.[0];
+
     if (!record || !record.ReportStructuredData) {
-        console.warn(`No 'ReportStructuredData' found for Report ID ${reportId}`);
-        return [];
+        console.warn("[API] No report data found.");
+        return { rows: [], canvasState: [], layoutMode: 'grid', reportRecordId: "" };
     }
 
-    let parsedStructure: any[] = [];
+    const reportRecordId = record.recordId; 
+    let canvasState: any[] = [];
+    let layoutMode = 'grid';
+    if (record.ChartCanvasState) {
+        try {
+            const parsed = JSON.parse(record.ChartCanvasState);
+            
+            if (Array.isArray(parsed)) {
+                canvasState = parsed;
+            } else if (parsed.charts && Array.isArray(parsed.charts)) {
+                canvasState = parsed.charts;
+                layoutMode = parsed.layoutMode || 'grid';
+            }
+        } catch (e) {
+            console.warn("Could not parse saved ChartCanvasState", e);
+        }
+    }
+
+    let rows: any[] = [];
     try {
-        parsedStructure = JSON.parse(record.ReportStructuredData);
-        console.log("Parsed ReportStructuredData:", parsedStructure);
+        const parsedStructure = JSON.parse(record.ReportStructuredData);
+        const bodyObj = parsedStructure.find((item: any) => item.Body && item.Body.BodyField);
+        if (bodyObj && bodyObj.Body && Array.isArray(bodyObj.Body.BodyField)) {
+            rows = bodyObj.Body.BodyField.map((row: any) => normalizeRecord(row));
+        }
     } catch (e) {
-        console.error("Failed to parse  JSON string", e);
-        return [];
+        console.error("[API] Failed to parse ReportStructuredData", e);
     }
 
-    const bodyObj = parsedStructure.find((item: any) => item.Body && item.Body.BodyField);
-    
-    if (bodyObj && bodyObj.Body && Array.isArray(bodyObj.Body.BodyField)) {
-        return bodyObj.Body.BodyField.map((row: any) => normalizeRecord(row));
-    }
-
-    return [];
-
+  return { rows, canvasState, layoutMode, reportRecordId };
+  
   } catch (error) {
-    console.error("API Data Error:", error);
-    return [];
+    console.error("[API] Critical Error:", error);
+    return { rows: [], canvasState: null, layoutMode: 'grid', reportRecordId: "" };
+  }
+}
+
+// Save State Function
+export async function saveDashboardState(reportRecordId: string, newState: any): Promise<boolean> {
+  if (!reportRecordId) {
+    console.error("[API] Save aborted: Missing reportRecordId");
+    return false;
+  }
+
+  try {
+    const res = await fetch('/api/dashboard/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          reportRecordId, 
+          canvasState: newState 
+        }),
+    });
+
+    if (!res.ok) {
+        console.error(`[API] Save Failed: ${res.status} ${res.statusText}`);
+        return false;
+    }
+    
+    console.log("[API] Save Successful"); 
+    return true;
+  } catch (error) {
+    console.error("[API] Save Error:", error);
+    return false;
   }
 }

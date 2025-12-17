@@ -1,6 +1,4 @@
-// src/app/api/charts/update/route.ts
 import { NextResponse } from 'next/server';
-import { record } from 'zod';
 
 const API_URL = process.env.API_URL || 'https://py-fmd.vercel.app/api/dataApi';
 

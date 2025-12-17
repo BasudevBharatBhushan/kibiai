@@ -12,7 +12,7 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
       })) ?? [];
 
     return {
-      chart: { type: 'pie' },
+      chart: { type: 'pie', reflow: true },
       colors: config.colors,
       title: { text: config.title, align: 'center' },
 
@@ -47,7 +47,10 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
   }
 //non-pie charts
   return {
-    chart: { type: config.kind },
+    chart: { 
+      type: config.kind, 
+      reflow: true
+    },
     colors: config.colors,
     title: { text: config.title },
 
