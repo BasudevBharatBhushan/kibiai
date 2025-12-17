@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^16.6.0",
+    "reactflow": "^11.11.4",
     "highcharts": "^12.4.0",
     "highcharts-react-official": "^3.2.3",
     "hyperformula": "^3.1.0",
