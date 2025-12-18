@@ -59,14 +59,14 @@ export function SubSummarySection() {
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef as React.Ref<HTMLDivElement>} 
+                ref={provided.innerRef } 
                 className="space-y-6"
               >
                 {groupEntries.map(([key, group], index) => (
                   <Draggable key={key} draggableId={key} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef as React.Ref<HTMLDivElement>}
+                        ref={provided.innerRef }
                         {...provided.draggableProps}
                         className={`border border-slate-200 rounded-lg p-4 transition-colors ${
                           snapshot.isDragging ? "draggable-row-active" : "bg-slate-50"

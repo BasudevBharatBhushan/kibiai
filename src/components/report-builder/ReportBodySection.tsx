@@ -84,14 +84,14 @@ export function ReportBodySection() {
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef as React.Ref<HTMLDivElement>} 
+                ref={provided.innerRef } 
                 className="space-y-2"
               >
                 {columns.map((col, index) => (
                   <Draggable key={`col-${index}`} draggableId={`col-${index}`} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef as React.Ref<HTMLDivElement>}
+                        ref={provided.innerRef }
                         {...provided.draggableProps}
                         className={`draggable-row ${
                           snapshot.isDragging 
@@ -170,14 +170,14 @@ export function ReportBodySection() {
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef as React.Ref<HTMLDivElement>}
+                ref={provided.innerRef }
                 className="space-y-2"
               >
                 {sortOrders.map((sort, index) => (
                   <Draggable key={`sort-${index}`} draggableId={`sort-${index}`} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef as React.Ref<HTMLDivElement>}
+                        ref={provided.innerRef }
                         {...provided.draggableProps}
                         className={`flex gap-3 items-center p-2 rounded border transition-colors ${
                           snapshot.isDragging 
