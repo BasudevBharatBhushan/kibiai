@@ -4,7 +4,7 @@ import React from "react";
 import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
-import { Plus, X, GripVertical } from "lucide-react";
+import { Plus, X, GripVertical , Newspaper, Sigma } from "lucide-react";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { TableDef, FieldDef } from "@/lib/reportConfigTypes"; // Import Types
@@ -71,6 +71,7 @@ const getNumberOptions = () => {
     <CollapsibleCard 
       title="Report Grand-Summary" 
       defaultOpen={false}
+      icon={<Sigma size={18}/>}
       action={
         <button 
            onClick={(e) => { e.stopPropagation(); dispatch({ type: "ADD_SUMMARY_FIELD" }); }}
@@ -83,12 +84,12 @@ const getNumberOptions = () => {
        <DragDropContext onDragEnd={onDragEnd}>
          <Droppable droppableId="summary-list">
            {(provided) => (
-             <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+             <div {...provided.droppableProps} ref={provided.innerRef as React.Ref<HTMLDivElement>} className="space-y-2">
                 {summaryFields.map((field, index) => (
                   <Draggable key={`sum-${index}`} draggableId={`sum-${index}`} index={index}>
                     {(provided, snapshot) => (
                        <div
-                         ref={provided.innerRef}
+                         ref={provided.innerRef as React.Ref<HTMLDivElement>}
                          {...provided.draggableProps}
                          className={`draggable-row ${
                             snapshot.isDragging ? "draggable-row-active" : "bg-slate-50 border-slate-200"

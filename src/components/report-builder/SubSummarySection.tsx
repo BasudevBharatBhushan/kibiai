@@ -5,7 +5,7 @@ import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { Modal } from "@/components/ui/Modal";
-import { Plus, X, GripVertical } from "lucide-react";
+import { Plus, X, GripVertical , ScrollText , Layers} from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard"; 
 
@@ -48,6 +48,7 @@ export function SubSummarySection() {
         <CollapsibleCard 
           title="Report Sub-Summary(s)"
           defaultOpen={false}
+          icon={<Layers size={18}/>}
           action={
             <button onClick={(e) => { e.stopPropagation(); handleOpenModal(); }} className="btn-primary btn-small">
               <Plus size={16} /> Add
@@ -58,14 +59,14 @@ export function SubSummarySection() {
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef} 
+                ref={provided.innerRef as React.Ref<HTMLDivElement>} 
                 className="space-y-6"
               >
                 {groupEntries.map(([key, group], index) => (
                   <Draggable key={key} draggableId={key} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef}
+                        ref={provided.innerRef as React.Ref<HTMLDivElement>}
                         {...provided.draggableProps}
                         className={`border border-slate-200 rounded-lg p-4 transition-colors ${
                           snapshot.isDragging ? "draggable-row-active" : "bg-slate-50"

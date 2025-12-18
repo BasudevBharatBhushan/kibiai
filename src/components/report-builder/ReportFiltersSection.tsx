@@ -5,7 +5,7 @@ import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
-import { Plus, X } from "lucide-react";
+import { Plus, X , SlidersHorizontal } from "lucide-react";
 
 interface FilterRow {
   id: string;
@@ -114,7 +114,7 @@ export function ReportFiltersSection() {
   };
 
   return (
-    <CollapsibleCard title="Report Filters" defaultOpen={false}>
+    <CollapsibleCard title="Report Filters" defaultOpen={false} icon={<SlidersHorizontal size={18} />}>
       
       {/* --- Date Range Fields --- */}
       <div className="mb-8">

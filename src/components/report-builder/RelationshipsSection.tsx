@@ -7,6 +7,7 @@ import { useSchema } from "@/lib/hooks/useSchema";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { SchemaVisualizer } from "@/components/report-builder/SchemaVisualizer";
 import { DbDefinition } from "@/lib/reportConfigTypes";
+import { Link2, Trash2 } from "lucide-react";
 
 export function RelationshipsSection() {
   const { state, dispatch } = useReport();
@@ -32,30 +33,30 @@ export function RelationshipsSection() {
   return (
     <CollapsibleCard 
       title="Relationships Definition" 
-      defaultOpen={true}
+      defaultOpen={false}
+      icon={<Link2 size={18} />}
       action={
         <button 
           onClick={(e) => { e.stopPropagation(); handleAddRow(); }} 
           className="btn-primary btn-small"
         >
-          <span>+</span> Add Join
+          <span>+</span> Join
         </button>
       }
     >
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto mb-6 border rounded-lg border-slate-200">
         <table className="w-full text-sm text-left">
           <thead>
             <tr>
-              <th className="table-header">Primary Table</th>
-              <th className="table-header">Joined Table</th>
-              <th className="table-header">Source Field</th>
-              <th className="table-header">Target Field</th>
-              <th className="table-header">Join Type</th>
-              <th className="table-header w-20">Order</th>
-              <th className="table-header w-16">Action</th>
+              <th className="table-header min-w-[160px]">Primary Table</th>
+              <th className="table-header min-w-[160px]">Joined Table</th>
+              <th className="table-header min-w-[160px]">Source Field</th>
+              <th className="table-header min-w-[160px]">Target Field</th>
+              <th className="table-header min-w-[160px]">Join Type</th>
+              <th className="table-header min-w-[100px]">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 bg-white">
             {rows.map((row, index) => (
               <tr key={index} className="hover:bg-slate-50/50">
                 <td className="table-cell">
@@ -72,6 +73,7 @@ export function RelationshipsSection() {
                   <select
                     value={row.joined_table}
                     onChange={(e) => handleUpdate(index, "joined_table", e.target.value)}
+                    disabled={row.fetch_order === 1}
                     className="form-input"
                   >
                     <option value="">Select...</option>
@@ -82,7 +84,7 @@ export function RelationshipsSection() {
                   <select
                     value={row.source}
                     onChange={(e) => handleUpdate(index, "source", e.target.value)}
-                    disabled={!row.primary_table}
+                    disabled={!row.primary_table || row.fetch_order === 1}
                     className="form-input"
                   >
                     <option value="">Select...</option>
@@ -115,20 +117,12 @@ export function RelationshipsSection() {
                     <option value="right">Right Join</option>
                   </select>
                 </td>
-                <td className="table-cell">
-                  <input
-                    type="number"
-                    value={row.fetch_order}
-                    onChange={(e) => handleUpdate(index, "fetch_order", parseInt(e.target.value))}
-                    className="form-input"
-                  />
-                </td>
                 <td className="table-cell text-center">
                   <button
                     onClick={() => dispatch({ type: "REMOVE_DB_DEF", payload: index })}
                     className="btn-danger-icon"
                   >
-                    ✕
+                    <Trash2 size={16} />
                   </button>
                 </td>
               </tr>

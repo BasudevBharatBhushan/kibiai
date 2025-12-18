@@ -9,7 +9,8 @@ interface CollapsibleCardProps {
   children: React.ReactNode;
   defaultOpen?: boolean;
   className?: string;
-  action?: React.ReactNode; // Optional button in header ("+ Add")
+  action?: React.ReactNode;
+  icon?: React.ReactNode;
 }
 
 export function CollapsibleCard({ 
@@ -17,7 +18,8 @@ export function CollapsibleCard({
   children, 
   defaultOpen = false, 
   className = "",
-  action 
+  action ,
+  icon
 }: CollapsibleCardProps) {
 
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -35,6 +37,12 @@ export function CollapsibleCard({
           </span>
           <h2>{title}</h2>
         </div>
+
+        {icon && (
+            <span className="text-indigo-600 bg-indigo-50 p-1.5 rounded-md">
+              {icon}
+            </span>
+          )}
         
         {/* Action Button (Prevent bubble up) */}
         {action && (
