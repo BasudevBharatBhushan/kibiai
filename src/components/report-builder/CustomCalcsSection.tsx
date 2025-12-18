@@ -5,7 +5,7 @@ import React from "react";
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema"; 
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
-import { Plus, X } from "lucide-react";
+import { Plus, X , Calculator} from "lucide-react";
 
 export function CustomCalcsSection() {
   const { state, dispatch } = useReport();
@@ -50,6 +50,7 @@ export function CustomCalcsSection() {
     <CollapsibleCard 
       title="Custom Calculated Fields" 
       defaultOpen={false}
+      icon={<Calculator size={18} />}
       action={
         <button 
           onClick={() => dispatch({ type: "ADD_CALC" })} 
@@ -76,7 +77,7 @@ export function CustomCalcsSection() {
             </div>
 
             {/* Inputs Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="form-label">Field Name (Internal)</label>
                 <input
@@ -97,7 +98,7 @@ export function CustomCalcsSection() {
                   onChange={(e) => dispatch({ type: "UPDATE_CALC", payload: { index, field: "label", value: e.target.value } })}
                 />
               </div>
-              <div>
+              {/* <div>
                 <label className="form-label">Format</label>
                 <select
                   className="form-input"
@@ -108,7 +109,20 @@ export function CustomCalcsSection() {
                   <option value="currency">Currency ($)</option>
                   <option value="percentage">Percentage (%)</option>
                 </select>
-              </div>
+              </div> */}
+            </div>
+
+            <div className="mb-4 w-1/2 pr-2">
+              <label className="form-label">Format</label>
+              <select
+                className="form-input"
+                value={calc.format}
+                onChange={(e) => dispatch({ type: "UPDATE_CALC", payload: { index, field: "format", value: e.target.value } })}
+              >
+                <option value="number">Number</option>
+                <option value="currency">Currency ($)</option>
+                <option value="percentage">Percentage (%)</option>
+              </select>
             </div>
 
             {/* Dependencies */}

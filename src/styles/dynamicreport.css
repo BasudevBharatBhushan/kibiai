@@ -1,0 +1,157 @@
+/* src/assets/styles/dynamicreport.css */
+@import "tailwindcss";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* --- Main Container --- */
+  .dynamic-report-container {
+    @apply bg-white flex justify-center items-start min-h-screen m-0 p-4 font-sans text-black text-[12px];
+  }
+
+  /* --- Main Report Wrapper --- */
+  /* Added text-slate-900 and explicitly forced color: black for print/safety */
+  .dynamic-report {
+    @apply  min-h-[297mm] p-[15mm_10mm] mx-auto bg-white border-none box-border flex flex-col relative mt-1 font-sans shadow-none;
+    color: #000000; 
+    font-family: Arial, sans-serif;
+    line-height: 1.2;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .current-date {
+    @apply absolute top-[10mm] right-[15mm] text-[9pt] text-black font-normal;
+  }
+
+  /* --- Title Header --- */
+  .title-header {
+    @apply text-right mb-5 border-b border-black pb-2 flex justify-between items-center;
+  }
+
+  .title-header h1 {
+    @apply text-[14pt] mb-1 uppercase font-bold text-black tracking-wide;
+  }
+
+  .title-header h2 {
+    @apply text-[10pt] font-normal text-black normal-case;
+  }
+
+  /* --- Subsummary Groups --- */
+  .subsummary {
+    @apply mb-4 border-none bg-transparent overflow-visible mx-0;
+    page-break-inside: auto;
+  }
+
+  .subsummary.level-0 { @apply ml-0; }
+  .subsummary.level-1 { @apply ml-[20px] mt-[10px]; }
+  .subsummary.level-2 { @apply ml-[40px] mt-[8px]; }
+
+  .subsummary-header {
+    @apply py-2 mx-[5px] font-bold bg-transparent text-slate-900 border-b-2 border-slate-700 flex items-baseline gap-2;
+  }
+
+  .subsummary.level-0 .subsummary-header { @apply text-[11pt] border-b-[3px] border-[#333333] uppercase tracking-wide; }
+  .subsummary.level-1 .subsummary-header { @apply text-[10pt] border-b-[2px] border-[#666666]; }
+  .subsummary.level-2 .subsummary-header { @apply text-[9pt] border-b-[1px] border-[#999999]; }
+
+  .field-name {
+    @apply font-bold uppercase text-black text-xs;
+  }
+
+  /* --- Display Fields --- */
+  .subsummary-display {
+    @apply py-2 mx-[5px] bg-transparent border-none text-[9pt] text-black flex flex-wrap gap-4 px-0;
+  }
+
+  .display-item {
+    @apply flex gap-1 mr-[15px] inline-block;
+  }
+
+  .display-label {
+    @apply font-bold text-black text-[9pt];
+  }
+
+  .display-value {
+    @apply text-black font-normal;
+  }
+
+  .subsummary-content {
+    @apply p-0;
+  }
+
+  /* --- Body Table --- */
+  .body-table {
+    @apply w-full border-collapse mb-4 border-none font-sans text-[9pt];
+    page-break-inside: auto;
+  }
+
+  .body-table th {
+    @apply bg-transparent text-black font-bold px-2 py-1.5 text-left border-b border-black uppercase text-[9pt];
+  }
+
+  .body-table td {
+    @apply px-2 py-1 text-left border-none text-black bg-transparent text-[9pt];
+  }
+
+  .body-table tr:hover td {
+    @apply bg-transparent;
+  }
+
+  .body-table tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  /* --- Section Totals --- */
+  .section-totals {
+    @apply mt-2.5 py-2 mx-[5px] border-none bg-transparent px-0;
+  }
+
+  .totals-title {
+    @apply text-[10pt] font-bold text-black mb-1.5 uppercase tracking-normal border-b border-[#666666] pb-0.5 inline-block w-full;
+  }
+
+  .totals-grid {
+    @apply block;
+  }
+
+  .total-item {
+    @apply flex justify-between py-[3px];
+  }
+
+  .total-label {
+    @apply font-bold text-black text-[9pt];
+  }
+
+  .total-value {
+    @apply font-normal text-black text-[9pt];
+  }
+
+  /* --- Trailing Grand Summary --- */
+  .trailing-summary {
+    @apply mt-5 border-t-0 pt-2 bg-transparent;
+  }
+
+  .trailing-summary h3 {
+    @apply text-[12pt] mb-2.5 font-bold text-black uppercase text-center border-b-2 border-black pb-1.5;
+  }
+
+  .trailing-summary table {
+    @apply w-full border-collapse;
+  }
+
+  .trailing-summary td {
+    @apply py-1.5 border-none text-[9pt];
+  }
+
+  .trailing-summary td:first-child {
+    @apply text-black font-bold uppercase w-[40%];
+  }
+
+  .trailing-summary td:last-child {
+    @apply text-right font-normal text-black;
+  }
+}

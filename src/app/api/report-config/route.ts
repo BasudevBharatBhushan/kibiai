@@ -65,7 +65,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       fmRecordId: record.recordId,
       config,
-      setup
+      setup,
+      reportStructuredData: record.ReportStructuredData
     });
 
   } catch (error) {

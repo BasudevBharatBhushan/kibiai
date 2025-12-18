@@ -20,20 +20,20 @@ export function ReportPreview() {
   let finalJsonData: any[] = [];
 
   try {
-    // Case 1: LIVE UPDATE (from /api/trigger-generation)
-    // The API returns { status: "ok", report_structure_json: [...] }
+    // 1. Live API response: { status: "ok", report_structure_json: [...] }
     if (rawData.report_structure_json && Array.isArray(rawData.report_structure_json)) {
       finalJsonData = rawData.report_structure_json;
     } 
-    // Case 2: INITIAL LOAD (from DB via /api/reportConfig)
-    // The DB returns { config: ..., setup: ..., fmRecordId: ... }
-    // BUT we need the `ReportStructuredData` field which might be inside the raw response
-    // NOTE: The `state.reportPreview` is set by `fetchPreview` in page.tsx. 
-    // Let's ensure page.tsx passes the correct data.
-    
-    // Fallback: If passed directly as array
+    // 2. Direct Array (Already parsed from DB string)
     else if (Array.isArray(rawData)) {
       finalJsonData = rawData;
+    }
+    // 3. Fallback: Try to find ReportStructuredData if passed as raw object
+    else if (rawData.ReportStructuredData) {
+       const parsed = typeof rawData.ReportStructuredData === 'string' 
+          ? JSON.parse(rawData.ReportStructuredData)
+          : rawData.ReportStructuredData;
+       finalJsonData = Array.isArray(parsed) ? parsed : [];
     }
     else {
       console.warn("Unknown Preview Data Structure", rawData);
@@ -47,14 +47,14 @@ export function ReportPreview() {
   if (finalJsonData.length === 0) {
      return (
         <div className="flex items-center justify-center h-full text-slate-400 bg-white border border-slate-200 min-h-[600px]">
-           No preview data available.
+           No preview data available or data is empty.
         </div>
      )
   }
 
+  // Render the DynamicReport with the normalized array
   return (
-    <div className="bg-white shadow-lg border border-slate-200 w-full min-h-[800px] p-8 overflow-auto">
-      {/* Pass the normalized array to the engine */}
+    <div className="w-full h-full p-4 overflow-auto">
       <DynamicReport jsonData={finalJsonData} />
     </div>
   );

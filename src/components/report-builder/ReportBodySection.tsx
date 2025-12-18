@@ -5,7 +5,7 @@ import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard"; // Updated Import
-import { Plus, X, GripVertical, ArrowUpDown } from "lucide-react";
+import { Plus, X, GripVertical, ArrowUpDown , NotebookTabs, TableIcon} from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 
 export function ReportBodySection() {
@@ -58,32 +58,40 @@ export function ReportBodySection() {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <CollapsibleCard title="Report Body" defaultOpen={false}>
+      <CollapsibleCard title="Report Body" defaultOpen={false} icon={<TableIcon size={18}/>}>
 
         {/* --- Section 1: Report Columns --- */}
         <div className="mb-8">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-semibold text-slate-700 text-sm">Report Columns</h3>
+
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2 ">
+              <NotebookTabs size={14} /> Report Columns
+            </h3>
             <button 
               onClick={() => dispatch({ type: "ADD_COLUMN" })} 
-              className="btn-ghost-add"
+              className="btn-ghost-add inline-flex items-center gap-2"
             >
-              + Add Column
+              <Plus size={14} />
+              <span>Add Column</span>
             </button>
+          </div>
+
+          <div className="text-indigo-400 text-sm italic mt-5 mb-5">
+            The column arrangement decides the order of columns in the report.
           </div>
 
           <Droppable droppableId="columns-list" type="COLUMNS">
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef} 
+                ref={provided.innerRef as React.Ref<HTMLDivElement>} 
                 className="space-y-2"
               >
                 {columns.map((col, index) => (
                   <Draggable key={`col-${index}`} draggableId={`col-${index}`} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef}
+                        ref={provided.innerRef as React.Ref<HTMLDivElement>}
                         {...provided.draggableProps}
                         className={`draggable-row ${
                           snapshot.isDragging 
@@ -141,30 +149,35 @@ export function ReportBodySection() {
 
         {/* --- Section 2: Body Sort Order --- */}
         <div>
-          <div className="flex justify-between items-center mb-3 border-t border-slate-100 pt-4">
-            <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+            <div className="flex justify-between items-center mb-3 border-t border-slate-100 pt-4">
+              <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
               <ArrowUpDown size={14} /> Sort Order
-            </h3>
-            <button 
-              onClick={() => dispatch({ type: "ADD_BODY_SORT" })} 
-              className="btn-ghost-add"
-            >
-              + Add Sort
-            </button>
-          </div>
+              </h3>
+              <button 
+                onClick={() => dispatch({ type: "ADD_BODY_SORT" })} 
+                className="btn-ghost-add inline-flex items-center gap-2"
+              >
+                <Plus size={14} />
+                <span>Add Sort</span>
+              </button>
+            </div>
+
+            <div className="text-indigo-400 text-sm italic mt-5 mb-5">
+            The sort order decides the nested sorting of records within each section.
+            </div>
 
           <Droppable droppableId="sorts-list" type="SORTS">
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef}
+                ref={provided.innerRef as React.Ref<HTMLDivElement>}
                 className="space-y-2"
               >
                 {sortOrders.map((sort, index) => (
                   <Draggable key={`sort-${index}`} draggableId={`sort-${index}`} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef}
+                        ref={provided.innerRef as React.Ref<HTMLDivElement>}
                         {...provided.draggableProps}
                         className={`flex gap-3 items-center p-2 rounded border transition-colors ${
                           snapshot.isDragging 

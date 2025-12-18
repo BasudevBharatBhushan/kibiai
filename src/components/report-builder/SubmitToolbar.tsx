@@ -16,6 +16,9 @@ export function SubmitToolbar() {
 
     try {
       // Call OUR internal API
+
+
+      // 1. Save Config to DB
       const res = await fetch("/api/report-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -26,6 +29,29 @@ export function SubmitToolbar() {
       });
 
       if (!res.ok) throw new Error("Update failed");
+
+
+
+      // 2. AUTO-REFRESH PREVIEW (Call generate-report)
+      const genRes = await fetch("/api/generate-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          report_setup: state.setup,   
+          report_config: state.config 
+        })
+      });
+
+      const result = await genRes.json();
+
+      // 3. Update Preview Context
+      if (result.status === "ok" && result.report_structure_json) {
+        dispatch({ type: "SET_REPORT_PREVIEW", payload: result.report_structure_json });
+        alert("Configuration saved & Preview updated!");
+      } else {
+        console.warn("Preview generation warning:", result);
+        alert("Config saved, but preview generation had issues.");
+      }
       
       alert("Report updated successfully!");
     } catch (error) {
