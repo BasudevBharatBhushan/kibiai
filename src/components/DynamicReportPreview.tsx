@@ -33,51 +33,104 @@ const ExpandedReportView = ({ htmlContent, onClose }: { htmlContent: string, onC
         <!DOCTYPE html>
         <html>
           <head>
-            <title>Report Preview</title>
+            <title>Expanded Report</title>
             <style>
-              /* Inject Basic Print/Report Styles */
-              body { font-family: Arial, sans-serif; padding: 40px; background: #525659; margin: 0; display: flex; justify-content: center; }
+              /* 1. Global Reset */
+              html, body { 
+                margin: 0; 
+                padding: 0; 
+                width: 100%;
+                height: 100%;
+                background: #525659; 
+                font-family: Arial, sans-serif; 
+                color: #000;
+              }
               
+              /* 2. Wrapper creates the scrollable area */
+              .report-wrapper {
+                width: 100%;
+                min-height: 100vh;
+                box-sizing: border-box;
+                padding: 20px;
+                display: flex;
+                justify-content: center;
+              }
+              
+              /* 3. Paper container - Forces 100% width per request */
               .report-paper {
                 background: white;
-                width: 80%;
-                min-height: 297mm;
-                padding: 15mm 10mm;
-                box-shadow: 0 0 10px rgba(0,0,0,0.3);
+                width: 100%;       
+                max-width: 100%;   
+                min-height: 100vh; 
+                padding: 20px;
+                box-shadow: 0 0 15px rgba(0,0,0,0.3);
                 box-sizing: border-box;
               }
 
-              /* Base Report CSS (Copied from dynamicreport.css logic) */
-              .title-header { text-align: center; margin-bottom: 20px; }
-              .title-header h1 { font-size: 24px; text-transform: uppercase; margin: 0; }
-              .title-header h2 { font-size: 14px; color: #666; margin: 5px 0 0 0; }
-              .current-date { text-align: right; font-size: 10px; color: #999; margin-bottom: 10px; }
+              /* 4. OVERRIDE: Force the inner dynamic-report to fill the paper */
+              .dynamic-report {
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                min-height: auto !important;
+                box-shadow: none !important;
+                font-size: 9pt;
+                line-height: 1.2;
+              }
+
+              /* --- STYLES MATCHING dynamicreport.css --- */
               
-              .subsummary { margin-top: 15px; margin-bottom: 10px; }
-              .subsummary-header { font-size: 16px; font-weight: bold; color: #4338ca; border-bottom: 1px solid #e0e7ff; padding-bottom: 4px; margin-bottom: 8px; }
-              .subsummary-display { font-size: 13px; color: #4b5563; margin-bottom: 8px; padding-left: 8px; }
-              .subsummary-content { padding-left: 16px; border-left: 2px solid #f5f3ff; }
-              
-              table.body-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-              th { background-color: #f3f4f6; padding: 8px; text-align: left; border-bottom: 2px solid #e5e7eb; font-weight: 600; color: #374151; }
-              td { padding: 8px; border-bottom: 1px solid #f3f4f6; color: #4b5563; }
-              tr:nth-child(even) { background-color: #f9fafb; }
-              
-              .section-totals { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
-              .totals-title { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
-              .totals-grid { display: flex; gap: 20px; flex-wrap: wrap; }
-              .total-item { display: flex; align-items: center; gap: 8px; }
-              .total-label { font-size: 12px; color: #4b5563; }
-              .total-value { font-weight: bold; color: #1f2937; }
-              
-              .trailing-summary { margin-top: 40px; padding-top: 20px; border-top: 2px solid #000; }
-              .trailing-summary h3 { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+              /* Header */
+              .title-header { text-align: right; border-bottom: 1px solid #000; padding-bottom: 8px; margin-bottom: 20px; display: flex; justify-content: flex-end; align-items: center; }
+              .title-header h1 { font-size: 14pt; font-weight: bold; text-transform: uppercase; margin: 0 0 4px 0; color: #000; letter-spacing: 0.05em; }
+              .title-header h2 { font-size: 10pt; font-weight: normal; margin: 0; color: #000; }
+              .current-date { text-align: right; font-size: 9pt; color: #000; margin-bottom: 10px; }
+
+              /* Subsummaries */
+              .subsummary { margin-bottom: 16px; }
+              .subsummary.level-0 { margin-left: 0; }
+              .subsummary.level-1 { margin-left: 20px; margin-top: 10px; }
+              .subsummary.level-2 { margin-left: 40px; margin-top: 8px; }
+
+              .subsummary-header { font-weight: bold; color: #000; padding: 4px 0; margin-bottom: 4px; display: flex; align-items: baseline; gap: 8px; }
+              .subsummary.level-0 .subsummary-header { font-size: 11pt; border-bottom: 3px solid #333; text-transform: uppercase; }
+              .subsummary.level-1 .subsummary-header { font-size: 10pt; border-bottom: 2px solid #666; }
+              .subsummary.level-2 .subsummary-header { font-size: 9pt; border-bottom: 1px solid #999; }
+
+              .subsummary-display { font-size: 9pt; color: #000; padding: 4px 0; display: flex; flex-wrap: wrap; gap: 15px; }
+              .display-item { display: inline-flex; gap: 4px; }
+              .display-label { font-weight: bold; }
+              .subsummary-content { padding: 0; }
+
+              /* Tables */
+              table.body-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }
+              th { text-align: left; font-weight: bold; color: #000; border-bottom: 1px solid #000; padding: 6px 4px; text-transform: uppercase; font-size: 9pt; background: transparent; }
+              td { padding: 4px; color: #000; vertical-align: top; border: none; }
+              tr:nth-child(even) { background-color: transparent; }
+
+              /* Totals */
+              .section-totals { margin-top: 10px; padding: 8px 0; }
+              .totals-title { font-size: 10pt; font-weight: bold; text-transform: uppercase; color: #000; border-bottom: 1px solid #666; padding-bottom: 2px; margin-bottom: 6px; display: inline-block; width: 100%; }
+              .totals-grid { display: block; }
+              .total-item { display: flex; justify-content: space-between; padding: 2px 0; }
+              .total-label { font-size: 9pt; font-weight: bold; color: #000; }
+              .total-value { font-size: 9pt; font-weight: normal; color: #000; }
+
+              /* Grand Summary */
+              .trailing-summary { margin-top: 20px; padding-top: 10px; border-top: none; }
+              .trailing-summary h3 { font-size: 12pt; font-weight: bold; text-transform: uppercase; text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; color: #000; }
+              .trailing-summary table { width: 100%; border-collapse: collapse; }
+              .trailing-summary td { padding: 6px 0; font-size: 9pt; color: #000; }
+              .trailing-summary td:first-child { font-weight: bold; text-transform: uppercase; width: 40%; }
+              .trailing-summary td:last-child { text-align: right; }
             </style>
           </head>
           <body>
-            <div class="report-paper">
-              <div class="dynamic-report">
-                ${htmlContent}
+            <div class="report-wrapper">
+              <div class="report-paper">
+                <div class="dynamic-report">
+                  ${htmlContent}
+                </div>
               </div>
             </div>
           </body>
@@ -304,34 +357,57 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
         return;
     }
 
-    // Write same logic as expanded view but trigger print
+    // expanded view but trigger print
     printWindow.document.write(`
       <html>
         <head>
           <title>Print Report</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
-            .title-header { text-align: center; margin-bottom: 20px; }
-            .title-header h1 { font-size: 24px; text-transform: uppercase; margin: 0; }
-            .title-header h2 { font-size: 14px; color: #666; margin: 5px 0 0 0; }
-            .current-date { text-align: right; font-size: 10px; color: #999; margin-bottom: 10px; }
-            .subsummary { margin-top: 15px; margin-bottom: 10px; }
-            .subsummary-header { font-size: 16px; font-weight: bold; color: #4338ca; border-bottom: 1px solid #e0e7ff; padding-bottom: 4px; margin-bottom: 8px; }
-            .subsummary-display { font-size: 13px; color: #4b5563; margin-bottom: 8px; padding-left: 8px; }
-            .subsummary-content { padding-left: 16px; border-left: 2px solid #f5f3ff; }
-            table.body-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-            th { background-color: #f3f4f6; padding: 8px; text-align: left; border-bottom: 2px solid #e5e7eb; font-weight: 600; color: #374151; }
-            td { padding: 8px; border-bottom: 1px solid #f3f4f6; color: #4b5563; }
-            tr:nth-child(even) { background-color: #f9fafb; }
-            .section-totals { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
-            .totals-title { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
-            .totals-grid { display: flex; gap: 20px; flex-wrap: wrap; }
-            .total-item { display: flex; align-items: center; gap: 8px; }
-            .total-label { font-size: 12px; color: #4b5563; }
-            .total-value { font-weight: bold; color: #1f2937; }
-            .trailing-summary { margin-top: 40px; padding-top: 20px; border-top: 2px solid #000; }
+            body { font-family: Arial, sans-serif; padding: 20px; font-size: 9pt; color: #000; }
+            
+            /* --- COPY OF STYLES FROM dynamicreport.css --- */
+            .title-header { text-align: right; border-bottom: 1px solid #000; padding-bottom: 8px; margin-bottom: 20px; display: flex; justify-content: flex-end; align-items: center; }
+            .title-header h1 { font-size: 14pt; font-weight: bold; text-transform: uppercase; margin: 0 0 4px 0; color: #000; letter-spacing: 0.05em; }
+            .title-header h2 { font-size: 10pt; font-weight: normal; margin: 0; color: #000; }
+            .current-date { text-align: right; font-size: 9pt; color: #000; margin-bottom: 10px; }
+
+            .subsummary { margin-bottom: 16px; page-break-inside: avoid; }
+            .subsummary.level-0 { margin-left: 0; }
+            .subsummary.level-1 { margin-left: 20px; margin-top: 10px; }
+            .subsummary.level-2 { margin-left: 40px; margin-top: 8px; }
+
+            .subsummary-header { font-weight: bold; color: #000; padding: 4px 0; margin-bottom: 4px; display: flex; align-items: baseline; gap: 8px; }
+            .subsummary.level-0 .subsummary-header { font-size: 11pt; border-bottom: 3px solid #333; text-transform: uppercase; }
+            .subsummary.level-1 .subsummary-header { font-size: 10pt; border-bottom: 2px solid #666; }
+            .subsummary.level-2 .subsummary-header { font-size: 9pt; border-bottom: 1px solid #999; }
+
+            .subsummary-display { font-size: 9pt; color: #000; padding: 4px 0; display: flex; flex-wrap: wrap; gap: 15px; }
+            .display-item { display: inline-flex; gap: 4px; }
+            .display-label { font-weight: bold; }
+            .subsummary-content { padding: 0; }
+
+            table.body-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }
+            th { text-align: left; font-weight: bold; color: #000; border-bottom: 1px solid #000; padding: 6px 4px; text-transform: uppercase; font-size: 9pt; background: transparent; }
+            td { padding: 4px; color: #000; vertical-align: top; border: none; }
+            tr:nth-child(even) { background-color: transparent; }
+
+            .section-totals { margin-top: 10px; padding: 8px 0; }
+            .totals-title { font-size: 10pt; font-weight: bold; text-transform: uppercase; color: #000; border-bottom: 1px solid #666; padding-bottom: 2px; margin-bottom: 6px; display: inline-block; width: 100%; }
+            .totals-grid { display: block; }
+            .total-item { display: flex; justify-content: space-between; padding: 2px 0; }
+            .total-label { font-size: 9pt; font-weight: bold; color: #000; }
+            .total-value { font-size: 9pt; font-weight: normal; color: #000; }
+
+            .trailing-summary { margin-top: 20px; padding-top: 10px; border-top: none; }
+            .trailing-summary h3 { font-size: 12pt; font-weight: bold; text-transform: uppercase; text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; color: #000; }
+            .trailing-summary table { width: 100%; border-collapse: collapse; }
+            .trailing-summary td { padding: 6px 0; font-size: 9pt; color: #000; }
+            .trailing-summary td:first-child { font-weight: bold; text-transform: uppercase; width: 40%; }
+            .trailing-summary td:last-child { text-align: right; }
+
             @media print {
               @page { margin: 15mm; size: A4; }
+              body { padding: 0; background: white; }
               tr { page-break-inside: avoid; }
               h1, h2, h3 { page-break-after: avoid; }
             }
@@ -404,7 +480,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
     <div className="flex flex-col h-full relative bg-gray-100">
       
       {/* --- Controls  Toolbar --- */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-white/95 backdrop-blur-sm shadow-xl p-2 rounded-full border border-slate-300 transition-all">
+      <div className="absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-white/95 backdrop-blur-sm shadow-xl p-2 rounded-full border border-slate-300 transition-all">
           
           {/* Pagination Controls */}
           <button 
@@ -459,7 +535,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
       {/* --- Normal Viewport --- */}
       <div 
         id="main-div" 
-        className="flex-1 overflow-auto p-8 flex justify-center items-start"
+        className="flex-1 overflow-auto flex justify-center items-start"
       >
         <div 
             className="bg-white shadow-xl transition-all duration-300 relative"

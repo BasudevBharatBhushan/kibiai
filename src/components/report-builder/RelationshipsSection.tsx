@@ -7,7 +7,7 @@ import { useSchema } from "@/lib/hooks/useSchema";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { SchemaVisualizer } from "@/components/report-builder/SchemaVisualizer";
 import { DbDefinition } from "@/lib/reportConfigTypes";
-import { Link2, Trash2 } from "lucide-react";
+import { Link2, Trash2 , Plus} from "lucide-react";
 
 export function RelationshipsSection() {
   const { state, dispatch } = useReport();
@@ -40,7 +40,7 @@ export function RelationshipsSection() {
           onClick={(e) => { e.stopPropagation(); handleAddRow(); }} 
           className="btn-primary btn-small"
         >
-          <span>+</span> Join
+          <Plus size={16} /> Join
         </button>
       }
     >

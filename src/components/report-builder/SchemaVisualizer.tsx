@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -10,6 +10,8 @@ import ReactFlow, {
   Node, 
   Edge
 } from 'reactflow';
+import { Maximize, Minimize, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import 'reactflow/dist/style.css';
 import "../../styles/reportConfig.css"
 import { useReport } from '@/context/ReportContext';
@@ -26,6 +28,13 @@ export function SchemaVisualizer() {
   // React Flow State
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [mounted, setMounted] = useState(false); 
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Auto-Layout Logic
   useEffect(() => {
@@ -85,22 +94,89 @@ export function SchemaVisualizer() {
   // FIX: Only depend on setupTables (stable from context) and db_defination
   }, [db_defination, setupTables, setNodes, setEdges]);
 
-  return (
-    <Card className="h-[500px] flex flex-col">
-        <CardHeader title="Visual Schema" />
-        <div className="flex-1 bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
-            <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                nodeTypes={nodeTypes}
-                fitView
-            >
-                <Background color="#e2e8f0" gap={16} />
-                <Controls />
-            </ReactFlow>
+
+  // 3. Define the Modal Content
+  const expandedModalContent = (
+    <div 
+        className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+        onClick={() => setIsExpanded(false)}
+    >
+        <div 
+            className="bg-white w-[80vw] h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()} 
+        >
+            <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 bg-white z-10">
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <Maximize size={20} className="text-indigo-600" />
+                    Relationship Visual Schema
+                </h2>
+                <button 
+                    onClick={() => setIsExpanded(false)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg transition-colors font-medium text-sm"
+                >
+                    <X size={18} /> Close
+                </button>
+            </div>
+
+            <div className="flex-1 bg-slate-50 relative overflow-hidden">
+                <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    minZoom={0.1}
+                    maxZoom={2}
+                >
+                    <Background color="#cbd5e1" gap={20} size={1} />
+                    <Controls />
+                </ReactFlow>
+            </div>
         </div>
-    </Card>
+    </div>
+  );
+
+return (
+    <>
+      {/* --- STANDARD CARD VIEW --- */}
+      <Card className="h-[500px] flex flex-col relative">
+          <div className="card-header-wrapper">
+            <h2 className="card-title">
+                Relationship Visual Schema
+            </h2>
+            {/* Expand Button */}
+            <button 
+                onClick={() => setIsExpanded(true)}
+                className="p-1.5 rounded hover:bg-indigo-50 text-indigo-600 transition-colors"
+                title="Expand View"
+            >
+                <Maximize size={18} />
+            </button>
+          </div>
+
+          <div className="flex-1 bg-slate-50 border-t border-slate-100 overflow-hidden relative">
+              <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  nodeTypes={nodeTypes}
+                  fitView
+                  attributionPosition="bottom-right"
+              >
+                  <Background color="#e2e8f0" gap={16} />
+                  <Controls className="bg-white border-slate-200 shadow-sm" />
+              </ReactFlow>
+          </div>
+      </Card>
+
+    {/* --- EXPANDED POP-UP MODAL --- */}
+    {/* Use createPortal to move this div to document.body */}
+      {isExpanded && mounted && createPortal(
+        expandedModalContent,
+        document.body
+      )}
+    </>
   );
 }
