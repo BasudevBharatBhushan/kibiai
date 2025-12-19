@@ -236,17 +236,26 @@ export default function Dashboard({
     });
   }
 
-  function handleReset() {
-    if (window.confirm("Are you sure? This will discard your saved layout.")) {
-      saveDashboardState(reportRecordId || "", []);
-      window.location.reload();
+  async function handleReset() {
+    if (window.confirm("Are you sure? This will discard your saved layout and reset to Grid.")) {
+      if (reportRecordId) {
+        const resetState = {
+          layoutMode: 'grid',
+          charts: []
+        };
+        
+        await saveDashboardState(reportRecordId, resetState);
+        window.location.reload();
+      } else {
+        window.location.reload();
+      }
     }
   }
 
   if (!mounted) return null;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[1600px] mx-auto p-6">
+    <div className="flex flex-col items-center w-full max-w-400 mx-auto p-6">
       <EditPanel 
         isOpen={isEditOpen} 
         onClose={() => setIsEditOpen(false)} 
@@ -298,7 +307,7 @@ export default function Dashboard({
         }}
       >
         {visibleCharts.length === 0 && (
-          <div className="flex h-[400px] items-center justify-center text-slate-400 italic">
+          <div className="flex h-100 items-center justify-center text-slate-400 italic">
             No charts visible. Click "Configure" to add charts.
           </div>
         )}
@@ -311,8 +320,7 @@ export default function Dashboard({
           rowHeight={60}
           margin={[10, 10]}
           onLayoutChange={handleLayoutChange}
-          draggableHandle=".dragHandle"
-        >
+          draggableHandle=".dragHandle">
           {visibleCharts.map(cfg => (
             <div key={cfg.id} className="relative group">
               {cfg.kind === 'insight' ? (
