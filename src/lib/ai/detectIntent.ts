@@ -1,57 +1,18 @@
 import { ChartIntent } from "./intent";
+import { INTENT_KEYWORDS } from "@/lib/constants/analytics"; // Import here
 
-// Detect the user's intent based on keywords in the prompt
 export function detectIntent(userPrompt: string): ChartIntent {
   const prompt = userPrompt.toLowerCase();
 
-  // Check for comparison chart keywords
-  if (
-    prompt.includes("compare") ||
-    prompt.includes("comparison") ||
-    prompt.includes("breakdown by") ||
-    prompt.includes("status by") ||
-    prompt.includes("trend by") ||
-    prompt.includes("grouped by")
-  ) {
-    return "comparison_chart";
-  }
+  // Helper to check if any keyword exists in prompt
+  const hasKeyword = (keywords: readonly string[]) => 
+    keywords.some(k => prompt.includes(k));
 
-  // Check for chart suggestion keywords
-  if (
-    prompt.includes("suggest") || 
-    prompt.includes("recommend")
-  ) {
-    return "chart_suggestions";
-  }
-  
-  // Check for business insight keywords
-  if (
-    prompt.includes("business insight") ||
-    prompt.includes("business insights") ||
-    prompt.includes("analyze the report")
-  ) {
-    return "business_insight";
-  }
-
-  // Check for report analysis keywords
-  if (
-    prompt.includes("report analysis") ||
-    prompt.includes("analyze report")
-  ) {
-    return "report_analysis";
-  }
-
-  // Check for chart generation keywords
-  if (
-    prompt.includes("chart") ||
-    prompt.includes("bar") ||
-    prompt.includes("line") ||
-    prompt.includes("pie") ||
-    prompt.includes("doughnut") ||
-    prompt.includes("area")
-  ) {
-    return "chart_generation";
-  }
+  if (hasKeyword(INTENT_KEYWORDS.comparison)) return "comparison_chart";
+  if (hasKeyword(INTENT_KEYWORDS.suggestion)) return "chart_suggestions";
+  if (hasKeyword(INTENT_KEYWORDS.insight)) return "business_insight";
+  if (hasKeyword(INTENT_KEYWORDS.analysis)) return "report_analysis";
+  if (hasKeyword(INTENT_KEYWORDS.generation)) return "chart_generation";
 
   return "unknown";
 }

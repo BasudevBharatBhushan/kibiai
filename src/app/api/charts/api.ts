@@ -1,4 +1,5 @@
 import { ReportChartSchema } from '@/lib/charts/ChartTypes';
+import { FM_CONFIG } from '@/lib/constants/filemaker';
 
 // FileMaker Record Interface
 interface FMRecord {
@@ -20,26 +21,23 @@ interface ReportDataResult {
   reportRecordId: string;
 }
 
+// Config for FileMaker Data API
+const API_URL = process.env.API_URL ?? FM_CONFIG.API_URL_DEFAULT;
 
-//Config for FileMaker Data API
-const API_URL =
-  process.env.API_URL ?? 'https://py-fmd.vercel.app/api/dataApi';
+// --- Helpers ---
 
-//Helpers
-//Basic Auth Header
+// Basic Auth Header
 function getAuthHeader(): string {
   const { FM_USERNAME, FM_PASSWORD } = process.env;
 
   if (!FM_USERNAME || !FM_PASSWORD) {
     throw new Error('Missing FileMaker credentials');
   }
-  //Base64 Encode
-  return `Basic ${Buffer.from(
-    `${FM_USERNAME}:${FM_PASSWORD}`
-  ).toString('base64')}`;
+  // Base64 Encode
+  return `Basic ${Buffer.from(`${FM_USERNAME}:${FM_PASSWORD}`).toString('base64')}`;
 }
 
-//POST to FM Data API
+// POST to FM Data API
 async function fmPost<T>(payload: unknown): Promise<T> {
   const res = await fetch(API_URL, {
     method: 'POST',
@@ -58,17 +56,18 @@ async function fmPost<T>(payload: unknown): Promise<T> {
   return res.json();
 }
 
-//Fetch Chart Configurations
+// --- Fetch Functions ---
+
+// Fetch Chart Configurations
 export async function fetchChartConfiguration(
   reportId: string
 ): Promise<ReportChartSchema[]> {
-  //Prepare Payload
   const payload = {
     fmServer: process.env.FM_HOST,
     method: 'findRecord',
     methodBody: {
       database: process.env.FM_DATABASE,
-      layout: process.env.FM_CHARTS_LAYOUT,
+      layout: process.env.FM_CHARTS_LAYOUT, 
       query: [{ JS_ReportID: `==${reportId}` }],
       limit: 50,
     },
@@ -88,12 +87,10 @@ export async function fetchChartConfiguration(
     return [];
   }
 }
-//Parse Chart Record
-function parseChartRecord(
-  record: FMRecord
-): ReportChartSchema | null {
+
+// Parse Chart Record
+function parseChartRecord(record: FMRecord): ReportChartSchema | null {
   if (!record.AI_JSONResponse_Chart) return null;
-  //Parse JSON Field
   try {
     const parsed = JSON.parse(record.AI_JSONResponse_Chart);
 
@@ -108,23 +105,22 @@ function parseChartRecord(
   }
 }
 
-//Fetch Report Data
+// Fetch Report Data
 export async function fetchReportData(
   reportId: string
 ): Promise<ReportDataResult> {
-  //Prepare Payload
   const payload = {
     fmServer: process.env.FM_HOST,
     method: 'findRecord',
     methodBody: {
       database: process.env.FM_DATABASE,
-      layout: 'MultiTableReport Filtered Datas',
+      layout: FM_CONFIG.LAYOUTS.REPORTS, 
       query: [{ ReportID: `==${reportId}` }],
       limit: 1,
     },
     session: { token: '', required: '' },
   };
-  //Fetch and Parse
+
   try {
     const data = await fmPost<any>(payload);
     const record = data.records?.[0];
@@ -150,8 +146,8 @@ export async function fetchReportData(
   }
 }
 
+// --- Parsing Helpers ---
 
-//Parsing Helpers
 function parseCanvas(raw?: string) {
   if (!raw) return { canvasState: [], layoutMode: 'grid' };
 

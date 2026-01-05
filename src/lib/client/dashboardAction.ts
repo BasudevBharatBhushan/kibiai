@@ -1,3 +1,4 @@
+import { API_ROUTES } from "@/lib/constants/analytics";
 // Function to save dashboard state
 export async function saveDashboardState(
   reportRecordId: string,
@@ -9,7 +10,7 @@ export async function saveDashboardState(
   }
 
   try {
-    const res = await fetch('/api/dashboard', {
+    const res = await fetch(API_ROUTES.DASHBOARD_SAVE, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

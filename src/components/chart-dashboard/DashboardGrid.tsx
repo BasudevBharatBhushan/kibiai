@@ -12,13 +12,23 @@ import { ChartConfig, ChartKind, ReportChartSchema, COLOR_PALETTES } from '@/lib
 import { updateChartStatus } from '@/lib/client/chartActions';
 import { saveDashboardState } from '@/lib/client/dashboardAction';
 
+import { 
+  ALLOWED_LAYOUTS, 
+  GRID_CONFIG, 
+  DASHBOARD_DEFAULTS, 
+  type LayoutMode, 
+  UI_TEXT
+} from '@/lib/constants/dashboard';
+
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import '@/styles/dashboard.css';
+import { PROCESSOR_DEFAULTS } from '@/lib/constants/analytics';
 
+//RGL Component for Responsive Grid
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
-
+//Props from Server Component
 interface DashboardProps {
   initialSchemas?: ReportChartSchema[];
   initialDataset?: any[];
@@ -27,21 +37,13 @@ interface DashboardProps {
   reportRecordId?: string;
 }
 
-const ALLOWED_LAYOUTS = [
-  'grid',
-  'two-columns',
-  'single-row',
-  'insight',
-] as const;
 
-type LayoutMode = typeof ALLOWED_LAYOUTS[number];
-
+// Normalize layout mode value
 function normalizeLayoutMode(value?: string): LayoutMode {
   return ALLOWED_LAYOUTS.includes(value as LayoutMode)
     ? (value as LayoutMode)
-    : 'grid';
+    : DASHBOARD_DEFAULTS.layoutMode;
 }
-
 
 export default function Dashboard({ 
   initialSchemas = [], 
@@ -51,14 +53,18 @@ export default function Dashboard({
   reportRecordId 
 }: DashboardProps) {
   
+  // --- STATE MANAGEMENT ---
   const [allCharts, setAllCharts] = useState<ChartConfig[]>([]);
   const [visibleChartIds, setVisibleChartIds] = useState<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
+
+  // Layout Mode
   const [activeLayout, setActiveLayout] = useState<LayoutMode>(
     normalizeLayoutMode(initialLayoutMode)
   );
   const [isEditOpen, setIsEditOpen] = useState(false);
   
+  // Auto-save debounce
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitialized = useRef(false);
 
@@ -71,32 +77,35 @@ export default function Dashboard({
     return allCharts.filter(c => !visibleChartIds.has(c.id));
   }, [allCharts, visibleChartIds]);
 
+  // The layout object required by React-Grid-Layout
   const currentLayouts = useMemo(() => {
     return { lg: visibleCharts.map(c => c.layout!) };
   }, [visibleCharts]);
 
 
   // --- INITIALIZATION (DB) ---
+  // This effect runs once on mount to merge "Live Data" with "Saved User Layouts"
   useEffect(() => {
     setMounted(true);
     if (hasInitialized.current) return;
 
     if (initialSchemas.length > 0) {
-      console.log("[Dashboard] Initializing...");
       
+      //Process raw data into chart configs
       const processed = processData(initialDataset, initialSchemas);
       
+      // Merge with saved canvas state if available
       let finalCharts = processed.map((c, i) => ({
         ...c,
         colors: COLOR_PALETTES[i % COLOR_PALETTES.length],
         layout: { x: (i % 2) * 6, y: Math.floor(i / 2) * 9, w: 6, h: 9, i: c.id }
       }));
       
+      //Determine visibility based on the raw 'isActive' flag from schema
       let initialVisibleIds = new Set(processed.filter(c => c.isActive).map(c => c.id));
 
+      //If we have saved state, override layouts and visibility
       if (initialCanvasState && Array.isArray(initialCanvasState) && initialCanvasState.length > 0) {
-        console.log(`[Dashboard] Applying saved state from DB (${initialCanvasState.length} items)...`);
-        
         finalCharts = finalCharts.map(chart => {
           const saved = initialCanvasState.find((s: any) => s.id === chart.id);
           if (saved) {
@@ -121,17 +130,17 @@ export default function Dashboard({
 
 
   // --- AUTO-SAVE LOGIC ---
+  //Debounced save function to prevent API spam while dragging/resizing
   const triggerAutoSave = useCallback((currentCharts: ChartConfig[], visibleIds: Set<string>, currentLayoutMode: string) => {
     if (!reportRecordId) {
         console.warn("[Dashboard] Cannot save: Missing reportRecordId");
         return;
     }
 
+    // Clear previous pending save
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
     saveTimeoutRef.current = setTimeout(() => {
-      console.log(`[Dashboard] Saving... Mode: ${currentLayoutMode}`);
-
       const chartsToSave = currentCharts
         .filter(c => visibleIds.has(c.id))
         .map(c => ({
@@ -150,7 +159,7 @@ export default function Dashboard({
   }, [reportRecordId]);
 
 
-  // --- HANDLERS ---
+  // --- EVENT HANDLERS ---
 
   // Layout Change 
   const handleLayoutChange = useCallback((newLayout: Layout[]) => {
@@ -183,6 +192,7 @@ export default function Dashboard({
     });
   }, [triggerAutoSave, visibleChartIds, activeLayout]);
 
+  // Add/Remove Chart 
   function handleRemove(id: string) {
     const nextIds = new Set(visibleChartIds);
     nextIds.delete(id);
@@ -196,6 +206,7 @@ export default function Dashboard({
     }
   }
 
+  // Add/Remove Chart
   function handleAdd(id: string) {
     const nextIds = new Set(visibleChartIds);
     nextIds.add(id);
@@ -209,6 +220,7 @@ export default function Dashboard({
     }
   }
 
+  // Change Chart Kind
   function handleChangeKind(id: string, kind: ChartKind) {
     setAllCharts(prev => {
       const next = prev.map(c => c.id === id ? { ...c, kind } : c);
@@ -222,6 +234,7 @@ export default function Dashboard({
     }
   }
 
+  // Apply Layout Mode
   function applyLayout(type: typeof activeLayout) {
     setActiveLayout(type);
     setAllCharts(prev => {
@@ -232,7 +245,7 @@ export default function Dashboard({
       
       const newCharts = sorted.map((c, i) => {
         const l = { ...c.layout! };
-        if (type === 'grid') { l.w = 6; l.h = 9; l.x = (i % 2) * 6; l.y = Math.floor(i / 2) * 9; }
+        if (type === 'grid') { l.w = PROCESSOR_DEFAULTS.LAYOUT_WIDTH; l.h = PROCESSOR_DEFAULTS.LAYOUT_HEIGHT; l.x = (i % 2) * 6; l.y = Math.floor(i / 2) * 9; }
         if (type === 'two-columns') { l.w = 6; l.h = 14; l.x = (i % 2) * 6; l.y = Math.floor(i / 2) * 14; }
         if (type === 'single-row') { l.w = 12; l.h = 10; l.x = 0; l.y = i * 10; }
         if (type === 'insight') {
@@ -252,13 +265,13 @@ export default function Dashboard({
       });
       
       triggerAutoSave(newCharts, visibleChartIds, activeLayout); 
-      console.log(`[Dashboard] Applied "${type}" layout and auto-saved.`);
       return newCharts;
     });
   }
 
+  // Reset Dashboard
   async function handleReset() {
-    if (window.confirm("Are you sure? This will discard your saved layout and reset to Grid.")) {
+    if (window.confirm(UI_TEXT.CONFIRM_RESET)) {
       if (reportRecordId) {
         const resetState = {
           layoutMode: 'grid',
@@ -275,6 +288,7 @@ export default function Dashboard({
 
   if (!mounted) return null;
 
+  // --- RENDER ---
   return (
     <div className="flex flex-col items-center w-full max-w-400 mx-auto p-6">
       <EditPanel 
@@ -286,7 +300,8 @@ export default function Dashboard({
         onRemove={handleRemove}
         onChangeKind={handleChangeKind} 
       />
-      
+
+      {/* --- TOOLBAR --- */}
       <div className="w-full flex items-center justify-between bg-white border border-slate-200 rounded-xl shadow-sm p-3 mb-6 sticky top-4 z-10">
         <div className="flex items-center gap-3">
           <button 
@@ -319,7 +334,7 @@ export default function Dashboard({
           </button>
         </div>
       </div>
-
+      {/* --- CANVAS --- */}
       <div 
         className="dashboard-area w-full"
         style={{
@@ -336,10 +351,10 @@ export default function Dashboard({
         <ResponsiveGridLayout
           className="layout"
           layouts={currentLayouts}
-          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-          cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
-          rowHeight={60}
-          margin={[10, 10]}
+          breakpoints={GRID_CONFIG.breakpoints}
+          cols={GRID_CONFIG.cols}
+          rowHeight={GRID_CONFIG.rowHeight}
+          margin={GRID_CONFIG.margin}
           onLayoutChange={handleLayoutChange}
           draggableHandle=".dragHandle">
           {visibleCharts.map(cfg => (

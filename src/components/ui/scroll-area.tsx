@@ -5,6 +5,7 @@ import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area"
 
 import { cn } from "@/lib/utils"
 
+// ScrollArea Component
 function ScrollArea({
   className,
   children,
@@ -28,6 +29,7 @@ function ScrollArea({
   )
 }
 
+// ScrollBar Component
 function ScrollBar({
   className,
   orientation = "vertical",

@@ -1,3 +1,4 @@
+import { AI_CONFIG } from "../constants/analytics";
 import { openai } from "./client";
 
 // Create a new conversation 
@@ -12,7 +13,7 @@ export async function createConversation(metadata?: Record<string, any>) {
 // Fetch conversation messages by ID
 export async function fetchConversation(conversationId: string) {
   const items = await openai.conversations.items.list(conversationId, {
-    limit: 50,
+   limit: AI_CONFIG.CONVERSATION_LIMIT,
   });
 
   return items.data.map((item: any) => ({

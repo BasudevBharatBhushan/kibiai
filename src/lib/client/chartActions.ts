@@ -1,3 +1,4 @@
+import { API_ROUTES } from "@/lib/constants/analytics";
 interface UpdateChartParams {
   isActive?: boolean;
   type?: string;
@@ -15,7 +16,7 @@ export async function updateChartStatus(
   }
   //Request payload
   try {
-    const res = await fetch('/api/charts', {
+    const res = await fetch(API_ROUTES.CHART_SAVE, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

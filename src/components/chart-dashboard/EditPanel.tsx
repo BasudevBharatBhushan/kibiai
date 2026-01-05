@@ -6,6 +6,7 @@ import {
   FiActivity, FiChevronDown, FiChevronRight, FiCpu, FiTrendingUp, FiList
 } from 'react-icons/fi';
 import { MdOutlineDonutLarge } from 'react-icons/md';
+import { UI_TEXT, AVAILABLE_CHART_TYPES } from '@/lib/constants/dashboard';
 import { ChartConfig, ChartKind } from '@/lib/charts/ChartTypes';
 
 interface EditPanelProps {
@@ -125,7 +126,7 @@ export default function EditPanel({
                     {/* Chart Type Selector */}
                     {chart.kind !== 'insight' && (
                       <div className="grid grid-cols-3 gap-2 mt-2">
-                        {(['column', 'line', 'area', 'pie', 'donut'] as ChartKind[]).map(k => (
+                        {AVAILABLE_CHART_TYPES.map((k) => (
                           <button
                             key={k}
                             onClick={() => onChangeKind(chart.id, k)}
@@ -196,7 +197,7 @@ export default function EditPanel({
           <div className="pt-2 space-y-3">
              <button 
                 className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-purple-200 hover:bg-purple-50 transition-all group text-left"
-                onClick={() => alert("Coming soon: AI Chart Generation")}
+                onClick={() => alert(UI_TEXT.COMING_SOON.AI_GEN)}
              >
                 <div className="flex items-center gap-4">
                    <div className="h-12 w-12 flex items-center justify-center bg-purple-100 text-purple-600 rounded-xl group-hover:bg-purple-200 transition-colors">
@@ -212,7 +213,7 @@ export default function EditPanel({
 
              <button 
                 className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-indigo-200 hover:bg-indigo-50 transition-all group text-left"
-                onClick={() => alert("Coming soon: Business Insights")}
+                onClick={() => alert(UI_TEXT.COMING_SOON.INSIGHTS)}
              >
                 <div className="flex items-center gap-4">
                    <div className="h-12 w-12 flex items-center justify-center bg-indigo-100 text-indigo-600 rounded-xl group-hover:bg-indigo-200 transition-colors">

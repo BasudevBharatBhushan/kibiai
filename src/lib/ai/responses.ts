@@ -6,6 +6,11 @@ import {
   SupportedChartType,
   InsightSchemaRegistry,
 } from "./schemaRegistry";
+import { 
+  AI_CONFIG, 
+  PROMPT_INSTRUCTIONS, 
+  AI_ERROR_MESSAGES 
+} from "@/lib/constants/analytics";
 
 // Parameters for sending a user prompt to the AI
 type SendUserPromptParams = {
@@ -47,29 +52,11 @@ export async function sendUserPrompt({
     contextBlock += `\nChart Summary: ${chart_summary}`;
   }
   if (intent === "report_analysis") {
-    contextBlock += `
-  Return a JSON object with:
-  - response_to_user
-  - responses (exactly 3 chart configurations)
-  - business_insights (an array of actionable insights)
-  Do NOT omit business_insights.
-  `;
+    contextBlock += `\n${PROMPT_INSTRUCTIONS.REPORT_ANALYSIS}`;
   }
 
   if (intent === "comparison_chart") {
-    contextBlock += `
-  This is a comparison-based chart.
-  STRICT REQUIREMENTS:
-  - subgroup_field is REQUIRED
-  - Use ONLY line charts
-  - aggregation_method must be "sum" or "count"
-  - filters are REQUIRED
-  - Always include:
-    - "<subgroup_field>: notEmpty"
-    - "<numerical_field>: >0"
-
-  Return a SINGLE chart configuration JSON.
-  `;
+    contextBlock += `\n${PROMPT_INSTRUCTIONS.COMPARISON_CHART}`;
   }
 
   // Construct the final prompt for the AI
@@ -84,12 +71,12 @@ export async function sendUserPrompt({
 
   // Send the prompt to the AI
   const response = await openai.responses.create({
-    model: "gpt-4.1",
+    model: AI_CONFIG.MODEL,
     instructions: instruction_set,
     conversation: conversationId,
     store: true,
     input: [{ role: "user", content: finalPrompt }],
-    text: { format: { type: "json_object" } },
+    text: { format: AI_CONFIG.RESPONSE_FORMAT },
   });
 
   // Parse and validate the AI's response based on the detected intent
@@ -105,7 +92,7 @@ export async function sendUserPrompt({
       const schema = ChartSchemaRegistry[chartType];
 
       if (!schema) {
-        throw new Error(`Unsupported chart type: ${chartType}`);
+        throw new Error(AI_ERROR_MESSAGES.UNSUPPORTED_CHART(chartType));
       }
 
       const validatedChart = schema.parse(parsedOutput);
@@ -124,7 +111,7 @@ export async function sendUserPrompt({
         return {
           conversation_id: conversationId,
           response_to_user:
-            "I could not generate valid business insights. Please ensure the report summary and chart summary are provided and try again.",
+            AI_ERROR_MESSAGES.VALIDATION_FAIL.INSIGHTS,
           business_insights: [],
         };
       }
@@ -145,7 +132,7 @@ export async function sendUserPrompt({
         return {
           conversation_id: conversationId,
           response_to_user:
-            "I could not generate valid chart suggestions. Please provide the required field names.",
+            AI_ERROR_MESSAGES.VALIDATION_FAIL.SUGGESTIONS,
           chart_suggestions: [],
         };
       }
@@ -170,7 +157,7 @@ export async function sendUserPrompt({
         return {
           conversation_id: conversationId,
           response_to_user:
-            "I could not generate a valid report analysis. Please ensure sufficient report and chart context is provided.",
+            AI_ERROR_MESSAGES.VALIDATION_FAIL.REPORT_ANALYSIS,
           responses: [],
           business_insights: [],
         };
@@ -197,7 +184,7 @@ export async function sendUserPrompt({
         return {
           conversation_id: conversationId,
           response_to_user:
-            "I could not generate a valid comparison chart. Please ensure all required fields are present.",
+            AI_ERROR_MESSAGES.VALIDATION_FAIL.COMPARISON,
         };
       }
 
@@ -208,6 +195,6 @@ export async function sendUserPrompt({
     }
     // Handle Unknown Intent
     default:
-      throw new Error("Unsupported intent");
+      throw new Error(AI_ERROR_MESSAGES.UNSUPPORTED_INTENT);
   }
 }
