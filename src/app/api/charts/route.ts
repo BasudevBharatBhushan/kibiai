@@ -1,69 +1,98 @@
 import { NextResponse } from 'next/server';
 
-const API_URL = process.env.API_URL || 'https://py-fmd.vercel.app/api/dataApi';
+//Config for FileMaker Data API
+const API_URL =
+  process.env.API_URL ?? 'https://py-fmd.vercel.app/api/dataApi';
 
-function getAuthHeader() {
-  const username = process.env.FM_USERNAME || '';
-  const password = process.env.FM_PASSWORD || '';
-  return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+interface UpdateRequest {
+  fmRecordId: string;
+  isActive?: boolean;
+  chartType?: string;
 }
 
-export async function POST(request: Request) {
+//Basic Auth Header
+function getAuthHeader() {
+  const { FM_USERNAME, FM_PASSWORD } = process.env;
+
+  if (!FM_USERNAME || !FM_PASSWORD) {
+    throw new Error('Missing FM credentials');
+  }
+
+  //Base64 Encode
+  return `Basic ${Buffer.from(
+    `${FM_USERNAME}:${FM_PASSWORD}`
+  ).toString('base64')}`;
+}
+
+export async function POST(req: Request) {
   try {
-    const { fmRecordId, isActive, chartType } = await request.json();
+    // 1. Parse incoming request body
+    const body = (await req.json()) as UpdateRequest;
+    const { fmRecordId, isActive, chartType } = body;
 
+    // 2. Validate required fields
     if (!fmRecordId) {
-      return NextResponse.json({ error: 'Missing Record ID' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'fmRecordId required' },
+        { status: 400 }
+      );
     }
 
-    const fieldData: any = {};
-    if (isActive !== undefined) {
-      fieldData.isActive = isActive ? "1" : "0";
-    }
-    if (chartType !== undefined) {
-      fieldData.ChartType = chartType; 
+    const record: Record<string, string> = {};
+
+    if (typeof isActive === 'boolean') {
+      record.isActive = isActive ? '1' : '0';
     }
 
-    if (Object.keys(fieldData).length === 0) {
-      return NextResponse.json({ message: 'No fields to update' });
+    if (typeof chartType === 'string' && chartType.trim()) {
+      record.ChartType = chartType;
     }
 
+    if (!Object.keys(record).length) {
+      return NextResponse.json(
+        { error: 'No valid fields to update' },
+        { status: 400 }
+      );
+    }
+
+    // 3. Prepare payload for FM Data API
     const payload = {
       fmServer: process.env.FM_HOST,
-      method: "updateRecord",
+      method: 'updateRecord',
       methodBody: {
         database: process.env.FM_DATABASE,
-        layout: process.env.FM_LAYOUT || "CHARTS_DAPI",
+        layout: process.env.FM_LAYOUT ?? 'CHARTS_DAPI',
         recordId: fmRecordId,
-        record: {
-          "isActive": isActive ? "1" : "0",
-          "ChartType": chartType
-        }
+        record,
       },
-      session: { token: "", required: "" }
+      session: { token: '', required: '' },
     };
 
-
+    // 4. Make request to FM Data API
     const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json', 
-            'Authorization': getAuthHeader() 
-        },
-        body: JSON.stringify(payload),
-        cache: 'no-store',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: getAuthHeader(),
+      },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
     });
 
+    // 5. Handle response
     if (!res.ok) {
-        const errText = await res.text();
-        return NextResponse.json({ error: errText }, { status: res.status });
+      return NextResponse.json(
+        { error: await res.text() },
+        { status: res.status }
+      );
     }
 
-    const data = await res.json();
-    return NextResponse.json({ success: true, data });
-
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Internal API Error:", error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('[Charts Route] error', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500 }
+    );
   }
 }

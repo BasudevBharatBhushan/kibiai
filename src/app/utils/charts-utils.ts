@@ -1,9 +1,11 @@
 import type Highcharts from 'highcharts';
-import type { ChartConfig } from '@/lib/ChartTypes';
+import type { ChartConfig } from '@/lib/charts/ChartTypes';
 
+// Build Highcharts Options from ChartConfig
 export function buildOptions(config: ChartConfig): Highcharts.Options {
   const isPie = config.kind === 'pie' || config.kind === 'donut';
 
+  // Pie charts configuration
   if (isPie) {
     const pieData =
       config.series[0]?.data.map((val: any, idx: number) => ({
@@ -45,7 +47,7 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
       ],
     };
   }
-//non-pie charts
+//non-pie charts confuguration
   return {
     chart: { 
       type: config.kind, 

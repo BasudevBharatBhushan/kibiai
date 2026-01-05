@@ -257,7 +257,7 @@ export default function ChatPage() {
                       <button
                         key={index}
                         onClick={() => handlePromptClick(prompt.description)}
-                        className="flex-shrink-0 w-64 text-left bg-white border border-gray-200 p-4 rounded-2xl shadow-lg hover:border-indigo-500 hover:shadow-md transition-all group"
+                        className="shrink-0 w-64 text-left bg-white border border-gray-200 p-4 rounded-2xl shadow-lg hover:border-indigo-500 hover:shadow-md transition-all group"
                       >
                          <div className="bg-indigo-50 w-8 h-8 rounded-lg flex items-center justify-center mb-3 group-hover:bg-indigo-100 transition-colors">
                             {prompt.icon}
@@ -282,7 +282,7 @@ export default function ChatPage() {
                     variant="ghost" 
                     onClick={() => setShowPrompts(!showPrompts)}
                     className="h-14 w-14 rounded-full bg-indigo-50 text-indigo-500 hover:bg-indigo-100">
-                    <HelpCircle className="!w-8 !h-8" />
+                    <HelpCircle className="w-8! h-8!" />
                 </Button>
 
                 {/* Input Pill */}

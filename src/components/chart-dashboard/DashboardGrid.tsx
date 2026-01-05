@@ -6,14 +6,15 @@ import { FiGrid, FiColumns, FiList, FiSidebar, FiRotateCcw, FiEdit2 } from 'reac
 import ChartCard from './ChartCard';
 import InsightCard from './InsightCard';
 import EditPanel from './EditPanel';
-import { processData } from '@/lib/DataProcessor';
-import { ChartConfig, ChartKind, ReportChartSchema, COLOR_PALETTES } from '@/lib/ChartTypes';
+import { processData } from '@/lib/charts/DataProcessor';
+import { ChartConfig, ChartKind, ReportChartSchema, COLOR_PALETTES } from '@/lib/charts/ChartTypes';
 
-import { updateChartStatus, saveDashboardState } from '@/app/api/charts/api'; 
+import { updateChartStatus } from '@/lib/client/chartActions';
+import { saveDashboardState } from '@/lib/client/dashboardAction';
 
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import '../../app/styles/dashboard.css';
+import '@/styles/dashboard.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -26,6 +27,22 @@ interface DashboardProps {
   reportRecordId?: string;
 }
 
+const ALLOWED_LAYOUTS = [
+  'grid',
+  'two-columns',
+  'single-row',
+  'insight',
+] as const;
+
+type LayoutMode = typeof ALLOWED_LAYOUTS[number];
+
+function normalizeLayoutMode(value?: string): LayoutMode {
+  return ALLOWED_LAYOUTS.includes(value as LayoutMode)
+    ? (value as LayoutMode)
+    : 'grid';
+}
+
+
 export default function Dashboard({ 
   initialSchemas = [], 
   initialDataset = [], 
@@ -37,7 +54,9 @@ export default function Dashboard({
   const [allCharts, setAllCharts] = useState<ChartConfig[]>([]);
   const [visibleChartIds, setVisibleChartIds] = useState<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
-  const [activeLayout, setActiveLayout] = useState<'grid' | 'two-columns' | 'single-row' | 'insight'>((initialLayoutMode as any) || 'grid'); 
+  const [activeLayout, setActiveLayout] = useState<LayoutMode>(
+    normalizeLayoutMode(initialLayoutMode)
+  );
   const [isEditOpen, setIsEditOpen] = useState(false);
   
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -93,7 +112,9 @@ export default function Dashboard({
 
       setAllCharts(finalCharts);
       setVisibleChartIds(initialVisibleIds);
-      if (initialLayoutMode) setActiveLayout(initialLayoutMode as any);
+      if (initialLayoutMode) {
+        setActiveLayout(normalizeLayoutMode(initialLayoutMode));
+      }
       hasInitialized.current = true;
     } 
   }, [initialSchemas, initialDataset, initialCanvasState, initialLayoutMode]);

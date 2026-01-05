@@ -1,248 +1,188 @@
-import { ReportChartSchema } from '@/lib/ChartTypes';
+import { ReportChartSchema } from '@/lib/charts/ChartTypes';
 
-const API_URL = process.env.API_URL || 'http://localhost:3001/api/dataApi';
-
-interface ApiResponse {
-  records: Array<{
-    AI_JSONResponse_Chart: string;
-    PrimaryKey: string;
-    JS_ReportID: string;
-  }>;
-  messages?: Array<{ code: string; message: string }>;
-}
-
-interface ChartUpdateParams {
+// FileMaker Record Interface
+interface FMRecord {
+  recordId?: string;
+  PrimaryKey?: string;
+  AI_JSONResponse_Chart?: string;
   isActive?: boolean;
-  type?: string;
 }
 
-//Authentication
-function getAuthHeader(){
-    const username = process.env.FM_USERNAME || '';
-    const password = process.env.FM_PASSWORD || '';
-    return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+interface FMResponse<T = FMRecord> {
+  records?: T[];
+  messages?: { code: string; message: string }[];
+}
+
+interface ReportDataResult {
+  rows: any[];
+  canvasState: any[];
+  layoutMode: 'grid' | 'free';
+  reportRecordId: string;
+}
+
+
+//Config for FileMaker Data API
+const API_URL =
+  process.env.API_URL ?? 'https://py-fmd.vercel.app/api/dataApi';
+
+//Helpers
+//Basic Auth Header
+function getAuthHeader(): string {
+  const { FM_USERNAME, FM_PASSWORD } = process.env;
+
+  if (!FM_USERNAME || !FM_PASSWORD) {
+    throw new Error('Missing FileMaker credentials');
+  }
+  //Base64 Encode
+  return `Basic ${Buffer.from(
+    `${FM_USERNAME}:${FM_PASSWORD}`
+  ).toString('base64')}`;
+}
+
+//POST to FM Data API
+async function fmPost<T>(payload: unknown): Promise<T> {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    throw new Error(`[FM API] ${res.status} ${await res.text()}`);
   }
 
-//Chart Configuration Fetcher
-export async function fetchChartConfiguration(reportId: string): Promise<ReportChartSchema[]> {
+  return res.json();
+}
+
+//Fetch Chart Configurations
+export async function fetchChartConfiguration(
+  reportId: string
+): Promise<ReportChartSchema[]> {
+  //Prepare Payload
+  const payload = {
+    fmServer: process.env.FM_HOST,
+    method: 'findRecord',
+    methodBody: {
+      database: process.env.FM_DATABASE,
+      layout: process.env.FM_CHARTS_LAYOUT,
+      query: [{ JS_ReportID: `==${reportId}` }],
+      limit: 50,
+    },
+    session: { token: '', required: '' },
+  };
+
   try {
-    //Payload
-    const payload = {
-        fmServer : process.env.FM_HOST,
-        method: "findRecord",
-        methodBody: {
-            database: process.env.FM_DATABASE,
-            layout: process.env.FM_CHARTS_LAYOUT,
-            query: [
-                {
-                    "JS_ReportID": `==${reportId}`
-                }
-            ],
-            limit: 50
-        },
-        session: {
-            token: "",
-            required: ""
-        }
-    };
+    const data = await fmPost<FMResponse>(payload);
 
-    //Send Post Request
-    const res = await fetch (API_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': getAuthHeader(), 
-        },
-        body: JSON.stringify(payload),
-        cache: 'no-store',
-    });
-    
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Failed to fetch report config: ${res.status} ${res.statusText} - ${errText}`);
-    }
-
-   const data: ApiResponse = await res.json();
-
-    if (!data) {
-        console.warn(`API returned null/empty response for report ${reportId}`);
-        return [];
-    }
-
-    if (!data.records || !Array.isArray(data.records)) {
-        if (data.messages && data.messages[0]?.code === '401') {
-            console.log(`No charts found for Report ID ${reportId} (FM Error 401)`);
-        } else {
-            console.error("API Response missing 'records' array:", data);
-        }
-        return [];
-    }
-    const schemas: ReportChartSchema[] = data.records.map((record: any) => {
-      try {
-        if (!record.AI_JSONResponse_Chart) return null;
-        
-        const parsed = JSON.parse(record.AI_JSONResponse_Chart);
-        return { 
-          ...parsed, 
-          pKey: record.PrimaryKey || parsed.pKey,
-          isActive: record.isActive || parsed.isActive,
-          fmRecordId: record.recordId || parsed.fmRecordId,
-        };
-      } catch (e) {
-        console.error("Failed to parse chart config for record:", record.recordId, e);
-        return null;
-      }
-    }).filter((item: any): item is ReportChartSchema => item !== null);
-
-    return schemas;
-
+    return (
+      data.records
+        ?.map(parseChartRecord)
+        .filter(Boolean) as ReportChartSchema[]
+    ) ?? [];
   } catch (error) {
-    console.error("API Fetch Error:", error);
+    console.error('[Charts] fetch failed', error);
     return [];
   }
 }
-//Update Chart Active Status
-export async function updateChartStatus(fmRecordId: string, params: ChartUpdateParams): Promise<boolean> {
-  if (!fmRecordId) return false;
-
+//Parse Chart Record
+function parseChartRecord(
+  record: FMRecord
+): ReportChartSchema | null {
+  if (!record.AI_JSONResponse_Chart) return null;
+  //Parse JSON Field
   try {
-    const res = await fetch('/api/charts/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          fmRecordId, 
-        isActive: params.isActive,
-          chartType: params.type
-        }),
-    });
+    const parsed = JSON.parse(record.AI_JSONResponse_Chart);
 
-    if (!res.ok) {
-        console.error("Failed to update status");
-        return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error("Update Status Error:", error);
-    return false;
+    return {
+      ...parsed,
+      pKey: record.PrimaryKey ?? parsed.pKey,
+      fmRecordId: record.recordId ?? parsed.fmRecordId,
+      isActive: record.isActive ?? parsed.isActive,
+    };
+  } catch {
+    return null;
   }
 }
 
-function normalizeRecord(record: any): any {
-  const normalized: any = { ...record };
-
-  const numFields = ['Profit', 'Quantity', 'Tax', 'Subtotal', 'Total Line', 'Line Price', 'Inventory', 'Unit Cost', 'Unit Price'];
-  numFields.forEach(field => {
-    if (record[field] !== undefined) {
-      normalized[field] = parseFloat(record[field] || '0');
-    }
-  });
-
-  if (record['Total Line'] !== undefined && record['Line Price'] === undefined) {
-    normalized['Line Price'] = normalized['Total Line'];
-  }
-  if (record['Sales Date'] !== undefined && record['SalesDate'] === undefined) {
-    normalized['SalesDate'] = record['Sales Date'];
-  }
-  if (record['SalesDate'] !== undefined && record['Sales Date'] === undefined) {
-    normalized['Sales Date'] = record['SalesDate'];
-  }
-
-  return normalized;
-}
-//Report Data Fetcher
-export async function fetchReportData(reportId: string): Promise<{ rows: any[], canvasState: any, layoutMode: string,reportRecordId: string }> {
-
+//Fetch Report Data
+export async function fetchReportData(
+  reportId: string
+): Promise<ReportDataResult> {
+  //Prepare Payload
+  const payload = {
+    fmServer: process.env.FM_HOST,
+    method: 'findRecord',
+    methodBody: {
+      database: process.env.FM_DATABASE,
+      layout: 'MultiTableReport Filtered Datas',
+      query: [{ ReportID: `==${reportId}` }],
+      limit: 1,
+    },
+    session: { token: '', required: '' },
+  };
+  //Fetch and Parse
   try {
-    const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': getAuthHeader() },
-        body: JSON.stringify({
-            fmServer: process.env.FM_HOST,
-            method: "findRecord",
-            methodBody: {
-                database: process.env.FM_DATABASE,
-                layout: "MultiTableReport Filtered Datas",
-                query: [{ "ReportID": `==${reportId}` }],
-                limit: 1 
-            },
-            session: { token: "", required: "" }
-        }),
-        cache: 'no-store',
-    });
-
-    if (!res.ok) throw new Error(`Data Fetch Failed: ${res.status}`);
-    const data = await res.json();
+    const data = await fmPost<any>(payload);
     const record = data.records?.[0];
 
-    if (!record || !record.ReportStructuredData) {
-        console.warn("[API] No report data found.");
-        return { rows: [], canvasState: [], layoutMode: 'grid', reportRecordId: "" };
+    if (!record?.ReportStructuredData) {
+      return emptyReport();
     }
 
-    const reportRecordId = record.recordId; 
-    let canvasState: any[] = [];
-    let layoutMode = 'grid';
-    if (record.ChartCanvasState) {
-        try {
-            const parsed = JSON.parse(record.ChartCanvasState);
-            
-            if (Array.isArray(parsed)) {
-                canvasState = parsed;
-            } else if (parsed.charts && Array.isArray(parsed.charts)) {
-                canvasState = parsed.charts;
-                layoutMode = parsed.layoutMode || 'grid';
-            }
-        } catch (e) {
-            console.warn("Could not parse saved ChartCanvasState", e);
-        }
-    }
+    const rows = parseRows(record.ReportStructuredData);
+    const { canvasState, layoutMode } = parseCanvas(
+      record.ChartCanvasState
+    );
 
-    let rows: any[] = [];
-    try {
-        const parsedStructure = JSON.parse(record.ReportStructuredData);
-        const bodyObj = parsedStructure.find((item: any) => item.Body && item.Body.BodyField);
-        if (bodyObj && bodyObj.Body && Array.isArray(bodyObj.Body.BodyField)) {
-            rows = bodyObj.Body.BodyField.map((row: any) => normalizeRecord(row));
-        }
-    } catch (e) {
-        console.error("[API] Failed to parse ReportStructuredData", e);
-    }
-
-  return { rows, canvasState, layoutMode, reportRecordId };
-  
+    return {
+      rows,
+      canvasState,
+      layoutMode,
+      reportRecordId: record.recordId ?? '',
+    };
   } catch (error) {
-    console.error("[API] Critical Error:", error);
-    return { rows: [], canvasState: null, layoutMode: 'grid', reportRecordId: "" };
+    console.error('[Report] fetch failed', error);
+    return emptyReport();
   }
 }
 
-// Save State Function
-export async function saveDashboardState(reportRecordId: string, newState: any): Promise<boolean> {
-  if (!reportRecordId) {
-    console.error("[API] Save aborted: Missing reportRecordId");
-    return false;
-  }
+
+//Parsing Helpers
+function parseCanvas(raw?: string) {
+  if (!raw) return { canvasState: [], layoutMode: 'grid' };
 
   try {
-    const res = await fetch('/api/dashboard/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          reportRecordId, 
-          canvasState: newState 
-        }),
-    });
-
-    if (!res.ok) {
-        console.error(`[API] Save Failed: ${res.status} ${res.statusText}`);
-        return false;
-    }
-    
-    console.log("[API] Save Successful"); 
-    return true;
-  } catch (error) {
-    console.error("[API] Save Error:", error);
-    return false;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? { canvasState: parsed, layoutMode: 'grid' }
+      : {
+          canvasState: parsed.charts ?? [],
+          layoutMode: parsed.layoutMode ?? 'grid',
+        };
+  } catch {
+    return { canvasState: [], layoutMode: 'grid' };
   }
+}
+
+function parseRows(raw: string) {
+  try {
+    const structure = JSON.parse(raw);
+    const body = structure.find((x: any) => x?.Body?.BodyField);
+    return body?.Body?.BodyField ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function emptyReport(): ReportDataResult {
+  return {
+    rows: [],
+    canvasState: [],
+    layoutMode: 'grid',
+    reportRecordId: '',
+  };
 }

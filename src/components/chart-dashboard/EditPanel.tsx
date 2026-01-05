@@ -6,7 +6,7 @@ import {
   FiActivity, FiChevronDown, FiChevronRight, FiCpu, FiTrendingUp, FiList
 } from 'react-icons/fi';
 import { MdOutlineDonutLarge } from 'react-icons/md';
-import { ChartConfig, ChartKind } from '@/lib/ChartTypes';
+import { ChartConfig, ChartKind } from '@/lib/charts/ChartTypes';
 
 interface EditPanelProps {
   isOpen: boolean;
@@ -47,19 +47,19 @@ export default function EditPanel({
       {/* Overlay Backdrop */}
       <div 
         className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 ${
-          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          isOpen ? 'opacity-0' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
       />
 
       {/* Sliding Panel */}
       <div 
-        className={`fixed top-0 right-0 h-full w-[400px] bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${
+        className={`fixed top-0 right-0 h-full w-100 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         
-        {/* --- HEADER --- */}
+        {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <div>
             <h2 className="text-lg font-bold text-slate-800">Configuration</h2>
@@ -75,7 +75,7 @@ export default function EditPanel({
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           
-          {/* 1. ACTIVE CHARTS ACCORDION */}
+          {/* 1. Active Charts */}
           <div className="space-y-2">
             <button 
               onClick={() => setIsActiveOpen(!isActiveOpen)}
@@ -148,7 +148,7 @@ export default function EditPanel({
             )}
           </div>
 
-          {/* 2. INACTIVE CHARTS ACCORDION */}
+          {/* 2. Inactive Charts */}
           <div className="space-y-2">
             <button 
               onClick={() => setIsInactiveOpen(!isInactiveOpen)}
@@ -192,7 +192,7 @@ export default function EditPanel({
             )}
           </div>
 
-          {/* 3. NEW ACTION BUTTONS */}
+          {/* 3. New Action Buttons */}
           <div className="pt-2 space-y-3">
              <button 
                 className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-purple-200 hover:bg-purple-50 transition-all group text-left"
@@ -229,7 +229,7 @@ export default function EditPanel({
 
         </div>
 
-        {/* --- FOOTER --- */}
+        {/* Footer */}
         <div className="p-5 border-t border-slate-100 bg-slate-50">
           <button 
             onClick={onClose}

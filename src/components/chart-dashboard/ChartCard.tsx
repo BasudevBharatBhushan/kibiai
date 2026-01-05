@@ -4,21 +4,24 @@ import React, { useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { FiTrash2, FiMove } from 'react-icons/fi';
 import { buildOptions } from '@/app/utils/charts-utils';
-import type { ChartConfig, ChartKind } from '@/lib/ChartTypes';
+import type { ChartConfig, ChartKind } from '@/lib/charts/ChartTypes';
 import * as Highcharts from 'highcharts';
-import '../../app/styles/dashboard.css';
+import '@/styles/dashboard.css';
 
+// Dynamically import HighchartsReact to avoid SSR issues
 const HighchartsReact = dynamic(
   () => import('highcharts-react-official').then(m => m.default),
   { ssr: false }
 );
 
+// Props for ChartCard component
 type Props = {
   config: ChartConfig;
   onRemove: (id: string) => void;
   onChangeKind: (id: string, kind: ChartKind) => void;
 };
 
+// ChartCard Component
 export default function ChartCard({ config, onRemove, onChangeKind }: Props) {
   const opts = useMemo(() => {
     const base = buildOptions(config);
@@ -44,7 +47,7 @@ export default function ChartCard({ config, onRemove, onChangeKind }: Props) {
 
   return (
   <div className="card-base flex flex-col h-full w-full">      
-    
+      {/*Chart Card Header */}
       <div className="card-header">        
         <div className="flex items-center gap-2 overflow-hidden">
           <div className="dragHandle drag-handle">            

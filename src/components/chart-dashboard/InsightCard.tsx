@@ -2,14 +2,16 @@
 
 import React from 'react';
 import { FiTrash2, FiMove } from 'react-icons/fi';
-import { ChartConfig } from '@/lib/ChartTypes';
-import '../../app/styles/dashboard.css';
+import { ChartConfig } from '@/lib/charts/ChartTypes';
+import '@/styles/dashboard.css';
 
+// Props for InsightCard component
 type Props = {
   config: ChartConfig;
   onRemove: (id: string) => void;
 };
 
+// InsightCard Component
 export default function InsightCard({ config, onRemove }: Props) {
   return (
     <div className="card-base flex flex-col h-full w-full">      

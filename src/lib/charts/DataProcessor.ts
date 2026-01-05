@@ -1,6 +1,7 @@
 import { ChartConfig, ChartKind, ReportChartSchema } from './ChartTypes';
 import { v4 as uuidv4 } from 'uuid';
 
+// Helper to recursively extract BodyFields from nested data
 function extractBodyFields(data: any): any[] {
   let bodyFields: any[] = [];
   function searchForBodyFields(item: any) {
@@ -19,6 +20,7 @@ function extractBodyFields(data: any): any[] {
   return bodyFields;
 }
 
+// Map legacy chart types to ChartKind
 function mapChartType(legacyType: string): ChartKind {
   const map: Record<string, ChartKind> = {
     bar: 'column', 
@@ -30,6 +32,7 @@ function mapChartType(legacyType: string): ChartKind {
   return map[legacyType.toLowerCase()] || 'column';
 }
 
+// Main data processing function
 export function processData(
   rawData: any[], 
   aiConfigs: ReportChartSchema[]
@@ -103,7 +106,7 @@ export function processData(
 
     const filters = filterCriteriaRaw.length > 0 ? filterCriteriaRaw : [];
 
-    // --- Filtering ---
+   // --- Filtering ---
     const filteredData = bodyData.filter(item => {
       return filters.every((rule: string) => {
         const [field, condition] = rule.split(':').map(s => s.trim());

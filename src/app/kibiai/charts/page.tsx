@@ -1,19 +1,27 @@
-import React from 'react';
 import Dashboard from '@/components/chart-dashboard/DashboardGrid';
-import { fetchChartConfiguration, fetchReportData } from '@/app/api/charts/api';
-
+import {
+  fetchChartConfiguration,
+  fetchReportData,
+} from '@/app/api/charts/api';
 
 interface PageProps {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  searchParams: {
+    report_id?: string;
+  };
 }
 
-export default async function ChartsPage({ searchParams }: PageProps) {
- 
-  const resolvedParams = await searchParams;
-  
-  const reportId = typeof resolvedParams.report_id === 'string' 
-    ? resolvedParams.report_id 
-    : '';
+// Chart Dashboard Page
+export default async function ChartsPage({
+  searchParams,
+}: PageProps) {
+  // 1. Resolve searchParams
+  const resolvedSearchParams = await searchParams;
+
+  // 2. Validate report_id
+  const reportId =
+    typeof resolvedSearchParams.report_id === 'string'
+      ? resolvedSearchParams.report_id
+      : '';
 
   if (!reportId) {
     return (
@@ -23,19 +31,20 @@ export default async function ChartsPage({ searchParams }: PageProps) {
     );
   }
 
-  const [schemas, dataResponse] = await Promise.all([
+  // 3. Parallel Data Fetching
+  const [schemas, report] = await Promise.all([
     fetchChartConfiguration(reportId),
-    fetchReportData(reportId)
+    fetchReportData(reportId),
   ]);
 
   return (
     <main className="min-h-screen w-full bg-slate-50">
-      <Dashboard 
-        initialSchemas={schemas} 
-        initialDataset={dataResponse.rows} 
-        initialCanvasState={dataResponse.canvasState}
-        initialLayoutMode={dataResponse.layoutMode} 
-        reportRecordId={dataResponse.reportRecordId}
+      <Dashboard
+        initialSchemas={schemas}
+        initialDataset={report.rows}
+        initialCanvasState={report.canvasState}
+        initialLayoutMode={report.layoutMode}
+        reportRecordId={report.reportRecordId}
       />
     </main>
   );

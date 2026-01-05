@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-// 🟩 Handles preflight CORS requests
+// Handles preflight CORS requests
 export async function OPTIONS() {
   return NextResponse.json({}, {
     headers: {
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
         { error: 'Missing required fields: openAIKey, assistantId, prompt' },
         {
           status: 400,
-          headers: { "Access-Control-Allow-Origin": "*" }, // 🟩 added
+          headers: { "Access-Control-Allow-Origin": "*" },
         }
       );
     }
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
         },
         {
           status: 504,
-          headers: { "Access-Control-Allow-Origin": "*" }, // 🟩 added
+          headers: { "Access-Control-Allow-Origin": "*" }, 
         }
       );
     }
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
       },
       {
         status: 200,
-        headers: { "Access-Control-Allow-Origin": "*" }, // 🟩 added
+        headers: { "Access-Control-Allow-Origin": "*" }, 
       }
     );
   } catch (err: any) {
@@ -133,7 +133,7 @@ export async function POST(req: Request) {
       { error: err.message || 'Unexpected error occurred' },
       {
         status: 500,
-        headers: { "Access-Control-Allow-Origin": "*" }, // 🟩 added
+        headers: { "Access-Control-Allow-Origin": "*" }, 
       }
     );
   }

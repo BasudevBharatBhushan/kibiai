@@ -1,5 +1,6 @@
 const BASE_URL = '/api/conversations';
 
+// Payload structure for sending a message
 export interface SendMessagePayload {
   instruction_set: string;
   conversation_id?: string | null;
@@ -8,6 +9,7 @@ export interface SendMessagePayload {
   user_prompt: string;
 }
 
+// Send a message to the conversation API
 export async function sendMessage(payload: SendMessagePayload) {
   const res = await fetch(BASE_URL, {
     method: "POST",
@@ -27,6 +29,7 @@ export async function sendMessage(payload: SendMessagePayload) {
   }>;
 }
 
+// Fetch an existing conversation by ID
 export async function getConversation(conversationId: string) {
   const res = await fetch(`${BASE_URL}/${conversationId}`);
 
