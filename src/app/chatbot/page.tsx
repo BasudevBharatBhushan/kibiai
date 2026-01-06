@@ -13,8 +13,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import TextareaAutosize from 'react-textarea-autosize';
 import '@/styles/chatbot.css';
 import { ChatProvider, useChat } from "@/context/ChatbotContext";
-import { CHAT_CONFIG } from "@/lib/constants/analytics";
+import { CHAT_CONFIG } from "@/constants/analytics";
 import { SUGGESTED_PROMPTS } from "@/lib/utils/mockPrompts";
+import { useAutoScroll } from '@/lib/hooks/useAutoScroll'
 
 // 1. Wrapper Component
 export default function ChatPage() {
@@ -40,15 +41,8 @@ function ChatView() {
     selectPrompt
   } = useChat();
 
-  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null); 
-
-  // Auto-scroll effect 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, loading]);
+  const scrollRef = useAutoScroll<HTMLDivElement>([messages, loading]);
 
   // Focus logic for prompt clicking
   const onPromptClick = (text: string) => {

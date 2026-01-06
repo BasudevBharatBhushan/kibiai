@@ -44,7 +44,6 @@ export const UI_TEXT = {
   NO_CHARTS: 'No charts visible. Click "Configure" to add charts.',
   COMING_SOON: {
     AI_GEN: "Coming soon: AI Chart Generation",
-    INSIGHTS: "Coming soon: Business Insights",
   },
 } as const;
 

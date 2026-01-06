@@ -3,7 +3,7 @@ import {
   VALIDATION_LIMITS, 
   AGGREGATION_METHODS, 
   PIE_AGGREGATION_METHODS 
-} from "@/lib/constants/analytics";
+} from "@/constants/analytics";
 
 // Base chart schema for common fields
 const BaseChartSchema = {

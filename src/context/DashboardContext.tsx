@@ -23,8 +23,9 @@ import {
   ALLOWED_LAYOUTS, 
   DASHBOARD_DEFAULTS, 
   type LayoutMode 
-} from '@/lib/constants/dashboard';
-import { PROCESSOR_DEFAULTS } from '@/lib/constants/analytics';
+} from '@/constants/dashboard';
+import { PROCESSOR_DEFAULTS } from '@/constants/analytics';
+import { useDebouncedCallback } from '@/lib/hooks/useDebounce';
 
 // Logic & API
 import { processData } from '@/lib/charts/DataProcessor';
@@ -96,7 +97,6 @@ export function DashboardProvider({
   const [isMounted, setIsMounted] = useState(false);
 
   // Refs
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitialized = useRef(false);
 
   // --- DERIVED DATA ---
@@ -168,16 +168,12 @@ useEffect(() => {
 }, [initialSchemas, initialDataset, initialCanvasState, initialLayoutMode]);
 
   // --- AUTO-SAVE ---
-
-  const triggerAutoSave = useCallback((currentCharts: ChartConfig[], visibleIds: Set<string>, currentLayoutMode: string) => {
-    if (!reportRecordId) {
+  const triggerAutoSave = useDebouncedCallback(
+    (currentCharts: ChartConfig[], visibleIds: Set<string>, currentLayoutMode: string) => {
+      if (!reportRecordId) {
         console.warn("[DashboardContext] Cannot save: Missing reportRecordId");
         return;
-    }
-
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-
-    saveTimeoutRef.current = setTimeout(() => {
+      }
 
       const chartsToSave = currentCharts
         .filter(c => visibleIds.has(c.id))
@@ -190,12 +186,12 @@ useEffect(() => {
       const payload = {
         layoutMode: currentLayoutMode,
         charts: chartsToSave
-      }
+      };
 
       saveDashboardState(reportRecordId, payload);
-    }, 500);
-  }, [reportRecordId]);
-
+    }, 
+    500 // Delay
+  );
 
   // --- ACTIONS ---
 

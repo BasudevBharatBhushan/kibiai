@@ -5,7 +5,7 @@ import { Responsive, WidthProvider } from 'react-grid-layout';
 import { FiGrid, FiColumns, FiList, FiSidebar, FiRotateCcw, FiEdit2 } from 'react-icons/fi';
 import { DashboardProvider, useDashboard } from '@/context/DashboardContext';
 import { ReportChartSchema } from '@/lib/charts/ChartTypes';
-import { GRID_CONFIG, UI_TEXT } from '@/lib/constants/dashboard';
+import { GRID_CONFIG, UI_TEXT } from '@/constants/dashboard';
 
 import ChartCard from './ChartCard';
 import InsightCard from './InsightCard';

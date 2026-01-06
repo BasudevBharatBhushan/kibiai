@@ -1,5 +1,5 @@
 import { ReportChartSchema } from '@/lib/charts/ChartTypes';
-import { FM_CONFIG } from '@/lib/constants/filemaker';
+import { FM_CONFIG } from '@/constants/filemaker';
 
 // FileMaker Record Interface
 interface FMRecord {

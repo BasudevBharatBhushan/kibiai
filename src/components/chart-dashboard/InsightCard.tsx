@@ -4,7 +4,7 @@ import React from 'react';
 import { FiTrash2, FiMove } from 'react-icons/fi';
 import { useDashboard } from '@/context/DashboardContext';
 import { ChartConfig } from '@/lib/charts/ChartTypes';
-import { INSIGHT_CONFIG } from '@/lib/constants/analytics';
+import { INSIGHT_CONFIG } from '@/constants/analytics';
 import '@/styles/dashboard.css';
 
 // Props Type

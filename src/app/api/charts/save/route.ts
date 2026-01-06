@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { FM_CONFIG } from '@/lib/constants/filemaker';
+import { FM_CONFIG } from '@/constants/filemaker';
 import { ChartKind } from '@/lib/charts/ChartTypes'; 
 
 // Configuration

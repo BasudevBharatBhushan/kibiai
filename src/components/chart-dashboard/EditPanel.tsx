@@ -9,7 +9,7 @@ import { MdOutlineDonutLarge } from 'react-icons/md';
 
 import { useDashboard } from '@/context/DashboardContext';
 import { ChartKind } from '@/lib/charts/ChartTypes';
-import { AVAILABLE_CHART_TYPES, UI_TEXT } from '@/lib/constants/dashboard';
+import { AVAILABLE_CHART_TYPES, UI_TEXT } from '@/constants/dashboard';
 
 // EditPanel Component
 export default function EditPanel() {

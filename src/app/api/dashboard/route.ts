@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { FM_CONFIG } from '@/lib/constants/filemaker'; 
+import { FM_CONFIG } from '@/constants/filemaker'; 
 
 // Configuration
 const API_URL = process.env.API_URL || FM_CONFIG.API_URL_DEFAULT;

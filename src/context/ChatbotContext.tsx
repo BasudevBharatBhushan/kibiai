@@ -15,7 +15,7 @@ import {
 } from "@/lib/bot/conversationAPI";
 import { formatUserPrompt } from "@/lib/bot/promptFormatter";
 import { parseAssistantResponse } from "@/lib/bot/responseParser";
-import { CHAT_CONFIG } from "@/lib/constants/analytics";
+import { CHAT_CONFIG } from "@/constants/analytics";
 
 // --- Types ---
 

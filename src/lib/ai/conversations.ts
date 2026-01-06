@@ -1,4 +1,4 @@
-import { AI_CONFIG } from "../constants/analytics";
+import { AI_CONFIG } from "../../constants/analytics";
 import { openai } from "./client";
 
 // Create a new conversation 

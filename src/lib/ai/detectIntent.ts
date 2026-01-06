@@ -1,5 +1,5 @@
 import { ChartIntent } from "./intent";
-import { INTENT_KEYWORDS } from "@/lib/constants/analytics"; // Import here
+import { INTENT_KEYWORDS } from "@/constants/analytics"; // Import here
 
 export function detectIntent(userPrompt: string): ChartIntent {
   const prompt = userPrompt.toLowerCase();

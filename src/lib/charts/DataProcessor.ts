@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { 
   PROCESSOR_DEFAULTS, 
   CHART_TYPE_MAP 
-} from "@/lib/constants/analytics";
+} from "@/constants/analytics";
 
 // Helper to recursively extract BodyFields from nested data
 function extractBodyFields(data: any): any[] {

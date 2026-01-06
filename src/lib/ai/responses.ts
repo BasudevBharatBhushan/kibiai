@@ -10,7 +10,7 @@ import {
   AI_CONFIG, 
   PROMPT_INSTRUCTIONS, 
   AI_ERROR_MESSAGES 
-} from "@/lib/constants/analytics";
+} from "@/constants/analytics";
 
 // Parameters for sending a user prompt to the AI
 type SendUserPromptParams = {

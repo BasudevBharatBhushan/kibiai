@@ -1,4 +1,4 @@
-import { API_ROUTES } from "@/lib/constants/analytics";
+import { API_ROUTES } from "@/constants/analytics";
 // Function to save dashboard state
 export async function saveDashboardState(
   reportRecordId: string,
