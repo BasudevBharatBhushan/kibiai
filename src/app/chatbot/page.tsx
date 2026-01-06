@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { HelpCircle, FileText, Download, BarChart3, Users, PieChart, Plus } from "lucide-react"; 
+import { useEffect, useRef } from "react";
+import { HelpCircle, FileText, Download, Plus } from "lucide-react"; 
 import {
   Card,
   CardContent,
@@ -10,149 +10,73 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button"; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; 
-import {
-  sendMessage,
-  getConversation,
-} from "@/lib/bot/conversationAPI";
-import { formatUserPrompt } from "@/lib/bot/promptFormatter";
-import { parseAssistantResponse } from "@/lib/bot/responseParser";
 import TextareaAutosize from 'react-textarea-autosize';
+import '@/styles/chatbot.css';
+import { ChatProvider, useChat } from "@/context/ChatbotContext";
+import { CHAT_CONFIG } from "@/lib/constants/analytics";
+import { SUGGESTED_PROMPTS } from "@/lib/utils/mockPrompts";
 
-//MOCK SUGGESTED PROMPTS
-const SUGGESTED_PROMPTS = [
-  {
-    title: "Sales Analysis",
-    description: "Analyze the sales trends for Q3 compared to the previous year.",
-    icon: <BarChart3 className="w-5 h-5 text-indigo-500" />
-  },
-  {
-    title: "Lead Engagement",
-    description: "Summarize the top leads engaged this week and their status.",
-    icon: <Users className="w-5 h-5 text-indigo-500" />
-  },
-  {
-    title: "Revenue Report",
-    description: "Generate a breakdown of revenue by region for last month.",
-    icon: <PieChart className="w-5 h-5 text-indigo-500" />
-  }
-];
-
-type Message = {
-  role: "user" | "assistant";
-  text: string;
-};
-
+// 1. Wrapper Component
 export default function ChatPage() {
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  
+  return (
+    <ChatProvider>
+      <ChatView />
+    </ChatProvider>
+  );
+}
+
+// 2. Inner Component (Consumes Context)
+function ChatView() {
+  const {
+    conversationId,
+    messages,
+    loading,
+    input,
+    showPrompts,
+    setInput,
+    setShowPrompts,
+    handleNewChat,
+    handleSend,
+    selectPrompt
+  } = useChat();
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null); 
-  const [showPrompts, setShowPrompts] = useState(false);
 
-  // Load conversation
-  useEffect(() => {
-    if (!conversationId) return;
-    if (messages.length > 0) return; 
-
-    getConversation(conversationId).then((items) => {
-      const restored = items.flatMap((item) =>
-        item.content
-          .filter((c) => c.type === "output_text")
-          .map((c) => ({
-            role: item.role,
-            text:
-              item.role === "assistant"
-                ? parseAssistantResponse(c.text || "")
-                : c.text || "",
-          }))
-      );
-      setMessages(restored);
-    });
-  }, [conversationId]);
-
-  // Auto-scroll
+  // Auto-scroll effect 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, loading]);
 
-  const handlePromptClick = (text: string) => {
-    setInput(text);
-    setShowPrompts(false); 
+  // Focus logic for prompt clicking
+  const onPromptClick = (text: string) => {
+    selectPrompt(text);
     setTimeout(() => {
       inputRef.current?.focus();
     }, 0);
   };
-
-  const handleNewChat = () => {
-    setConversationId(null); 
-    setMessages([]);         
-    setInput("");            
-    setShowPrompts(false);   
-  };
-
-  async function handleSend(e?: React.FormEvent) {
-    e?.preventDefault();
-    if (!input.trim() || loading) return;
-
-    const userText = input;
-    setInput("");
-    setLoading(true);
-    setShowPrompts(false);
-
-    // Optimistic update
-    setMessages((prev) => [...prev, { role: "user", text: userText }]);
-
-    try {
-      const res = await sendMessage({
-        instruction_set: "You are a helpful assistant.",
-        conversation_id: conversationId,
-        conversation_metadata: conversationId ? undefined : { source: "demo-ui" },
-        predefined_prompt: "Answer in plain English.",
-        user_prompt: formatUserPrompt(userText),
-      });
-
-      setConversationId(res.conversation_id);
-      const assistantText = parseAssistantResponse(res.response ?? "");
-
-      if (assistantText) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", text: assistantText },
-        ]);
-      }
-    } catch (error) {
-      console.error("Failed to send message", error);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <main className="flex items-center justify-center min-h-screen bg-white p-4">
       <Card className="w-full max-w-120 h-[90vh] flex flex-col shadow-2 border-0 bg-white">
         
         {/* Header  */}
-        <CardHeader className="px-6 py-4 border-b-0">
-          <div className="flex items-center justify-between w-full">
-            {/* Left Side: Logo & Title */}
+        <CardHeader className="chat-header">
+          <div className="chat-header-container flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-12 h-12 bg-indigo-50 rounded-full p-2 shrink-0">
+              <div className="chat-logo w-8 h-8">
                 <img src="/bot-avatar.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div className="flex flex-col">
-                <span className="font-semibold text-lg text-gray-700">KiBi-AI</span>
+                <span className="chat-title">{CHAT_CONFIG.BOT_NAME}</span>
                 {conversationId && (
-                  <span className="text-xs text-gray-400 font-mono">ID: {conversationId.slice(0, 12)}...</span>
+                  <span className="chat-id">ID: {conversationId.slice(0, 12)}...</span>
                 )}
               </div>
             </div>
 
-            {/* Right Side: New Chat Button */}
             <Button 
               variant="ghost" 
               size="icon" 
@@ -170,17 +94,17 @@ export default function ChatPage() {
             <div className="space-y-6 pb-15">
               
               {/* Welcome Message */}
-                 <div className="flex w-full justify-start animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex items-start gap-3 max-w-[85%]">
-                        <Avatar className="w-10 h-10 border bg-white shadow-sm mt-1">
-                            <AvatarImage src="/bot-avatar.png" className="object-contain p-1" />
-                            <AvatarFallback>AI</AvatarFallback>
-                        </Avatar>
-                        <div className="bg-gray-100 rounded-2xl rounded-tl-none px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Welcome to KiBi-AI! Please select an available prompt from the suggestion button or enter a new prompt to generate a report.
-                        </div>
-                    </div>
-                 </div>
+               <div className="flex w-full justify-start animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex items-start gap-3 max-w-[85%]">
+                      <Avatar className="w-10 h-10 border bg-white shadow-sm mt-1">
+                          <AvatarImage src="/bot-avatar.png" className="object-contain p-1" />
+                          <AvatarFallback>AI</AvatarFallback>
+                      </Avatar>
+                      <div className="bg-gray-100 rounded-2xl rounded-tl-none px-5 py-4 text-sm text-gray-700 leading-relaxed">
+                          {CHAT_CONFIG.WELCOME_MESSAGE}
+                      </div>
+                  </div>
+               </div>
 
               {/* Dynamic Messages */}
               {messages.map((m, i) => (
@@ -192,7 +116,6 @@ export default function ChatPage() {
                 >
                   <div className={`flex items-start gap-3 max-w-[85%] ${m.role === "user" ? "flex-row-reverse" : ""}`}>
                     
-                    {/* Bot Avatar */}
                     {m.role === "assistant" && (
                       <Avatar className="w-10 h-10 border bg-white shadow-sm mt-1">
                         <AvatarImage src="/bot-avatar.png" className="object-contain p-1" />
@@ -200,7 +123,6 @@ export default function ChatPage() {
                       </Avatar>
                     )}
 
-                    {/* Message Bubble */}
                     <div
                       className={`rounded-2xl px-5 py-4 text-sm shadow-sm leading-relaxed ${
                         m.role === "user"
@@ -210,9 +132,7 @@ export default function ChatPage() {
                     >
                       {m.text}
 
-                      {/* Mock Report Attachment - 
-                         If the text contains "Report", render a mock attachment
-                      */}
+                      {/* Mock Report Attachment */}
                       {m.role === "assistant" && m.text.toLowerCase().includes("report") && (
                          <div className="mt-3 bg-white rounded-xl p-3 flex items-center gap-3 shadow-sm border border-gray-100 w-full max-w-sm">
                             <div className="bg-indigo-100 p-2 rounded-lg">
@@ -250,13 +170,14 @@ export default function ChatPage() {
               <div ref={scrollRef} />
             </div>
           </ScrollArea>
+          
           {showPrompts && (
              <div className="absolute bottom-20 left-4 right-4 animate-in slide-in-from-bottom-5 fade-in duration-300 z-10">
                 <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
                    {SUGGESTED_PROMPTS.map((prompt, index) => (
                       <button
                         key={index}
-                        onClick={() => handlePromptClick(prompt.description)}
+                        onClick={() => onPromptClick(prompt.description)}
                         className="shrink-0 w-64 text-left bg-white border border-gray-200 p-4 rounded-2xl shadow-lg hover:border-indigo-500 hover:shadow-md transition-all group"
                       >
                          <div className="bg-indigo-50 w-8 h-8 rounded-lg flex items-center justify-center mb-3 group-hover:bg-indigo-100 transition-colors">
@@ -271,12 +192,12 @@ export default function ChatPage() {
                 </div>
              </div>
           )}
-          {/* Floating Input Area */}
+          
           <div className="absolute bottom-4 left-0 right-0 px-4 w-full pt-4 bg-white ">
             <form
                 onSubmit={handleSend}
                 className="flex items-center gap-2 w-full max-w-2xl mx-auto">
-                {/* Help Icon Button */}
+                
                 <Button 
                     type="button" 
                     variant="ghost" 
@@ -285,7 +206,6 @@ export default function ChatPage() {
                     <HelpCircle className="w-8! h-8!" />
                 </Button>
 
-                {/* Input Pill */}
             <div className="flex-1 relative">
             <TextareaAutosize
                 ref={inputRef} 
@@ -296,18 +216,16 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-            
-                if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend(e);
-                }
-         }}
-            disabled={loading}
-            autoFocus
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(e);
+                  }
+                }}
+                disabled={loading}
+                autoFocus
             />
-        </div>
+            </div>
 
-                {/* Send Button */}
                 <Button 
                     type="submit" 
                     disabled={loading || !input.trim()}

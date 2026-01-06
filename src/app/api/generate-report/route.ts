@@ -3,7 +3,7 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { fetchFmRecord } from "@/app/utils/utility";
+import { fetchFmRecord } from "@/lib/utils/utility";
 
 // Types
 interface ReportSetupJson {

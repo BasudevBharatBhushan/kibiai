@@ -1,27 +1,14 @@
 import { ChartKind } from "@/lib/charts/ChartTypes";
 import { AIChartType } from "@/lib/ai/aiTypes";
+import { CHART_TYPE_MAP } from "@/lib/constants/analytics";
 
 // Map AI chart types to UI ChartKind
-export function mapAIChartTypeToUIKind(
-  chartType: AIChartType
-): ChartKind {
-  switch (chartType) {
-    case "bar":
-      return "column";
-
-    case "line":
-      return "line";
-
-    case "pie":
-      return "pie";
-
-    case "doughnut":
-      return "donut";
-
-    case "area":
-      return "area";
-
-    default:
-      throw new Error(`Unsupported chart type: ${chartType}`);
+export function mapAIChartTypeToUIKind(chartType: AIChartType): ChartKind {
+  const mapped = CHART_TYPE_MAP[chartType];
+  
+  if (!mapped) {
+    throw new Error(`Unsupported chart type: ${chartType}`);
   }
+  
+  return mapped as ChartKind;
 }

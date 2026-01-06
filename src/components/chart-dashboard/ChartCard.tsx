@@ -6,7 +6,7 @@ import { FiTrash2, FiMove } from 'react-icons/fi';
 import * as Highcharts from 'highcharts';
 
 import { useDashboard } from '@/context/DashboardContext';
-import { buildOptions } from '@/app/utils/chartsUtils';
+import { buildOptions } from '@/lib/utils/chartsUtils';
 import type { ChartConfig, ChartKind } from '@/lib/charts/ChartTypes';
 import { CHART_VISUALS, AVAILABLE_CHART_TYPES } from '@/lib/constants/dashboard';
 import '@/styles/dashboard.css';

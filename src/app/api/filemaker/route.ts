@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   parseODataBatchResponse,
   flattenFileMakerRecords,
-} from "@/app/utils/utility";
+} from "@/lib/utils/utility";
 import { url } from "inspector";
 
 interface FetchFmDataRequest {

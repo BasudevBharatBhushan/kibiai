@@ -1,12 +1,12 @@
-import { jsonResponse } from "@/app/utils/utility";
+import { jsonResponse } from "@/lib/utils/utility";
 import {
   fmFindOne,
   fmCreateRecord,
   fmEditRecord,
   fmFindAllRecords,
-} from "@/app/utils/filemaker";
+} from "@/lib/utils/filemaker";
 import { verifyBearerToken } from "@/lib/auth";
-import { requireEnv } from "@/app/utils/utility";
+import { requireEnv } from "@/lib/utils/utility";
 
 const FM_COMPANY_LAYOUT = requireEnv("FM_COMPANY_LAYOUT");
 

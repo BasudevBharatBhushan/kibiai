@@ -1,5 +1,5 @@
-import { jsonResponse, requireEnv } from "@/app/utils/utility";
-import { fmFindOne } from "@/app/utils/filemaker";
+import { jsonResponse, requireEnv } from "@/lib/utils/utility";
+import { fmFindOne } from "@/lib/utils/filemaker";
 import { verifyBasicCompany } from "@/lib/auth";
 
 const FM_LICENSE_LAYOUT = requireEnv("FM_LICENSE_LAYOUT");

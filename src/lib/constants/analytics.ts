@@ -115,3 +115,12 @@ export const INSIGHT_CONFIG = {
   SEPARATOR: ' - ',
   BULLET_COLOR: 'bg-blue-500',
 } as const;
+
+// 11. Chat Configuration
+export const CHAT_CONFIG = {
+  BOT_NAME: "KiBi-AI",
+  WELCOME_MESSAGE: "Welcome to KiBi-AI! Please select an available prompt from the suggestion button or enter a new prompt to generate a report.",
+  SYSTEM_INSTRUCTION: "You are a helpful assistant.",
+  DEFAULT_PREDEFINED: "Answer in plain English.",
+  SOURCE_METADATA: "demo-ui",
+} as const;

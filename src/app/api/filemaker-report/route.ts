@@ -11,7 +11,7 @@ import {
   processFetchOrder,
   stitch,
   generateReportStructure,
-} from "@/app/utils/utility";
+} from "@/lib/utils/utility";
 
 import {
   fmSignIn,
@@ -19,7 +19,7 @@ import {
   fmGetRecordById,
   fmSetRecordById,
   fmSignOut
-} from "@/app/utils/filemaker";
+} from "@/lib/utils/filemaker";
 
 const FM_LAYOUT = "MultiTableReport Filtered Datas";
 
