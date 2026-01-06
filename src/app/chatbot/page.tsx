@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { HelpCircle, FileText, Download, Plus } from "lucide-react"; 
 import {
   Card,
