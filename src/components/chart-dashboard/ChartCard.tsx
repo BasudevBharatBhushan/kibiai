@@ -3,27 +3,29 @@
 import React, { useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { FiTrash2, FiMove } from 'react-icons/fi';
+import * as Highcharts from 'highcharts';
+
+import { useDashboard } from '@/context/DashboardContext';
 import { buildOptions } from '@/app/utils/chartsUtils';
 import type { ChartConfig, ChartKind } from '@/lib/charts/ChartTypes';
-import * as Highcharts from 'highcharts';
 import { CHART_VISUALS, AVAILABLE_CHART_TYPES } from '@/lib/constants/dashboard';
 import '@/styles/dashboard.css';
 
-// Dynamically import HighchartsReact to avoid SSR issues
+
 const HighchartsReact = dynamic(
   () => import('highcharts-react-official').then(m => m.default),
   { ssr: false }
 );
 
-// Props for ChartCard component
+// Props Type
 type Props = {
   config: ChartConfig;
-  onRemove: (id: string) => void;
-  onChangeKind: (id: string, kind: ChartKind) => void;
 };
 
-// ChartCard Component
-export default function ChartCard({ config, onRemove, onChangeKind }: Props) {
+export default function ChartCard({ config }: Props) {
+  // Use Context hook
+  const { removeChart, updateChartKind } = useDashboard();
+
   const opts = useMemo(() => {
     const base = buildOptions(config);
     return {
@@ -36,7 +38,7 @@ export default function ChartCard({ config, onRemove, onChangeKind }: Props) {
         spacingBottom: CHART_VISUALS.SPACING.BOTTOM,
         spacingLeft: CHART_VISUALS.SPACING.LEFT,
         spacingRight: CHART_VISUALS.SPACING.RIGHT,
-    },
+      },
       credits: { enabled: false },
       legend: {
         ...base.legend,
@@ -46,9 +48,9 @@ export default function ChartCard({ config, onRemove, onChangeKind }: Props) {
     };
   }, [config]);
 
+  // Render
   return (
-  <div className="card-base flex flex-col h-full w-full">      
-      {/*Chart Card Header */}
+    <div className="card-base flex flex-col h-full w-full">      
       <div className="card-header">        
         <div className="flex items-center gap-2 overflow-hidden">
           <div className="dragHandle drag-handle">            
@@ -63,7 +65,8 @@ export default function ChartCard({ config, onRemove, onChangeKind }: Props) {
           <select
             className="chart-kind-select"
             value={config.kind}
-            onChange={(e) => onChangeKind(config.id, e.target.value as ChartKind)}>
+            onChange={(e) => updateChartKind(config.id, e.target.value as ChartKind)}
+          >
             {AVAILABLE_CHART_TYPES.map(type => (
               <option key={type} value={type}>
                 {type.charAt(0).toUpperCase() + type.slice(1).replace('Column', 'Bar')}
@@ -72,7 +75,7 @@ export default function ChartCard({ config, onRemove, onChangeKind }: Props) {
           </select>
 
           <button 
-            onClick={() => onRemove(config.id)}
+            onClick={() => removeChart(config.id)}
             className="delete-btn"
             title="Remove Chart"
           >
@@ -81,7 +84,6 @@ export default function ChartCard({ config, onRemove, onChangeKind }: Props) {
         </div>
       </div>
 
-     {/*Chart Body */}
       <div className="flex-1 p-2 w-full min-h-100">
         <HighchartsReact 
           highcharts={Highcharts} 

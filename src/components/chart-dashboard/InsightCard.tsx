@@ -2,21 +2,23 @@
 
 import React from 'react';
 import { FiTrash2, FiMove } from 'react-icons/fi';
+import { useDashboard } from '@/context/DashboardContext';
 import { ChartConfig } from '@/lib/charts/ChartTypes';
 import { INSIGHT_CONFIG } from '@/lib/constants/analytics';
 import '@/styles/dashboard.css';
 
-// Props for InsightCard component
+// Props Type
 type Props = {
   config: ChartConfig;
-  onRemove: (id: string) => void;
 };
 
 // InsightCard Component
-export default function InsightCard({ config, onRemove }: Props) {
+export default function InsightCard({ config }: Props) {
+  const { removeChart } = useDashboard();
+
+  // Render
   return (
     <div className="card-base flex flex-col h-full w-full">      
-      {/* Header */}
       <div className="card-header shrink-0">
         <div className="flex items-center gap-3">
           <div className="dragHandle drag-handle">
@@ -25,14 +27,13 @@ export default function InsightCard({ config, onRemove }: Props) {
           <h3 className="text-36 font-semibold text-slate-700">{config.title}</h3>
         </div>
         <button 
-          onClick={() => onRemove(config.id)}
+          onClick={() => removeChart(config.id)}
           className="delete-btn"
         >
           <FiTrash2 size={14} />
         </button>
       </div>
 
-      {/* Body */}
       <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
         <div className="flex flex-col gap-3">
           {config.insights?.map((text, idx) => {
