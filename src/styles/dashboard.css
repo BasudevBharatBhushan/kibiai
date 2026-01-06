@@ -25,18 +25,6 @@
   @apply cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-50 transition-colors;
 }
 
-.layout-btn {
-  @apply p-2 rounded-md transition-all;
-}
-
-.layout-btn-active {
-  @apply bg-white text-slate-800 shadow-sm ring-1 ring-slate-200;
-}
-
-.layout-btn-inactive {
-  @apply text-slate-400 hover:text-slate-600;
-}
-
 .dashboard-area {
   @apply w-full min-h-[800px] bg-white border border-slate-200 rounded-xl shadow-sm p-6;
 }
