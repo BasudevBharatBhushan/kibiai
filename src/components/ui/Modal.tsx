@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from "react";
 import "../../styles/reportConfig.css"
 import { X } from "lucide-react";
 
+// Modal Component
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;

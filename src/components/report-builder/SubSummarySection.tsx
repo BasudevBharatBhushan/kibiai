@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
+import {SORT_ORDERS} from "@/constants/reportOptions";
 import { Modal } from "@/components/ui/Modal";
 import { Plus, X, GripVertical , ScrollText , Layers} from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -59,14 +60,14 @@ export function SubSummarySection() {
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef as React.Ref<HTMLDivElement>} 
+                ref={provided.innerRef} 
                 className="space-y-6"
               >
                 {groupEntries.map(([key, group], index) => (
                   <Draggable key={key} draggableId={key} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef as React.Ref<HTMLDivElement>}
+                        ref={provided.innerRef}
                         {...provided.draggableProps}
                         className={`border border-slate-200 rounded-lg p-4 transition-colors ${
                           snapshot.isDragging ? "draggable-row-active" : "bg-slate-50"
@@ -125,8 +126,11 @@ export function SubSummarySection() {
                               value={group.sort_order}
                               onChange={(e) => dispatch({ type: "UPDATE_GROUP_MAIN", payload: { groupKey: key, field: "sort_order", value: e.target.value } })}
                             >
-                              <option value="asc">Ascending</option>
-                              <option value="desc">Descending</option>
+
+                            {SORT_ORDERS.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                            
                             </select>
                           </div>
                         </div>

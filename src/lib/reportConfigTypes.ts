@@ -18,7 +18,7 @@ export interface TableDef {
 export interface ReportSetup {
   host: string;
   tables: Record<string, TableDef>;
-  relationships: any[];
+  relationships: any[]; // relationships: any[] with a proper interface
 }
 
 // --- Configuration Definitions (The State) ---
@@ -63,7 +63,7 @@ export interface SortField {
   sort_order: 'asc' | 'desc';
 }
 
-// The Master Config Interface
+// 6. The Master Config Interface
 export interface ReportConfig {
   report_header: string;
   response_to_user: string;

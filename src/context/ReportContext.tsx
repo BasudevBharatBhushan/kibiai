@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useReducer, ReactNode } from "react";
-import { ReportConfig, ReportSetup } from "../lib/reportConfigTypes";
+import { ReportConfig, ReportSetup , DbDefinition , SortField , CustomCalcField } from "../lib/reportConfigTypes";
 
 
 // Actions 
@@ -13,8 +13,8 @@ type Action =
   | { type: "SET_DESCRIPTION"; payload: string }
 
 
-  | { type: "ADD_DB_DEF"; payload: any } // We'll refine 'any' later
-  | { type: "UPDATE_DB_DEF"; payload: { index: number; field: string; value: any } }
+  | { type: "ADD_DB_DEF"; payload: DbDefinition }
+  | { type: "UPDATE_DB_DEF"; payload: { index: number; field: keyof DbDefinition; value: string | number | undefined } }
   | { type: "REMOVE_DB_DEF"; payload: number }
   | { type: "LOAD_INITIAL_CONFIG"; payload: ReportConfig }
   | { type: "LOAD_SETUP"; payload: ReportSetup }
@@ -38,7 +38,7 @@ type Action =
   // Body Sort Order
   | { type: "ADD_BODY_SORT" }
   | { type: "REMOVE_BODY_SORT"; payload: number }
-  | { type: "UPDATE_BODY_SORT"; payload: { index: number; field: 'field' | 'sort_order'; value: string } }
+  | { type: "UPDATE_BODY_SORT"; payload: { index: number; field: keyof SortField ; value: string } }
 
  
   | { type: "REORDER_COLUMNS"; payload: { sourceIndex: number; destinationIndex: number } }
@@ -47,7 +47,7 @@ type Action =
 
   | { type: "ADD_CALC" }
   | { type: "REMOVE_CALC"; payload: number }
-  | { type: "UPDATE_CALC"; payload: { index: number; field: string; value: string } }
+  | { type: "UPDATE_CALC"; payload: { index: number; field: keyof CustomCalcField ; value: string | number } }
   // Nested Dependencies
   | { type: "ADD_CALC_DEP"; payload: number } // payload = calcIndex
   | { type: "REMOVE_CALC_DEP"; payload: { calcIndex: number; depIndex: number } }
@@ -63,7 +63,7 @@ type Action =
   // Loading Report 
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "LOAD_FULL_REPORT"; payload: { config: ReportConfig; setup: ReportSetup; fmRecordId: string } }
-  | { type: "SET_REPORT_PREVIEW"; payload: any };
+  | { type: "SET_REPORT_PREVIEW"; payload: any[] };
 
 
 
@@ -124,8 +124,8 @@ function reportReducer(state: ReportState, action: Action): ReportState {
 
     case "UPDATE_DB_DEF":
       const newDbDef = [...state.config.db_defination];
-      // @ts-ignore - dynamic assignment for now
-      newDbDef[action.payload.index][action.payload.field] = action.payload.value;
+      (newDbDef[action.payload.index] as any)[action.payload.field] = action.payload.value;
+
       return {
         ...state,
         config: { ...state.config, db_defination: newDbDef },
@@ -334,8 +334,9 @@ function reportReducer(state: ReportState, action: Action): ReportState {
 
     case "UPDATE_BODY_SORT":
       const newSorts = [...state.config.body_sort_order];
-      // @ts-ignore
-      newSorts[action.payload.index][action.payload.field] = action.payload.value;
+
+      (newSorts[action.payload.index] as any)[action.payload.field] = action.payload.value;
+      
       return {
         ...state,
         config: { ...state.config, body_sort_order: newSorts }
@@ -403,8 +404,8 @@ function reportReducer(state: ReportState, action: Action): ReportState {
 
     case "UPDATE_CALC":
       const newCalcs = [...state.config.custom_calculated_fields];
-      // @ts-ignore
-      newCalcs[action.payload.index][action.payload.field] = action.payload.value;
+      (newCalcs[action.payload.index] as any)[action.payload.field] = action.payload.value;
+      
       return {
         ...state,
         config: { ...state.config, custom_calculated_fields: newCalcs }
@@ -530,8 +531,10 @@ const ReportContext = createContext<{
 export function ReportProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reportReducer, initialState);
 
+  const contextValue = React.useMemo(() => ({ state, dispatch }), [state]);
+
   return (
-    <ReportContext.Provider value={{ state, dispatch }}>
+    <ReportContext.Provider value={contextValue}>
       {children}
     </ReportContext.Provider>
   );

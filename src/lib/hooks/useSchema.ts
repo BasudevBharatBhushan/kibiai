@@ -33,7 +33,7 @@ export function useSchema() {
          .map(c => ({
             value: c.field_name,
             label: c.label || c.field_name,
-            type: "number" // calculated fields are numeric for now
+            type: "number" // calculated fields are numeric
          }));
     }
 

@@ -5,15 +5,18 @@ import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
+import {JOIN_TYPES} from "@/constants/reportOptions";
 import { SchemaVisualizer } from "@/components/report-builder/SchemaVisualizer";
 import { DbDefinition } from "@/lib/reportConfigTypes";
 import { Link2, Trash2 , Plus} from "lucide-react";
 
 export function RelationshipsSection() {
+  // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
   const { getAllTables, getFieldOptions } = useSchema();
   const rows = state.config.db_defination;
 
+  // Handlers
   const handleAddRow = () => {
     const newRow: DbDefinition = {
       primary_table: "",
@@ -112,9 +115,11 @@ export function RelationshipsSection() {
                     onChange={(e) => handleUpdate(index, "join_type", e.target.value)}
                     className="form-input"
                   >
-                    <option value="inner">Inner Join</option>
-                    <option value="left">Left Join</option>
-                    <option value="right">Right Join</option>
+
+                  {JOIN_TYPES.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                  
                   </select>
                 </td>
                 <td className="table-cell text-center">

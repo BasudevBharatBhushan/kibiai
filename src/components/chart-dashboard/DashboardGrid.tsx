@@ -10,7 +10,7 @@ import type { ChartConfig, ChartKind, ReportChartSchema } from '@/lib/ChartTypes
 
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import '../../app/styles/dashboard.css';
+import '@/styles/dashboard.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 const LOCAL_KEY = 'hc_rgl_dashboard_v3';

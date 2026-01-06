@@ -3,10 +3,10 @@
 import React, { useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { FiTrash2, FiMove } from 'react-icons/fi';
-import { buildOptions } from '@/app/utils/charts-utils';
+import { buildOptions } from '@/lib/utils/charts-utils';
 import type { ChartConfig, ChartKind } from '@/lib/ChartTypes';
 import * as Highcharts from 'highcharts';
-import '../../app/styles/dashboard.css';
+import '@/styles/dashboard.css';
 
 const HighchartsReact = dynamic(
   () => import('highcharts-react-official').then(m => m.default),

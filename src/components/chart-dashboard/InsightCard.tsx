@@ -3,7 +3,7 @@
 import React from 'react';
 import { FiTrash2, FiMove } from 'react-icons/fi';
 import { ChartConfig } from '@/lib/ChartTypes';
-import '../../app/styles/dashboard.css';
+import '@/styles/dashboard.css';
 
 type Props = {
   config: ChartConfig;

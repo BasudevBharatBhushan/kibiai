@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
+import {FILTER_OPERATORS} from "@/constants/reportOptions";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Plus, X , SlidersHorizontal } from "lucide-react";
 
@@ -218,13 +219,11 @@ export function ReportFiltersSection() {
                    value={row.operator}
                    onChange={e => updateFilterRow(idx, "operator", e.target.value)}
                 >
-                   <option value="==">Equals</option>
-                   <option value="*">Not Empty</option>
-                   <option value="=">Is Empty</option>
-                   <option value=">">Greater Than</option>
-                   <option value="<">Less Than</option>
-                   <option value=">=">Greater/Equal</option>
-                   <option value="<=">Less/Equal</option>
+                  
+                {FILTER_OPERATORS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+                
                 </select>
                 <input 
                   type="text" 
