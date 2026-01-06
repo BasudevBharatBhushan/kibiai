@@ -7,11 +7,15 @@ import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Goal , FileText } from "lucide-react";
 
 export function HeaderSection() {
+
+  // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
   const { report_header, response_to_user } = state.config;
 
   return (
     <CollapsibleCard title="Report Header" defaultOpen={false} icon={<FileText size={18}/>}>
+
+      {/* Header Input */}
       <div className="space-y-4">
         <div>
           <label className="form-label">Report Title</label>
@@ -23,7 +27,7 @@ export function HeaderSection() {
             placeholder="e.g. Sales Summary March 2025"
           />
         </div>
-
+      {/* Description */}
         <div>
           <label className="form-label">Description</label>
           <textarea

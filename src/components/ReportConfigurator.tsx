@@ -8,8 +8,7 @@ import { validateConfig } from "@/lib/utils/reportValidation";
 
 // Icons
 import { 
-  FileText, Link2, Layers, Table as TableIcon, 
-  Calculator, Filter, Sigma, Info, Save, RotateCw 
+  Info, Save, RotateCw 
 } from "lucide-react";
 
 // Components

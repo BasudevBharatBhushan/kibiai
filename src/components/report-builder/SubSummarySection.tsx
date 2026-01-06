@@ -11,10 +11,13 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard"; 
 
 export function SubSummarySection() {
+
+  // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
   const { getConnectedTables, getFieldOptions } = useSchema();
+
+  // Data & Handlers
   const groups = state.config.group_by_fields;
-  
   const groupEntries = Object.entries(groups);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,6 +28,7 @@ export function SubSummarySection() {
     setIsModalOpen(true);
   };
 
+  // Confirm Add New Group
   const handleConfirmAdd = () => {
     if (newGroupName.trim()) {
       dispatch({ type: "ADD_GROUP", payload: newGroupName.trim() });
@@ -32,6 +36,7 @@ export function SubSummarySection() {
     }
   };
 
+  // Drag and Drop Handler
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     dispatch({
@@ -230,7 +235,7 @@ export function SubSummarySection() {
           onClose={() => setIsModalOpen(false)} 
           title="Add Sub-Summary Group"
         >
-          {/* ... Modal content same as before ... */}
+          {/* ... Modal content ... */}
           <div className="space-y-4">
             <div>
               <label className="form-label">Group Name</label>

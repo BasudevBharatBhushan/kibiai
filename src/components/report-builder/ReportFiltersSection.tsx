@@ -19,9 +19,11 @@ interface FilterRow {
 }
 
 export function ReportFiltersSection() {
+  // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
   const { getConnectedTables, getFieldOptions } = useSchema();
 
+  // --- STATE ---
   const [dateRows, setDateRows] = useState<FilterRow[]>([]);
   const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
 
@@ -46,6 +48,8 @@ export function ReportFiltersSection() {
     if (loadedDates.length > 0) setDateRows(loadedDates);
 
     const loadedFilters: FilterRow[] = [];
+
+    // Parse filters from config
     Object.entries(state.config.filters || {}).forEach(([table, fields]) => {
       Object.entries(fields).forEach(([field, rawValue]) => {
         let op = "==";
@@ -96,7 +100,7 @@ export function ReportFiltersSection() {
   }, [filterRows, dispatch]);
 
 
-  // Handlers
+  // --- HANDLERS ---
   const addDateRow = () => {
     setDateRows([...dateRows, { id: Math.random().toString(), table: "", field: "", operator: "...", value: "", startDate: "", endDate: "" }]);
   };
