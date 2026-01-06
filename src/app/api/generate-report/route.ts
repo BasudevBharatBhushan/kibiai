@@ -1613,7 +1613,7 @@ export async function OPTIONS() {
   });
 }
 
-export const maxDuration =300 ;
+export const maxDuration =800 ;
 
 export async function POST(req: NextRequest) {
   const dataManager = new InMemoryDataManager();
