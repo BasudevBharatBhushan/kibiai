@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server';
+import { FM_CONFIG } from '@/constants/filemaker'; 
 
-const API_URL = process.env.API_URL || 'https://py-fmd.vercel.app/api/dataApi';
+// Configuration
+const API_URL = process.env.API_URL || FM_CONFIG.API_URL_DEFAULT;
+
+interface SaveRequest {
+  reportRecordId: string;
+  canvasState: any[]; 
+  layoutMode?: string; 
+}
 
 function getAuthHeader() {
   const username = process.env.FM_USERNAME || '';
@@ -10,20 +18,26 @@ function getAuthHeader() {
 
 export async function POST(request: Request) {
   try {
-    const { reportRecordId, canvasState } = await request.json();
+    // 1. Parse and Typed Request
+    const body = (await request.json()) as SaveRequest;
+    const { reportRecordId, canvasState } = body;
 
+    // 2. Validate
     if (!reportRecordId) {
       return NextResponse.json({ error: 'Missing Report Record ID' }, { status: 400 });
     }
 
+    // 3. Serialize Data
     const jsonString = JSON.stringify(canvasState);
 
+    // 4. Construct Payload
     const payload = {
       fmServer: process.env.FM_HOST,
       method: "updateRecord",
       methodBody: {
         database: process.env.FM_DATABASE,
-        layout: "MultiTableReport Filtered Datas", 
+        layout: FM_CONFIG.LAYOUTS.REPORTS, 
+        
         recordId: reportRecordId, 
         record: {
           "ChartCanvasState": jsonString
@@ -32,6 +46,7 @@ export async function POST(request: Request) {
       session: { token: "", required: "" }
     };
 
+    // 5. Send to Middleware
     const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 
@@ -42,6 +57,7 @@ export async function POST(request: Request) {
         cache: 'no-store',
     });
 
+    // 6. Handle Response
     if (!res.ok) {
         const errText = await res.text();
         return NextResponse.json({ error: errText }, { status: res.status });
@@ -50,7 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
 
   } catch (error) {
-    console.error("Save API Error:", error);
+    console.error("[Dashboard Save] Error:", error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

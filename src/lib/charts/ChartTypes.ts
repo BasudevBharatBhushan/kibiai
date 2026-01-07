@@ -1,11 +1,12 @@
-
 export type ChartKind = 'line' | 'pie' | 'area' | 'column' | 'donut' | 'insight';
 
+// Data series for charts
 export interface ChartDataSeries {
     name: string;
     data: number[];
 }
 
+// Chart configuration interface
 export interface ChartConfig {
     id: string;
     kind: ChartKind;
@@ -27,10 +28,12 @@ export interface ChartConfig {
   };
 }
 
+// Raw data item interface
 export interface RawDataItem {
   [key: string]: string | number | undefined;
 }
 
+// Report Chart Schema Interface
 export interface ReportChartSchema {
   pKey: string;                
   chart_title: string;          

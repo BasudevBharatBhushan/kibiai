@@ -1,6 +1,11 @@
 import { ChartConfig, ChartKind, ReportChartSchema } from './ChartTypes';
 import { v4 as uuidv4 } from 'uuid';
+import { 
+  PROCESSOR_DEFAULTS, 
+  CHART_TYPE_MAP 
+} from "@/constants/analytics";
 
+// Helper to recursively extract BodyFields from nested data
 function extractBodyFields(data: any): any[] {
   let bodyFields: any[] = [];
   function searchForBodyFields(item: any) {
@@ -19,17 +24,12 @@ function extractBodyFields(data: any): any[] {
   return bodyFields;
 }
 
+// Map legacy chart types to ChartKind
 function mapChartType(legacyType: string): ChartKind {
-  const map: Record<string, ChartKind> = {
-    bar: 'column', 
-    doughnut: 'donut',
-    pie: 'pie',
-    line: 'line',
-    area: 'area'
-  };
-  return map[legacyType.toLowerCase()] || 'column';
+  return (CHART_TYPE_MAP[legacyType.toLowerCase()] as ChartKind) || 'column';
 }
 
+// Main data processing function
 export function processData(
   rawData: any[], 
   aiConfigs: ReportChartSchema[]
@@ -50,7 +50,7 @@ export function processData(
   const bodyData = rawBodyData.map((item: any) => {
     const parse = (val: any) => {
         if (typeof val === 'number') return val;
-        const cleaned = String(val || '0').replace(/[^0-9.-]/g, ''); 
+        const cleaned = String(val || '0').replace(PROCESSOR_DEFAULTS.NUMERIC_CLEAN_REGEX, '');
         return parseFloat(cleaned) || 0;
     };
 
@@ -103,7 +103,7 @@ export function processData(
 
     const filters = filterCriteriaRaw.length > 0 ? filterCriteriaRaw : [];
 
-    // --- Filtering ---
+   // --- Filtering ---
     const filteredData = bodyData.filter(item => {
       return filters.every((rule: string) => {
         const [field, condition] = rule.split(':').map(s => s.trim());
@@ -170,8 +170,8 @@ export function processData(
     });
 
     // --- Layout ---
-    const W = 6;
-    const H = 9; 
+    const W = PROCESSOR_DEFAULTS.LAYOUT_WIDTH;
+    const H = PROCESSOR_DEFAULTS.LAYOUT_HEIGHT;
     const layout = {
       x: (results.length % 2) * W,
       y: Math.floor(results.length / 2) * H,

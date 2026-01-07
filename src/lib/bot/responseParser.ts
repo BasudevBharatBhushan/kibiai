@@ -1,3 +1,4 @@
+// Parses the assistant's response to extract meaningful content
 export function parseAssistantResponse(raw: string): string {
   if (!raw) return "";
 
