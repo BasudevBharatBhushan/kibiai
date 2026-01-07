@@ -8,7 +8,7 @@ import { ReportConfigurator } from "@/components/report/ReportConfigurator";
 import { ReportPreview }  from "@/components/report/ReportPreview";
 import { ChevronLeft, ChevronRight, MessageSquare, Settings } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
-
+import { reportService } from "@/services/reportService";
 
 
 function ReportPageContent() {
@@ -28,19 +28,10 @@ function ReportPageContent() {
   // Function to fetch live preview
   const fetchLivePreview = async (setupData: any, configData: any) => {
     try {
-      const res = await fetch("/api/generate-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ report_setup: setupData, report_config: configData })
-      });
-      const result = await res.json();
-      
-      if(result.status === "ok" && result.report_structure_json) {
-         // Store just the array part
-         dispatch({ type: "SET_REPORT_PREVIEW", payload: result.report_structure_json });
-      }
+      const previewData = await reportService.generatePreview(setupData, configData);
+      dispatch({ type: "SET_REPORT_PREVIEW", payload: previewData });
     } catch (e) {
-      console.error("Preview Generation Failed", e);
+      addToast("error", "Preview Failed", "Could not generate live preview");
     }
   };
 

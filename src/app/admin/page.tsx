@@ -5,7 +5,7 @@ import CompanyList from "@/components/company/CompanyList";
 import CompanyDetails from "@/components/company/CompanyDetails";
 import LicenseInfo from "@/components/license/LicenseInfo";
 import PaymentSection from "@/components/payment/PaymentSection";
-import Logo from "../../assets/kibiai.png";
+import Logo from "@/public/kibiai.png";
 import Image from "next/image";
 
 // -------------------- STATIC LOGIN DATA --------------------

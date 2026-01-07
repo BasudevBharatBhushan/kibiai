@@ -2,11 +2,17 @@
 import "@/styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
+// UI Components
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
-import {JOIN_TYPES} from "@/constants/reportOptions";
 import { SchemaVisualizer } from "./SchemaVisualizer";
+// Types
 import { DbDefinition } from "@/lib/types/reportConfigTypes";
+// Icons
 import { Link2, Trash2 , Plus} from "lucide-react";
+// Constants
+import { RELATIONSHIPS_HEADERS, PLACEHOLDERS } from "@/constants/ui";
+import {JOIN_TYPES} from "@/constants/reportOptions";
+
 
 export function RelationshipsSection() {
   // --- CONTEXT & HOOKS ---
