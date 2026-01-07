@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
+import {FILTER_OPERATORS} from "@/constants/reportOptions";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Plus, X , SlidersHorizontal } from "lucide-react";
 
@@ -18,9 +19,11 @@ interface FilterRow {
 }
 
 export function ReportFiltersSection() {
+  // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
   const { getConnectedTables, getFieldOptions } = useSchema();
 
+  // --- STATE ---
   const [dateRows, setDateRows] = useState<FilterRow[]>([]);
   const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
 
@@ -45,6 +48,8 @@ export function ReportFiltersSection() {
     if (loadedDates.length > 0) setDateRows(loadedDates);
 
     const loadedFilters: FilterRow[] = [];
+
+    // Parse filters from config
     Object.entries(state.config.filters || {}).forEach(([table, fields]) => {
       Object.entries(fields).forEach(([field, rawValue]) => {
         let op = "==";
@@ -95,7 +100,7 @@ export function ReportFiltersSection() {
   }, [filterRows, dispatch]);
 
 
-  // Handlers
+  // --- HANDLERS ---
   const addDateRow = () => {
     setDateRows([...dateRows, { id: Math.random().toString(), table: "", field: "", operator: "...", value: "", startDate: "", endDate: "" }]);
   };
@@ -218,13 +223,11 @@ export function ReportFiltersSection() {
                    value={row.operator}
                    onChange={e => updateFilterRow(idx, "operator", e.target.value)}
                 >
-                   <option value="==">Equals</option>
-                   <option value="*">Not Empty</option>
-                   <option value="=">Is Empty</option>
-                   <option value=">">Greater Than</option>
-                   <option value="<">Less Than</option>
-                   <option value=">=">Greater/Equal</option>
-                   <option value="<=">Less/Equal</option>
+                  
+                {FILTER_OPERATORS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+                
                 </select>
                 <input 
                   type="text" 

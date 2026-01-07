@@ -3,7 +3,7 @@
 import { useEffect, Suspense , useState} from "react";
 import { useSearchParams } from "next/navigation";
 import { ReportProvider, useReport } from "@/context/ReportContext";
-import "../../../styles/reportConfig.css"; 
+import "@/styles/reportConfig.css"; 
 import { ReportConfigurator } from "@/components/ReportConfigurator";
 import { ReportPreview }  from "@/components/ReportPreview";
 import { ChevronLeft, ChevronRight, MessageSquare, Settings } from "lucide-react";
@@ -12,6 +12,8 @@ import { useToast } from "@/context/ToastContext";
 
 
 function ReportPageContent() {
+
+  // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
   const searchParams = useSearchParams();
   const reportId = searchParams.get("report_id");
@@ -22,6 +24,8 @@ function ReportPageContent() {
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isConfigOpen, setIsConfigOpen] = useState(true);
 
+
+  // Function to fetch live preview
   const fetchLivePreview = async (setupData: any, configData: any) => {
     try {
       const res = await fetch("/api/generate-report", {
@@ -40,6 +44,7 @@ function ReportPageContent() {
     }
   };
 
+  // On mount or reportId change, load report config
   useEffect(() => {
     async function load() {
       if (!reportId) return;

@@ -4,7 +4,8 @@ import React from "react";
 import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
-import { CollapsibleCard } from "@/components/ui/CollapsibleCard"; // Updated Import
+import {SORT_ORDERS} from "@/constants/reportOptions";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard"; 
 import { Plus, X, GripVertical, ArrowUpDown , NotebookTabs, TableIcon} from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 
@@ -84,14 +85,14 @@ export function ReportBodySection() {
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef } 
+                ref={provided.innerRef} 
                 className="space-y-2"
               >
                 {columns.map((col, index) => (
                   <Draggable key={`col-${index}`} draggableId={`col-${index}`} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef }
+                        ref={provided.innerRef}
                         {...provided.draggableProps}
                         className={`draggable-row ${
                           snapshot.isDragging 
@@ -170,14 +171,14 @@ export function ReportBodySection() {
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef }
+                ref={provided.innerRef}
                 className="space-y-2"
               >
                 {sortOrders.map((sort, index) => (
                   <Draggable key={`sort-${index}`} draggableId={`sort-${index}`} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef }
+                        ref={provided.innerRef}
                         {...provided.draggableProps}
                         className={`flex gap-3 items-center p-2 rounded border transition-colors ${
                           snapshot.isDragging 
@@ -206,8 +207,11 @@ export function ReportBodySection() {
                             value={sort.sort_order}
                             onChange={(e) => dispatch({ type: "UPDATE_BODY_SORT", payload: { index, field: "sort_order", value: e.target.value } })}
                           >
-                            <option value="asc">Ascending (A-Z)</option>
-                            <option value="desc">Descending (Z-A)</option>
+
+                          {SORT_ORDERS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+
                           </select>
                         </div>
 

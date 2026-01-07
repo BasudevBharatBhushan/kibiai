@@ -2,6 +2,7 @@ import React, { ReactNode } from "react";
 import "../../styles/reportConfig.css"
 import { ChevronRight, ChevronDown } from "lucide-react";
 
+// Card Component
 interface CardProps {
   children: ReactNode;
   className?: string;
@@ -16,6 +17,7 @@ export function Card({ children, className = "" }: CardProps) {
   );
 }
 
+// Card Header Component
 export function CardHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="card-header-wrapper">

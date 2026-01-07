@@ -84,12 +84,12 @@ const getNumberOptions = () => {
        <DragDropContext onDragEnd={onDragEnd}>
          <Droppable droppableId="summary-list">
            {(provided) => (
-             <div {...provided.droppableProps} ref={provided.innerRef } className="space-y-2">
+             <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
                 {summaryFields.map((field, index) => (
                   <Draggable key={`sum-${index}`} draggableId={`sum-${index}`} index={index}>
                     {(provided, snapshot) => (
                        <div
-                         ref={provided.innerRef }
+                         ref={provided.innerRef}
                          {...provided.draggableProps}
                          className={`draggable-row ${
                             snapshot.isDragging ? "draggable-row-active" : "bg-slate-50 border-slate-200"

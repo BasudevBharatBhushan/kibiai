@@ -5,15 +5,18 @@ import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
+import {JOIN_TYPES} from "@/constants/reportOptions";
 import { SchemaVisualizer } from "@/components/report-builder/SchemaVisualizer";
 import { DbDefinition } from "@/lib/reportConfigTypes";
 import { Link2, Trash2 , Plus} from "lucide-react";
 
 export function RelationshipsSection() {
+  // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
   const { getAllTables, getFieldOptions } = useSchema();
   const rows = state.config.db_defination;
 
+  // Handlers
   const handleAddRow = () => {
     const newRow: DbDefinition = {
       primary_table: "",
@@ -45,7 +48,9 @@ export function RelationshipsSection() {
       }
     >
       <div className="overflow-x-auto mb-6 border rounded-lg border-slate-200">
+        {/* Relationships Table */}
         <table className="w-full text-sm text-left">
+          {/* Table Header */}
           <thead>
             <tr>
               <th className="table-header min-w-[160px]">Primary Table</th>
@@ -56,9 +61,11 @@ export function RelationshipsSection() {
               <th className="table-header min-w-[100px]">Action</th>
             </tr>
           </thead>
+          {/* Table Body */}
           <tbody className="divide-y divide-slate-100 bg-white">
             {rows.map((row, index) => (
               <tr key={index} className="hover:bg-slate-50/50">
+                {/* Primary table select */}
                 <td className="table-cell">
                   <select
                     value={row.primary_table}
@@ -69,6 +76,7 @@ export function RelationshipsSection() {
                     {getAllTables().map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </td>
+                {/* Joined table select */}
                 <td className="table-cell">
                   <select
                     value={row.joined_table}
@@ -80,6 +88,7 @@ export function RelationshipsSection() {
                     {getAllTables().map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </td>
+                {/* Source field select */}
                 <td className="table-cell">
                   <select
                     value={row.source}
@@ -93,6 +102,7 @@ export function RelationshipsSection() {
                     ))}
                   </select>
                 </td>
+                {/* Target field select */}
                 <td className="table-cell">
                   <select
                     value={row.target}
@@ -106,15 +116,18 @@ export function RelationshipsSection() {
                     ))}
                   </select>
                 </td>
+                {/* Join type select */}
                 <td className="table-cell">
                   <select
                     value={row.join_type}
                     onChange={(e) => handleUpdate(index, "join_type", e.target.value)}
                     className="form-input"
                   >
-                    <option value="inner">Inner Join</option>
-                    <option value="left">Left Join</option>
-                    <option value="right">Right Join</option>
+
+                  {JOIN_TYPES.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                  
                   </select>
                 </td>
                 <td className="table-cell text-center">
@@ -128,6 +141,7 @@ export function RelationshipsSection() {
               </tr>
             ))}
 
+            {/* Show message if no rows */}
             {rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="text-center py-8 text-slate-400 italic bg-slate-50/50">

@@ -4,16 +4,20 @@ import React, { useState } from "react";
 import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
+import {SORT_ORDERS} from "@/constants/reportOptions";
 import { Modal } from "@/components/ui/Modal";
 import { Plus, X, GripVertical , ScrollText , Layers} from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard"; 
 
 export function SubSummarySection() {
+
+  // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
   const { getConnectedTables, getFieldOptions } = useSchema();
+
+  // Data & Handlers
   const groups = state.config.group_by_fields;
-  
   const groupEntries = Object.entries(groups);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,6 +28,7 @@ export function SubSummarySection() {
     setIsModalOpen(true);
   };
 
+  // Confirm Add New Group
   const handleConfirmAdd = () => {
     if (newGroupName.trim()) {
       dispatch({ type: "ADD_GROUP", payload: newGroupName.trim() });
@@ -31,6 +36,7 @@ export function SubSummarySection() {
     }
   };
 
+  // Drag and Drop Handler
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     dispatch({
@@ -59,14 +65,14 @@ export function SubSummarySection() {
             {(provided) => (
               <div 
                 {...provided.droppableProps} 
-                ref={provided.innerRef } 
+                ref={provided.innerRef} 
                 className="space-y-6"
               >
                 {groupEntries.map(([key, group], index) => (
                   <Draggable key={key} draggableId={key} index={index}>
                     {(provided, snapshot) => (
                       <div
-                        ref={provided.innerRef }
+                        ref={provided.innerRef}
                         {...provided.draggableProps}
                         className={`border border-slate-200 rounded-lg p-4 transition-colors ${
                           snapshot.isDragging ? "draggable-row-active" : "bg-slate-50"
@@ -125,8 +131,11 @@ export function SubSummarySection() {
                               value={group.sort_order}
                               onChange={(e) => dispatch({ type: "UPDATE_GROUP_MAIN", payload: { groupKey: key, field: "sort_order", value: e.target.value } })}
                             >
-                              <option value="asc">Ascending</option>
-                              <option value="desc">Descending</option>
+
+                            {SORT_ORDERS.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                            
                             </select>
                           </div>
                         </div>
@@ -226,7 +235,7 @@ export function SubSummarySection() {
           onClose={() => setIsModalOpen(false)} 
           title="Add Sub-Summary Group"
         >
-          {/* ... Modal content same as before ... */}
+          {/* ... Modal content ... */}
           <div className="space-y-4">
             <div>
               <label className="form-label">Group Name</label>

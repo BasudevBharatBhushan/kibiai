@@ -12,6 +12,7 @@ import {
   Minimize,
   X
 } from "lucide-react";
+import DOMPurify from "dompurify";
 
 interface DynamicReportProps {
   jsonData: any[];
@@ -186,7 +187,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
   useEffect(() => {
     if (jsonData?.length > 0) {
       const html = generateDynamicReport(jsonData);
-      setReportHtml(html);
+      setReportHtml(DOMPurify.sanitize(html));
     }
   }, [jsonData]);
 
@@ -572,7 +573,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
 export default DynamicReport;
 
 
-// ================== GENERATION LOGIC (Copy exactly as provided previously) ==================
+// ================== GENERATION LOGIC ==================
 
 function generateDynamicReport(jsonData: any[]): string {
   

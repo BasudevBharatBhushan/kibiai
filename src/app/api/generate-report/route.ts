@@ -1,5 +1,3 @@
-// pages/api/generate-report.ts or app/api/generate-report/route.ts (depending on your Next.js setup)
-
 import { NextApiRequest, NextApiResponse } from "next";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";

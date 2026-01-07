@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import "../../styles/reportConfig.css"
 import { ChevronRight, ChevronDown } from "lucide-react";
 
+// Collapsible Card Component
 interface CollapsibleCardProps {
   title: string;
   children: React.ReactNode;
@@ -22,6 +23,7 @@ export function CollapsibleCard({
   icon
 }: CollapsibleCardProps) {
 
+  // State to manage open/close
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
