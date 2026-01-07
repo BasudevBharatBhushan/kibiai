@@ -19,7 +19,7 @@ import {
   ChartKind, 
   ReportChartSchema, 
   COLOR_PALETTES 
-} from '@/lib/charts/ChartTypes';
+} from '@/lib/types/ChartTypes';
 import { 
   ALLOWED_LAYOUTS, 
   DASHBOARD_DEFAULTS, 

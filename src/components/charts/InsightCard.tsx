@@ -3,7 +3,7 @@
 import React from 'react';
 import { FiTrash2, FiMove } from 'react-icons/fi';
 import { useDashboard } from '@/context/DashboardContext';
-import { ChartConfig } from '@/lib/charts/ChartTypes';
+import { ChartConfig } from '@/lib/types/ChartTypes';
 import { INSIGHT_CONFIG } from '@/constants/analytics';
 import '@/styles/dashboard.css';
 

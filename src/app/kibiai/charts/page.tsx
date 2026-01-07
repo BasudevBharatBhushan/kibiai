@@ -1,4 +1,4 @@
-import Dashboard from '@/components/chart-dashboard/DashboardGrid';
+import Dashboard from '@/components/charts/DashboardGrid';
 import {
   fetchChartConfiguration,
   fetchReportData,

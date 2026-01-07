@@ -1,4 +1,4 @@
-import { ChartConfig, ChartKind, ReportChartSchema } from './ChartTypes';
+import { ChartConfig, ChartKind, ReportChartSchema } from '../types/ChartTypes';
 import { v4 as uuidv4 } from 'uuid';
 import { 
   PROCESSOR_DEFAULTS, 

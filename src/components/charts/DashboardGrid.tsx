@@ -4,7 +4,7 @@ import React from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
 import { FiGrid, FiColumns, FiList, FiSidebar, FiRotateCcw, FiEdit2 } from 'react-icons/fi';
 import { DashboardProvider, useDashboard } from '@/context/DashboardContext';
-import { ReportChartSchema } from '@/lib/charts/ChartTypes';
+import { ReportChartSchema } from '@/lib/types/ChartTypes';
 import { GRID_CONFIG, UI_TEXT } from '@/constants/dashboard';
 
 import ChartCard from './ChartCard';

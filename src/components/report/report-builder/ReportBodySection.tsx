@@ -1,7 +1,5 @@
-"use client";
 
-import React from "react";
-import "../../styles/reportConfig.css"
+import "@/styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import {SORT_ORDERS} from "@/constants/reportOptions";

@@ -1,13 +1,11 @@
-"use client";
 
-import React from "react";
-import "../../styles/reportConfig.css"
+import "@/styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Plus, X, GripVertical , Newspaper, Sigma } from "lucide-react";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { TableDef, FieldDef } from "@/lib/reportConfigTypes"; // Import Types
+import { TableDef, FieldDef } from "@/lib/types/reportConfigTypes"; // Import Types
 
 export function GrandSummarySection() {
   const { state, dispatch } = useReport();

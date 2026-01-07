@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { InMemoryDataManager } from "@/lib/DataManager";
+import { InMemoryDataManager } from "@/lib/data/DataManager";
 import {
   ReportSetupJson,
   ReportConfigJson,
   reportSetupSchema,
   reportConfigSchema,
-} from "@/lib/types";
+} from "@/lib/types/types";
 import {
   extractPkeysFromData,
   processFetchOrder,

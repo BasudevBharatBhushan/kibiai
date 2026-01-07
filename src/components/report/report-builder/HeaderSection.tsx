@@ -1,10 +1,7 @@
-"use client";
-
-import React from "react";
-import "../../styles/reportConfig.css"
+import "@/styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
-import { Goal , FileText } from "lucide-react";
+import {FileText } from "lucide-react";
 
 export function HeaderSection() {
 

@@ -5,7 +5,7 @@ import {
   ChartSchemaRegistry,
   SupportedChartType,
   InsightSchemaRegistry,
-} from "./schemaRegistry";
+} from "../schema/schemaRegistry";
 import { 
   AI_CONFIG, 
   PROMPT_INSTRUCTIONS, 

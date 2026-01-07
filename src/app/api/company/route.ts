@@ -5,7 +5,7 @@ import {
   fmEditRecord,
   fmFindAllRecords,
 } from "@/lib/utils/filemaker";
-import { verifyBearerToken } from "@/lib/auth";
+import { verifyBearerToken } from "@/lib/auth/auth";
 import { requireEnv } from "@/lib/utils/utility";
 
 const FM_COMPANY_LAYOUT = requireEnv("FM_COMPANY_LAYOUT");

@@ -1,13 +1,11 @@
-"use client";
 
-import React from "react";
-import "../../styles/reportConfig.css"
+import "@/styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import {JOIN_TYPES} from "@/constants/reportOptions";
-import { SchemaVisualizer } from "@/components/report-builder/SchemaVisualizer";
-import { DbDefinition } from "@/lib/reportConfigTypes";
+import { SchemaVisualizer } from "./SchemaVisualizer";
+import { DbDefinition } from "@/lib/types/reportConfigTypes";
 import { Link2, Trash2 , Plus} from "lucide-react";
 
 export function RelationshipsSection() {

@@ -1,9 +1,6 @@
-"use client";
 
-import "../../styles/reportConfig.css"
-import React from "react";
+import "@/styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
-import { useSchema } from "@/lib/hooks/useSchema"; 
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Plus, X , Calculator} from "lucide-react";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useReport } from "@/context/ReportContext";
-import DynamicReport from "@/components/DynamicReportPreview"; 
+import DynamicReport from "@/components/report/DynamicReportPreview"; 
 
 export function ReportPreview() {
   const { state } = useReport();

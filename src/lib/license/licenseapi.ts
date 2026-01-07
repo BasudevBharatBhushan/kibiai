@@ -1,4 +1,4 @@
-import { Company, License, ApiResponse } from "./license";
+import { Company, License, ApiResponse } from "../types/license";
 
 class ApiService {
   private getAuthHeaders(): HeadersInit {

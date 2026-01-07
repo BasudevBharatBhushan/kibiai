@@ -4,8 +4,8 @@ import { useEffect, Suspense , useState} from "react";
 import { useSearchParams } from "next/navigation";
 import { ReportProvider, useReport } from "@/context/ReportContext";
 import "@/styles/reportConfig.css"; 
-import { ReportConfigurator } from "@/components/ReportConfigurator";
-import { ReportPreview }  from "@/components/ReportPreview";
+import { ReportConfigurator } from "@/components/report/ReportConfigurator";
+import { ReportPreview }  from "@/components/report/ReportPreview";
 import { ChevronLeft, ChevronRight, MessageSquare, Settings } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 

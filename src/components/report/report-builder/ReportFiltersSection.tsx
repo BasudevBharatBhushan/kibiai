@@ -1,7 +1,5 @@
-"use client";
-
-import React, { useState, useEffect } from "react";
-import "../../styles/reportConfig.css"
+import { useState, useEffect } from "react";
+import "@/styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import {FILTER_OPERATORS} from "@/constants/reportOptions";

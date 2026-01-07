@@ -1,5 +1,5 @@
-import { ChartKind } from "@/lib/charts/ChartTypes";
-import { AIChartType } from "@/lib/ai/aiTypes";
+import { ChartKind } from "@/lib/types/ChartTypes";
+import { AIChartType } from "@/lib/types/aiTypes";
 import { CHART_TYPE_MAP } from "@/constants/analytics";
 
 // Map AI chart types to UI ChartKind

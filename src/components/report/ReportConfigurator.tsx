@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import "../styles/reportConfig.css"; 
+import "@/styles/reportConfig.css"; 
 import { useReport } from "@/context/ReportContext";
 import { useToast } from "@/context/ToastContext";
 import { validateConfig } from "@/lib/utils/reportValidation";
@@ -12,13 +12,13 @@ import {
 } from "lucide-react";
 
 // Components
-import { HeaderSection } from "@/components/report-builder/HeaderSection";
-import { RelationshipsSection } from "@/components/report-builder/RelationshipsSection";
-import { SubSummarySection } from "@/components/report-builder/SubSummarySection";
-import { ReportBodySection } from "@/components/report-builder/ReportBodySection";
-import { CustomCalcsSection } from "@/components/report-builder/CustomCalcsSection";
-import { ReportFiltersSection } from "@/components/report-builder/ReportFiltersSection";
-import { GrandSummarySection } from "@/components/report-builder/GrandSummarySection";
+import { HeaderSection } from "./report-builder/HeaderSection";
+import { RelationshipsSection } from "./report-builder/RelationshipsSection";
+import { SubSummarySection } from "./report-builder/SubSummarySection";
+import { ReportBodySection } from "./report-builder/ReportBodySection";
+import { CustomCalcsSection } from "./report-builder/CustomCalcsSection";
+import { ReportFiltersSection } from "./report-builder/ReportFiltersSection";
+import { GrandSummarySection } from "./report-builder/GrandSummarySection";
 import { Modal } from "@/components/ui/Modal";
 
 export function ReportConfigurator() {

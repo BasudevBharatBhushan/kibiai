@@ -1,5 +1,5 @@
 // Utility functions for handling FileMaker records and OData batch responses
-import { InMemoryDataManager } from "@/lib/DataManager";
+import { InMemoryDataManager } from "@/lib/data/DataManager";
 import {
   ReportSetupJson,
   ReportConfigJson,
@@ -8,7 +8,7 @@ import {
   ApiResponse,
   reportSetupSchema,
   reportConfigSchema,
-} from "@/lib/types";
+} from "@/lib/types/types";
 
 interface FileMakerRecord {
   fieldData: Record<string, any>;

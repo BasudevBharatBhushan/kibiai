@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import "@/styles/dynamicreport.css";
 import { 

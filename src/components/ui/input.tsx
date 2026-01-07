@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils/utils"
 
 // 1. Wrapped in React.forwardRef to allow focus control
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(

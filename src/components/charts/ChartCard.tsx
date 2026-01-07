@@ -7,7 +7,7 @@ import * as Highcharts from 'highcharts';
 
 import { useDashboard } from '@/context/DashboardContext';
 import { buildOptions } from '@/lib/utils/chartsUtils';
-import type { ChartConfig, ChartKind } from '@/lib/charts/ChartTypes';
+import type { ChartConfig, ChartKind } from '@/lib/types/ChartTypes';
 import { CHART_VISUALS, AVAILABLE_CHART_TYPES } from '@/constants/dashboard';
 import '@/styles/dashboard.css';
 

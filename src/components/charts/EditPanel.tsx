@@ -8,7 +8,7 @@ import {
 import { MdOutlineDonutLarge } from 'react-icons/md';
 
 import { useDashboard } from '@/context/DashboardContext';
-import { ChartKind } from '@/lib/charts/ChartTypes';
+import { ChartKind } from '@/lib/types/ChartTypes';
 import { AVAILABLE_CHART_TYPES, UI_TEXT } from '@/constants/dashboard';
 
 // EditPanel Component

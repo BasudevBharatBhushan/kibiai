@@ -1,6 +1,4 @@
-"use client";
-
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -10,10 +8,10 @@ import ReactFlow, {
   Node, 
   Edge
 } from 'reactflow';
-import { Maximize, Minimize, X } from 'lucide-react';
+import { Maximize,  X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import 'reactflow/dist/style.css';
-import "../../styles/reportConfig.css"
+import "@/styles/reportConfig.css"
 import { useReport } from '@/context/ReportContext';
 import TableNode from './diagram/TableNode';
 import { Card, CardHeader } from '@/components/ui/Card';

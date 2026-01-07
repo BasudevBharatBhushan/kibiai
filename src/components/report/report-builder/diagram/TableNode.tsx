@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
-import "../../../styles/reportConfig.css"
+import "@/styles/reportConfig.css"
 
 // This defines the data we pass to each node
 interface TableNodeData {

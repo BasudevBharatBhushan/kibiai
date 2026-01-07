@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import CompanyList from "@/components/CompanyList";
-import CompanyDetails from "@/components/CompanyDetails";
-import LicenseInfo from "@/components/LicenseInfo";
-import PaymentSection from "@/components/PaymentSection";
+import CompanyList from "@/components/company/CompanyList";
+import CompanyDetails from "@/components/company/CompanyDetails";
+import LicenseInfo from "@/components/license/LicenseInfo";
+import PaymentSection from "@/components/payment/PaymentSection";
 import Logo from "../../assets/kibiai.png";
 import Image from "next/image";
 

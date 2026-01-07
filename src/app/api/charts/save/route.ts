@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { FM_CONFIG } from '@/constants/filemaker';
-import { ChartKind } from '@/lib/charts/ChartTypes'; 
+import { ChartKind } from '@/lib/types/ChartTypes'; 
 
 // Configuration
 const API_URL = process.env.API_URL ?? FM_CONFIG.API_URL_DEFAULT;

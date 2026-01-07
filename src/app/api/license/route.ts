@@ -1,6 +1,6 @@
 import { jsonResponse, requireEnv } from "@/lib/utils/utility";
 import { fmFindOne, fmCreateRecord, fmEditRecord } from "@/lib/utils/filemaker";
-import { verifyBearerToken, getCompanyByCompanyId } from "@/lib/auth";
+import { verifyBearerToken, getCompanyByCompanyId } from "@/lib/auth/auth";
 
 const FM_LICENSE_LAYOUT = requireEnv("FM_LICENSE_LAYOUT");
 const FM_COMPANY_LAYOUT = requireEnv("FM_COMPANY_LAYOUT");

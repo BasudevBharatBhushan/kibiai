@@ -1,4 +1,4 @@
-import { ReportChartSchema } from '@/lib/charts/ChartTypes';
+import { ReportChartSchema } from '@/lib/types/ChartTypes';
 import { FM_CONFIG } from '@/constants/filemaker';
 
 // FileMaker Record Interface

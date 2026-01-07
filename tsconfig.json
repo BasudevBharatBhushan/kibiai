@@ -29,9 +29,15 @@
       ]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/lib/hooks/debou"],
-  "exclude": ["node_modules"]
-,  "exclude": [
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "src/lib/hooks/debou",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
     "node_modules"
   ]
 }

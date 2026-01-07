@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState } from "react";
-import "../../styles/reportConfig.css"
+import "@/styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { Modal } from "@/components/ui/Modal";
 

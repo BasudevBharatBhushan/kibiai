@@ -1,5 +1,5 @@
 import type Highcharts from 'highcharts';
-import type { ChartConfig } from '@/lib/charts/ChartTypes';
+import type { ChartConfig } from '@/lib/types/ChartTypes';
 
 // Build Highcharts Options from ChartConfig
 export function buildOptions(config: ChartConfig): Highcharts.Options {

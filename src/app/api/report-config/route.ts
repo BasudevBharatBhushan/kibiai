@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ReportConfig, ReportSetup } from "@/lib/reportConfigTypes";
+import { ReportConfig, ReportSetup } from "@/lib/types/reportConfigTypes";
 
 // 1. Environment Variables (Server-side only)
 const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL!;

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useReducer, ReactNode } from "react";
-import { ReportConfig, ReportSetup , DbDefinition , SortField , CustomCalcField } from "../lib/reportConfigTypes";
+import { ReportConfig, ReportSetup , DbDefinition , SortField , CustomCalcField } from "../lib/types/reportConfigTypes";
 
 
 // Actions 

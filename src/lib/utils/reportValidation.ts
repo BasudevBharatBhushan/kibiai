@@ -1,4 +1,4 @@
-import { ReportConfig } from "@/lib/reportConfigTypes";
+import { ReportConfig } from "@/lib/types/reportConfigTypes";
 
 export const validateConfig = (config: ReportConfig): { isValid: boolean; error?: string } => {
   const errors: string[] = [];

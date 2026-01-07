@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import DynamicReport from "../../components/DynamicReport";
+import DynamicReport from "../../components/report/DynamicReport";
 //Import the CSS
 import "./reports.css";
 
