@@ -907,6 +907,8 @@ async function stitch(
       }
     });
 
+
+
     // Get all required fields from report structure
     const requiredFields: Array<{
       table: string;
@@ -1110,9 +1112,22 @@ async function stitch(
 
             if (matchingRecords.length > 0) {
               matchingRecords.forEach((matchRecord) => {
+                
+                const prefixedJoinRecord: any = {};
+
+                Object.keys(matchRecord).forEach((key) => {
+                  // keep internal/meta keys untouched
+                  if (key.startsWith("_")) {
+                    prefixedJoinRecord[key] = matchRecord[key];
+                  } else {
+                    prefixedJoinRecord[`${relationship.tables[1]}::${key}`] =
+                      matchRecord[key];
+                  }
+                });
+
                 newResultData.push({
                   ...baseRecord,
-                  ...matchRecord,
+                  ...prefixedJoinRecord,
                   _joinedTable: relationship.tables[1],
                   _joinedRecordId: matchRecord._recordId,
                 });
@@ -1153,9 +1168,18 @@ async function stitch(
           return;
         }
 
-        const value =
-          record[field.field] !== undefined ? record[field.field] : "--";
-        outputRecord[field.label] = value;
+        let value = "--";
+
+        // base table fields (fetch_order = 1)
+        if (field.table === reportStructure.db_defination[0].primary_table) {
+          value = record[field.field];
+        }
+        // joined table fields
+        else {
+          value = record[`${field.table}::${field.field}`];
+        }
+        
+        outputRecord[field.label] = value ?? "--";
       });
       return outputRecord;
     });
