@@ -122,50 +122,87 @@ useEffect(() => {
 
   if (hasInitialized.current) return;
 
-  if (initialSchemas && initialSchemas.length > 0) {
-    
-    // 1. Process Data
-    const processed = processData(initialDataset || [], initialSchemas);
+    console.log("[Ctx] Init START", { 
+      schemaCount: initialSchemas?.length, 
+      datasetCount: initialDataset?.length, 
+      canvasState: initialCanvasState 
+    });
 
-    // 2. Assign Defaults
-    let finalCharts = processed.map((c, i) => ({
-      ...c,
-      colors: COLOR_PALETTES[i % COLOR_PALETTES.length],
-      layout: { 
-        // Fallback to hardcoded numbers if constant is missing
-        x: (i % 2) * (PROCESSOR_DEFAULTS?.LAYOUT_WIDTH || 6), 
-        y: Math.floor(i / 2) * (PROCESSOR_DEFAULTS?.LAYOUT_HEIGHT || 9), 
-        w: PROCESSOR_DEFAULTS?.LAYOUT_WIDTH || 6, 
-        h: PROCESSOR_DEFAULTS?.LAYOUT_HEIGHT || 9, 
-        i: c.id 
-      }
-    }));
+    if (initialSchemas && initialSchemas.length > 0) {
+      // 1. Process Data
+      const processed = processData(initialDataset || [], initialSchemas);
+      console.log("[Ctx] Processed Charts:", processed.map(c => ({ id: c.id, title: c.title, isActive: c.isActive })));
 
-    // 3. Visibility
-    let initialVisibleIds = new Set(processed.filter(c => c.isActive).map(c => c.id));
+      // 2. Assign Defaults
+      const defaultW = PROCESSOR_DEFAULTS?.LAYOUT_WIDTH || 6;
+      const defaultH = PROCESSOR_DEFAULTS?.LAYOUT_HEIGHT || 9;
 
-    // 4. Merge Saved State
-    if (initialCanvasState && Array.isArray(initialCanvasState) && initialCanvasState.length > 0) {
-      finalCharts = finalCharts.map(chart => {
-        const saved = initialCanvasState.find((s: any) => s.id === chart.id);
-        if (saved) {
-           return { ...chart, layout: saved.layout, kind: saved.kind };
+      let finalCharts = processed.map((c, i) => ({
+        ...c,
+        colors: COLOR_PALETTES[i % COLOR_PALETTES.length],
+        layout: { 
+          x: (i % 2) * defaultW, 
+          y: Math.floor(i / 2) * defaultH, 
+          w: defaultW, 
+          h: defaultH, 
+          i: c.id 
         }
-        return chart;
-      });
-      initialVisibleIds = new Set(initialCanvasState.map((s: any) => s.id));
-    }
+      }));
 
-    setAllCharts(finalCharts);
-    setVisibleChartIds(initialVisibleIds);
-    if (initialLayoutMode) {
-      setActiveLayout(normalizeLayoutMode(initialLayoutMode));
+      // 3. Visibility
+      let initialVisibleIds = new Set(processed.filter(c => c.isActive).map(c => c.id));
+      console.log("[Ctx] Initial Visible IDs:", Array.from(initialVisibleIds));
+
+      // 4. Merge Saved State
+      if (initialCanvasState && Array.isArray(initialCanvasState) && initialCanvasState.length > 0) {
+        console.log("[Ctx] Applying saved canvas state...");
+
+        const isValidLayout = (l: any) =>
+          l &&
+          Number.isFinite(l.x) &&
+          Number.isFinite(l.y) &&
+          Number.isFinite(l.w) &&
+          Number.isFinite(l.h);
+
+        finalCharts = finalCharts.map(chart => {
+          const saved = initialCanvasState.find((s: any) => s.id === chart.id);
+          if (!saved) return chart;
+
+          const mergedLayout = isValidLayout(saved.layout)
+            ? {
+                ...chart.layout,
+                ...saved.layout,
+                i: chart.id,
+                w: saved.layout?.w ?? chart.layout?.w ?? defaultW,
+                h: saved.layout?.h ?? chart.layout?.h ?? defaultH,
+              }
+            : chart.layout;
+
+          return { ...chart, layout: mergedLayout, kind: saved.kind ?? chart.kind };
+        });
+
+        const existingIds = new Set(finalCharts.map(c => c.id));
+        const savedIds = initialCanvasState.map((s: any) => s.id).filter(Boolean);
+        const nextVisible = new Set(savedIds.filter((id: string) => existingIds.has(id)));
+
+        if (nextVisible.size > 0) {
+          initialVisibleIds = nextVisible;
+        }
+
+        console.log("[Ctx] Visible IDs after canvas merge:", Array.from(initialVisibleIds));
+      }
+
+      setAllCharts(finalCharts);
+      setVisibleChartIds(initialVisibleIds);
+      if (initialLayoutMode) {
+        setActiveLayout(normalizeLayoutMode(initialLayoutMode));
+      }
+      
+      hasInitialized.current = true;
+      console.log("[Ctx] Init COMPLETE", { finalCount: finalCharts.length, visibleCount: initialVisibleIds.size });
+    } else {
+      console.warn("[Ctx] Skipping init: No schemas provided");
     }
-    
-    hasInitialized.current = true;
-  } else {
-    console.warn("[Ctx] Skipping init: No schemas provided");
-  }
 }, [initialSchemas, initialDataset, initialCanvasState, initialLayoutMode]);
 
   // --- AUTO-SAVE ---

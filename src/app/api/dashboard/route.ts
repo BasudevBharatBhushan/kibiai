@@ -1,19 +1,19 @@
-import { NextResponse } from 'next/server';
-import { FM_CONFIG } from '@/constants/filemaker'; 
+import { NextResponse } from "next/server";
+import { FM_CONFIG } from "@/constants/filemaker";
 
 // Configuration
 const API_URL = process.env.API_URL || FM_CONFIG.API_URL_DEFAULT;
 
 interface SaveRequest {
   reportRecordId: string;
-  canvasState: any[]; 
-  layoutMode?: string; 
+  canvasState: any[];
+  layoutMode?: string;
 }
 
 function getAuthHeader() {
-  const username = process.env.FM_USERNAME || '';
-  const password = process.env.FM_PASSWORD || '';
-  return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+  const username = process.env.FM_USERNAME || "";
+  const password = process.env.FM_PASSWORD || "";
+  return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 }
 
 export async function POST(request: Request) {
@@ -24,7 +24,10 @@ export async function POST(request: Request) {
 
     // 2. Validate
     if (!reportRecordId) {
-      return NextResponse.json({ error: 'Missing Report Record ID' }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing Report Record ID" },
+        { status: 400 }
+      );
     }
 
     // 3. Serialize Data
@@ -35,38 +38,42 @@ export async function POST(request: Request) {
       fmServer: process.env.FM_HOST,
       method: "updateRecord",
       methodBody: {
-        database: process.env.FM_DATABASE,
-        layout: FM_CONFIG.LAYOUTS.REPORTS, 
-        
-        recordId: reportRecordId, 
+        database: process.env.NEXT_PUBLIC_FM_DATABASE,
+        layout: FM_CONFIG.LAYOUTS.REPORTS,
+
+        recordId: reportRecordId,
         record: {
-          "ChartCanvasState": jsonString
-        }
+          ChartCanvasState: jsonString,
+        },
       },
-      session: { token: "", required: "" }
+      session: { token: "", required: "" },
     };
+
+    console.log(payload);
 
     // 5. Send to Middleware
     const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json', 
-            'Authorization': getAuthHeader() 
-        },
-        body: JSON.stringify(payload),
-        cache: 'no-store',
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: getAuthHeader(),
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
     });
 
     // 6. Handle Response
     if (!res.ok) {
-        const errText = await res.text();
-        return NextResponse.json({ error: errText }, { status: res.status });
+      const errText = await res.text();
+      return NextResponse.json({ error: errText }, { status: res.status });
     }
 
     return NextResponse.json({ success: true });
-
   } catch (error) {
     console.error("[Dashboard Save] Error:", error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

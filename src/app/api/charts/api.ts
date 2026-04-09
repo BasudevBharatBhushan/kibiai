@@ -1,5 +1,5 @@
-import { ReportChartSchema } from '@/lib/charts/ChartTypes';
-import { FM_CONFIG } from '@/constants/filemaker';
+import { ReportChartSchema } from "@/lib/charts/ChartTypes";
+import { FM_CONFIG } from "@/constants/filemaker";
 
 // FileMaker Record Interface
 interface FMRecord {
@@ -17,7 +17,7 @@ interface FMResponse<T = FMRecord> {
 interface ReportDataResult {
   rows: any[];
   canvasState: any[];
-  layoutMode: 'grid' | 'free';
+  layoutMode: "grid" | "free";
   reportRecordId: string;
 }
 
@@ -31,22 +31,22 @@ function getAuthHeader(): string {
   const { FM_USERNAME, FM_PASSWORD } = process.env;
 
   if (!FM_USERNAME || !FM_PASSWORD) {
-    throw new Error('Missing FileMaker credentials');
+    throw new Error("Missing FileMaker credentials");
   }
   // Base64 Encode
-  return `Basic ${Buffer.from(`${FM_USERNAME}:${FM_PASSWORD}`).toString('base64')}`;
+  return `Basic ${Buffer.from(`${FM_USERNAME}:${FM_PASSWORD}`).toString("base64")}`;
 }
 
 // POST to FM Data API
 async function fmPost<T>(payload: unknown): Promise<T> {
   const res = await fetch(API_URL, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: getAuthHeader(),
     },
     body: JSON.stringify(payload),
-    cache: 'no-store',
+    cache: "no-store",
   });
 
   if (!res.ok) {
@@ -64,26 +64,26 @@ export async function fetchChartConfiguration(
 ): Promise<ReportChartSchema[]> {
   const payload = {
     fmServer: process.env.FM_HOST,
-    method: 'findRecord',
+    method: "findRecord",
     methodBody: {
-      database: process.env.FM_DATABASE,
-      layout: process.env.FM_CHARTS_LAYOUT, 
+      database: process.env.NEXT_PUBLIC_FM_DATABASE,
+      layout: FM_CONFIG.LAYOUTS.CHARTS_DEFAULT,
       query: [{ JS_ReportID: `==${reportId}` }],
       limit: 50,
     },
-    session: { token: '', required: '' },
+    session: { token: "", required: "" },
   };
 
   try {
     const data = await fmPost<FMResponse>(payload);
-
+    // console.log(data)
     return (
-      data.records
+      (data.records
         ?.map(parseChartRecord)
-        .filter(Boolean) as ReportChartSchema[]
-    ) ?? [];
+        .filter(Boolean) as ReportChartSchema[]) ?? []
+    );
   } catch (error) {
-    console.error('[Charts] fetch failed', error);
+    console.error("[Charts] fetch failed", error);
     return [];
   }
 }
@@ -111,14 +111,14 @@ export async function fetchReportData(
 ): Promise<ReportDataResult> {
   const payload = {
     fmServer: process.env.FM_HOST,
-    method: 'findRecord',
+    method: "findRecord",
     methodBody: {
-      database: process.env.FM_DATABASE,
-      layout: FM_CONFIG.LAYOUTS.REPORTS, 
+      database: process.env.NEXT_PUBLIC_FM_DATABASE,
+      layout: FM_CONFIG.LAYOUTS.REPORTS,
       query: [{ ReportID: `==${reportId}` }],
       limit: 1,
     },
-    session: { token: '', required: '' },
+    session: { token: "", required: "" },
   };
 
   try {
@@ -130,18 +130,16 @@ export async function fetchReportData(
     }
 
     const rows = parseRows(record.ReportStructuredData);
-    const { canvasState, layoutMode } = parseCanvas(
-      record.ChartCanvasState
-    );
+    const { canvasState, layoutMode } = parseCanvas(record.ChartCanvasState);
 
     return {
       rows,
       canvasState,
       layoutMode,
-      reportRecordId: record.recordId ?? '',
+      reportRecordId: record.recordId ?? "",
     };
   } catch (error) {
-    console.error('[Report] fetch failed', error);
+    console.error("[Report] fetch failed", error);
     return emptyReport();
   }
 }
@@ -149,18 +147,18 @@ export async function fetchReportData(
 // --- Parsing Helpers ---
 
 function parseCanvas(raw?: string) {
-  if (!raw) return { canvasState: [], layoutMode: 'grid' };
+  if (!raw) return { canvasState: [], layoutMode: "grid" };
 
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed)
-      ? { canvasState: parsed, layoutMode: 'grid' }
+      ? { canvasState: parsed, layoutMode: "grid" }
       : {
           canvasState: parsed.charts ?? [],
-          layoutMode: parsed.layoutMode ?? 'grid',
+          layoutMode: parsed.layoutMode ?? "grid",
         };
   } catch {
-    return { canvasState: [], layoutMode: 'grid' };
+    return { canvasState: [], layoutMode: "grid" };
   }
 }
 
@@ -178,7 +176,7 @@ function emptyReport(): ReportDataResult {
   return {
     rows: [],
     canvasState: [],
-    layoutMode: 'grid',
-    reportRecordId: '',
+    layoutMode: "grid",
+    reportRecordId: "",
   };
 }

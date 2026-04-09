@@ -29,6 +29,17 @@ function mapChartType(legacyType: string): ChartKind {
   return (CHART_TYPE_MAP[legacyType.toLowerCase()] as ChartKind) || 'column';
 }
 
+// Coerce isActive values from FileMaker/JSON into a boolean
+function coerceIsActive(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
+  return Boolean(value);
+}
+
 // Main data processing function
 export function processData(
   rawData: any[], 
@@ -71,7 +82,7 @@ export function processData(
   aiConfigs.forEach((aiResponse) => {
     const newId = aiResponse.pKey || uuidv4();
 
-    const activeStatus = String(aiResponse.isActive) === '1';
+    const activeStatus = coerceIsActive(aiResponse.isActive);
 
     // 1. Handle Insight Cards
     if (aiResponse.business_insights) {
