@@ -15,7 +15,8 @@ export function useSchema() {
     const uniqueTables = new Set<string>();
     
     // Always include tables defined in the relationships
-    state.config.db_defination.forEach(def => {
+    const defs = state.config.db_defination || [];
+    defs.forEach(def => {
       if (def.primary_table) uniqueTables.add(def.primary_table);
       if (def.joined_table) uniqueTables.add(def.joined_table);
     });
@@ -28,7 +29,8 @@ export function useSchema() {
   const getFieldOptions = (tableName: string, typeFilter?: string) => {
     // Handle "calculated" table specifically
     if (tableName === "calculated") {
-       return state.config.custom_calculated_fields
+       const calcs = state.config.custom_calculated_fields || [];
+       return calcs
          .filter(c => c.field_name) // Ensure name exists
          .map(c => ({
             value: c.field_name,

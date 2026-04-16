@@ -82,8 +82,7 @@
 
   /* --- Prompts --- */
   .chat-prompts {
-    @apply absolute bottom-20 left-4 right-4 z-10
-           animate-in slide-in-from-bottom-5 fade-in duration-300;
+    @apply absolute bottom-20 left-4 right-4 z-10;
   }
 
   .chat-prompt-card {

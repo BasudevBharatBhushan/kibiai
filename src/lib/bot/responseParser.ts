@@ -8,6 +8,7 @@ export function parseAssistantResponse(raw: string): string {
     const parsed = JSON.parse(cleanText);
 
     if (typeof parsed === "object" && parsed !== null) {
+      if (typeof parsed.response_to_user === "string") return parsed.response_to_user;
       if (typeof parsed.response === "string") return parsed.response;
       if (typeof parsed.answer === "string") return parsed.answer;
       

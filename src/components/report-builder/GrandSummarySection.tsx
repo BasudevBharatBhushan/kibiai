@@ -16,7 +16,7 @@ export function GrandSummarySection() {
   
   // FIX 1: Cast tables to the correct Record type to avoid 'unknown' errors
   const tables = (state.setup?.tables || {}) as Record<string, TableDef>;
-  const calcs = state.config.custom_calculated_fields;
+  const calcs = state.config.custom_calculated_fields || [];
 
   // Helper: Get ONLY Number fields (from Schema + Custom Calcs)
 const getNumberOptions = () => {

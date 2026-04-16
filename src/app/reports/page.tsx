@@ -1,6 +1,9 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import DynamicReport from "../../components/DynamicReport";
+import { ModularChatbot } from "@/components/chat/ModularChatbot";
+import { REPORTS_SYSTEM_INSTRUCTION } from "@/constants/reportsSystemInstruction";
+import { useSearchParams } from "next/navigation";
 //Import the CSS
 import "./reports.css";
 
@@ -199,6 +202,9 @@ class IndexedDBManager {
 }
 
 const ReportDataFetcher: React.FC = () => {
+  const searchParams = useSearchParams();
+  const recordId = searchParams?.get("recordId");
+
   const [reportSetup, setReportSetup] = useState<string>("");
   const [reportConfig, setReportConfig] = useState<string>("");
   const [fetchStatuses, setFetchStatuses] = useState<FetchStatus[]>([]);
@@ -206,6 +212,77 @@ const ReportDataFetcher: React.FC = () => {
   const [dbManager] = useState(() => new IndexedDBManager());
   const [logs, setLogs] = useState<string[]>([]);
   const [reportStructuredData, setReportStructuredData] = useState<any>(null);
+
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [userEditedConfig, setUserEditedConfig] = useState(false);
+
+  const handleAssistantResponse = useCallback((parsedResponse: string, rawResponse: any) => {
+    let jsonString = parsedResponse;
+    const jsonMatch = parsedResponse.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+    if (jsonMatch) {
+      jsonString = jsonMatch[1];
+    } else {
+      const matchPlain = parsedResponse.match(/(\{[\s\S]*\})/);
+      if (matchPlain) jsonString = matchPlain[1];
+    }
+
+    try {
+      const parsedJson = JSON.parse(jsonString);
+      if (parsedJson.db_defination || parsedJson.report_columns) {
+        setReportConfig(JSON.stringify(parsedJson, null, 2));
+        setUserEditedConfig(false);
+      }
+    } catch (e) {}
+  }, []);
+
+  const handleConversationIdChange = useCallback(async (id: string | null) => {
+    setConversationId(id);
+    if (id && recordId) {
+      try {
+        let username = "Developer";
+        let password = "adminbiz";
+        let host = "kibiz.smtech.cloud";
+        
+        try {
+          const parsedSetup = JSON.parse(reportSetup || "{}");
+          if (parsedSetup.host) host = parsedSetup.host;
+          const tables = parsedSetup.tables || {};
+          const firstTable = Object.values(tables)[0] as any;
+          if (firstTable) {
+            if (firstTable.username) username = firstTable.username;
+            if (firstTable.password) password = firstTable.password;
+          }
+        } catch (e) {}
+
+        await fetch("/api/filemaker-report/thread", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            recordId, 
+            threadId: id,
+            username,
+            password,
+            server: host
+          }),
+        });
+      } catch (e) {
+         console.error("Failed to sync thread ID", e);
+      }
+    }
+  }, [recordId, reportSetup]);
+
+  const predefinedPrompt = useMemo(() => {
+    if (!conversationId) {
+      let setupData = "{}";
+      try {
+         setupData = JSON.stringify(JSON.parse(reportSetup || "{}")).replace(/"/g, "'");
+      } catch (e) {}
+      return `Here is my DB Schema - ${setupData} Suggest me prompt related to it.`;
+    } else if (userEditedConfig) {
+      return `Here is my updated config - ${reportConfig}`;
+    }
+    return "";
+  }, [conversationId, reportSetup, reportConfig, userEditedConfig]);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -1286,24 +1363,40 @@ const ReportDataFetcher: React.FC = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-[1400px] mx-auto p-6 space-y-6">
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Report Data Fetcher
+          AI Reports
         </h1>
         <p className="text-gray-600">
-          Sequential data fetching with IndexedDB storage
+          Generate Dynamic Multi-Table Reports via Copilot
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Input Forms */}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Report Setup JSON
-            </label>
-            <textarea
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Chatbot (Left) */}
+        <div className="lg:col-span-1 rounded-xl overflow-hidden shadow-sm h-[85vh]">
+          <ModularChatbot
+            botName="Report Copilot"
+            instructionSet={REPORTS_SYSTEM_INSTRUCTION}
+            predefinedPrompt={predefinedPrompt}
+            initialConversationId={conversationId}
+            onAssistantResponse={handleAssistantResponse}
+            onConversationIdChange={handleConversationIdChange}
+            welcomeMessage="Hello! I am the Report Copilot. I can help you generate ERP reports from your data. What would you like to see?"
+          />
+        </div>
+
+        {/* Data Fetcher (Middle & Right) */}
+        <div className="lg:col-span-2 space-y-6 h-[85vh] overflow-y-auto overflow-x-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
+            {/* Input Forms */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Report Setup JSON
+                </label>
+                <textarea
               value={reportSetup || defaultSetupJson}
               onChange={(e) => setReportSetup(e.target.value)}
               className="w-full h-64 p-3 border border-gray-300 rounded-md font-mono text-sm"
@@ -1317,7 +1410,10 @@ const ReportDataFetcher: React.FC = () => {
             </label>
             <textarea
               value={reportConfig || defaultConfigJson}
-              onChange={(e) => setReportConfig(e.target.value)}
+              onChange={(e) => {
+                setReportConfig(e.target.value);
+                setUserEditedConfig(true);
+              }}
               className="w-full h-64 p-3 border border-gray-300 rounded-md font-mono text-sm"
               placeholder="Enter report config JSON..."
             />
@@ -1385,11 +1481,19 @@ const ReportDataFetcher: React.FC = () => {
         </div>
       </div>
 
-      <div className="report-preview">
+      <div className="report-preview z-0 border-t pt-6 mt-6 border-gray-100">
         <DynamicReport report_structure_json={reportStructuredData} />
       </div>
     </div>
+  </div>
+</div>
   );
 };
 
-export default ReportDataFetcher;
+const ReportDataFetcherWrapper = () => (
+  <Suspense fallback={<div className="p-8 text-center">Loading AI Reports...</div>}>
+    <ReportDataFetcher />
+  </Suspense>
+);
+
+export default ReportDataFetcherWrapper;

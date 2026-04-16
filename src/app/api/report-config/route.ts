@@ -66,7 +66,8 @@ export async function GET(request: Request) {
       fmRecordId: record.recordId,
       config,
       setup,
-      reportStructuredData: record.ReportStructuredData
+      reportStructuredData: record.ReportStructuredData,
+      threadId: record.OpenAI_AssistantThreadID || null
     });
 
   } catch (error) {
@@ -78,11 +79,15 @@ export async function GET(request: Request) {
 // --- POST: Update Report Configuration ---
 export async function POST(request: Request) {
   try {
-    const { fmRecordId, config } = await request.json();
+    const { fmRecordId, config, threadId } = await request.json();
 
-    if (!fmRecordId || !config) {
+    if (!fmRecordId) {
       return NextResponse.json({ error: "Missing Data" }, { status: 400 });
     }
+
+    const payloadRecord: any = {};
+    if (config !== undefined) payloadRecord.AIResponseJson = JSON.stringify(config, null, 2);
+    if (threadId !== undefined) payloadRecord.OpenAI_AssistantThreadID = threadId;
 
     // 1. Construct FileMaker Update
     const body = {
@@ -92,9 +97,7 @@ export async function POST(request: Request) {
         database: FM_DB,
         layout: FM_LAYOUT,
         recordId: fmRecordId,
-        record: {
-          AIResponseJson: JSON.stringify(config, null, 2)
-        }
+        record: payloadRecord
       },
       session: { token: "", required: "" }
     };

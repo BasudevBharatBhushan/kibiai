@@ -94,29 +94,23 @@ export function ReportConfigurator() {
     <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200 shadow-xl">
       
       {/* --- NEW HEADER SUBMIT HANDLER --- */}
-      <div className="px-4 py-3 border-b border-slate-200 bg-white flex justify-between items-center shrink-0 z-20 shadow-sm sticky top-0">
-         <h2 className="font-bold text-slate-800 text-base uppercase tracking-wide">Report Builder</h2>
+      <div className="px-4 py-4 bg-white flex justify-between items-center shrink-0 z-20 sticky top-0 border-b border-slate-100">
+         <button 
+           onClick={handleUpdate}
+           disabled={isSaving}
+           className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2.5 rounded-md text-sm font-semibold shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+         >
+           {isSaving ? <RotateCw size={16} className="animate-spin" /> : null}
+           {isSaving ? "Updating..." : "Update Report"}
+         </button>
          
-         <div className="flex items-center gap-2">
-            {/* JSON Info Icon */}
-            <button 
-              onClick={() => setShowJson(true)}
-              className="text-slate-400 hover:text-indigo-600 transition-colors p-2 rounded-full hover:bg-slate-100"
-              title="View JSON Configuration"
-            >
-              <Info size={18} />
-            </button>
-
-            {/* Update Button */}
-            <button 
-              onClick={handleUpdate}
-              disabled={isSaving}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
-            >
-              {isSaving ? <RotateCw size={14} className="animate-spin" /> : <Save size={14} />}
-              {isSaving ? "Saving..." : "Update"}
-            </button>
-         </div>
+         <button 
+           onClick={() => setShowJson(true)}
+           className="text-slate-500 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white transition-colors px-4 py-2 rounded-md font-medium text-xs flex items-center gap-2"
+           title="View JSON Configuration"
+         >
+           <Info size={14} /> View JSON
+         </button>
       </div>
 
       {/* --- SCROLLABLE CONTENT --- */}

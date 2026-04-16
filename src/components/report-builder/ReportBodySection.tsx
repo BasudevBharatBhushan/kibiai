@@ -30,6 +30,19 @@ export function ReportBodySection() {
         });
       });
     }
+
+    if (state.config.custom_calculated_fields) {
+      state.config.custom_calculated_fields.forEach((c) => {
+        if (c.field_name) {
+          allFields.push({
+            key: `calculated-${c.field_name}`,
+            value: c.field_name,
+            label: `Calculated : ${c.label || c.field_name}`
+          });
+        }
+      });
+    }
+
     return allFields;
   };
   const allFieldOptions = getAllFields();

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import "@/styles/dynamicreport.css";
 import { 
   ChevronLeft, 
@@ -182,6 +183,14 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
   
   // Modal State
   const [showExpandedModal, setShowExpandedModal] = useState(false);
+
+  // Portal Target State
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+
+  // Mount logic for Portal
+  useEffect(() => {
+    setPortalTarget(document.getElementById('portal-report-actions'));
+  }, []);
 
   // 1. Generate HTML
   useEffect(() => {
@@ -480,58 +489,61 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
   return (
     <div className="flex flex-col h-full relative bg-gray-100">
       
-      {/* --- Controls  Toolbar --- */}
-      <div className="absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-white/95 backdrop-blur-sm shadow-xl p-2 rounded-full border border-slate-300 transition-all">
-          
-          {/* Pagination Controls */}
-          <button 
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1 || isCalculating}
-            className="p-2 rounded-full hover:bg-slate-100 disabled:opacity-30 text-slate-700"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          
-          <span className="text-sm font-medium text-slate-700 min-w-[100px] text-center flex items-center justify-center gap-2">
-            {isCalculating ? (
-                <><RefreshCw size={14} className="animate-spin"/> Calculating</>
-            ) : (
-                `Page ${currentPage} / ${totalPages}`
-            )}
-          </span>
+      {/* --- Controls  Toolbar (Portaled to header) --- */}
+      {portalTarget && createPortal(
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 shadow-xs px-2 py-1 rounded-md">
+            
+            {/* Pagination Controls */}
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1 || isCalculating}
+              className="p-1 rounded-sm hover:bg-white disabled:opacity-30 text-slate-600 transition-colors"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            
+            <span className="text-xs font-semibold text-slate-600 min-w-[90px] text-center flex items-center justify-center gap-1.5 uppercase tracking-wide">
+              {isCalculating ? (
+                  <><RefreshCw size={12} className="animate-spin"/> Calc...</>
+              ) : (
+                  `Page ${currentPage} / ${totalPages}`
+              )}
+            </span>
 
-          <button 
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages || isCalculating}
-            className="p-2 rounded-full hover:bg-slate-100 disabled:opacity-30 text-slate-700"
-          >
-            <ChevronRight size={20} />
-          </button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || isCalculating}
+              className="p-1 rounded-sm hover:bg-white disabled:opacity-30 text-slate-600 transition-colors"
+            >
+              <ChevronRight size={16} />
+            </button>
 
-          <div className="h-6 w-px bg-slate-200 mx-1"></div>
+            <div className="h-4 w-px bg-slate-300 mx-1"></div>
 
-          {/* Expand Toggle */}
-          <button 
-              onClick={() => setShowExpandedModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
-          >
-              <Maximize size={16} /> Expand
-          </button>
+            {/* Expand Toggle */}
+            <button 
+                onClick={() => setShowExpandedModal(true)}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-white rounded-sm transition-colors"
+            >
+                <Maximize size={13} /> Expand
+            </button>
 
-          <button 
-              onClick={handleExportPDF}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
-          >
-              <Printer size={16} /> Print/PDF
-          </button>
+            <button 
+                onClick={handleExportPDF}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-white rounded-sm transition-colors"
+            >
+                <Printer size={13} /> Print/PDF
+            </button>
 
-          <button 
-              onClick={handleExportExcel}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
-          >
-              <FileSpreadsheet size={16} /> Excel
-          </button>
-      </div>
+            <button 
+                onClick={handleExportExcel}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-white rounded-sm transition-colors"
+            >
+                <FileSpreadsheet size={13} /> Excel
+            </button>
+        </div>,
+        portalTarget
+      )}
 
       {/* --- Normal Viewport --- */}
       <div 

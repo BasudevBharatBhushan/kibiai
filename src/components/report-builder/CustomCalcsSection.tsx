@@ -9,7 +9,7 @@ import { Plus, X , Calculator} from "lucide-react";
 
 export function CustomCalcsSection() {
   const { state, dispatch } = useReport();
-  const calcs = state.config.custom_calculated_fields;
+  const calcs = state.config.custom_calculated_fields || [];
 
   // --- Helper: Get All Fields with UNIQUE KEYS ---
   const getDependencyOptions = () => {
@@ -31,15 +31,17 @@ export function CustomCalcsSection() {
     }
 
     // 2. Other Calculated Fields (chaining)
-    calcs.forEach((c, idx) => {
-      if (c.field_name) {
-        options.push({ 
-            key: `calc-${idx}-${c.field_name}`, // Unique Key
-            value: c.field_name, 
-            label: `(Calc) ${c.label || c.field_name}` 
-        });
-      }
-    });
+    if (calcs && Array.isArray(calcs)) {
+      calcs.forEach((c, idx) => {
+        if (c.field_name) {
+          options.push({ 
+              key: `calc-${idx}-${c.field_name}`, // Unique Key
+              value: c.field_name, 
+              label: `(Calc) ${c.label || c.field_name}` 
+          });
+        }
+      });
+    }
 
     return options;
   };

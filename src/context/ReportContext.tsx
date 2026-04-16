@@ -118,12 +118,12 @@ function reportReducer(state: ReportState, action: Action): ReportState {
         ...state,
         config: {
           ...state.config,
-          db_defination: [...state.config.db_defination, action.payload],
+          db_defination: [...(state.config.db_defination || []), action.payload],
         },
       };
 
     case "UPDATE_DB_DEF":
-      const newDbDef = [...state.config.db_defination];
+      const newDbDef = [...(state.config.db_defination || [])];
       (newDbDef[action.payload.index] as any)[action.payload.field] = action.payload.value;
 
       return {
@@ -136,7 +136,7 @@ function reportReducer(state: ReportState, action: Action): ReportState {
         ...state,
         config: {
           ...state.config,
-          db_defination: state.config.db_defination.filter(
+          db_defination: (state.config.db_defination || []).filter(
             (_, i) => i !== action.payload
           ),
         },
@@ -145,7 +145,18 @@ function reportReducer(state: ReportState, action: Action): ReportState {
     case "LOAD_INITIAL_CONFIG":
       return {
          ...state,
-         config: action.payload
+         config: {
+           ...initialState.config,
+           ...action.payload,
+           db_defination: action.payload.db_defination || [],
+           report_columns: action.payload.report_columns || [],
+           body_sort_order: action.payload.body_sort_order || [],
+           summary_fields: action.payload.summary_fields || [],
+           custom_calculated_fields: action.payload.custom_calculated_fields || [],
+           group_by_fields: action.payload.group_by_fields || {},
+           filters: action.payload.filters || {},
+           date_range_fields: action.payload.date_range_fields || {}
+         }
       }
 
     case "LOAD_SETUP":
@@ -201,7 +212,7 @@ function reportReducer(state: ReportState, action: Action): ReportState {
                 ...state.config.group_by_fields,
                 [action.payload]: {
                     ...groupDisp,
-                    display: [...groupDisp.display, { table: "", field: "" }]
+                    display: [...(groupDisp.display || []), { table: "", field: "" }]
                 }
             }
         }
@@ -249,7 +260,7 @@ function reportReducer(state: ReportState, action: Action): ReportState {
                 ...state.config.group_by_fields,
                 [action.payload]: {
                     ...groupTot,
-                    group_total: [...groupTot.group_total, { table: "", field: "" }]
+                    group_total: [...(groupTot.group_total || []), { table: "", field: "" }]
                 }
             }
         }
@@ -292,7 +303,7 @@ function reportReducer(state: ReportState, action: Action): ReportState {
         ...state,
         config: {
           ...state.config,
-          report_columns: [...state.config.report_columns, { table: "", field: "" }]
+          report_columns: [...(state.config.report_columns || []), { table: "", field: "" }]
         }
       };
 
@@ -301,7 +312,7 @@ function reportReducer(state: ReportState, action: Action): ReportState {
         ...state,
         config: {
           ...state.config,
-          report_columns: state.config.report_columns.filter((_, i) => i !== action.payload)
+          report_columns: (state.config.report_columns || []).filter((_, i) => i !== action.payload)
         }
       };
 
@@ -319,7 +330,7 @@ function reportReducer(state: ReportState, action: Action): ReportState {
         ...state,
         config: {
           ...state.config,
-          body_sort_order: [...state.config.body_sort_order, { field: "", sort_order: "asc" }]
+          body_sort_order: [...(state.config.body_sort_order || []), { field: "", sort_order: "asc" }]
         }
       };
 
@@ -328,7 +339,7 @@ function reportReducer(state: ReportState, action: Action): ReportState {
         ...state,
         config: {
           ...state.config,
-          body_sort_order: state.config.body_sort_order.filter((_, i) => i !== action.payload)
+          body_sort_order: (state.config.body_sort_order || []).filter((_, i) => i !== action.payload)
         }
       };
 
@@ -387,7 +398,7 @@ function reportReducer(state: ReportState, action: Action): ReportState {
         config: {
           ...state.config,
           custom_calculated_fields: [
-            ...state.config.custom_calculated_fields,
+            ...(state.config.custom_calculated_fields || []),
             { field_name: "", label: "", format: "number", formula: "", dependencies: [] }
           ]
         }
@@ -398,12 +409,12 @@ function reportReducer(state: ReportState, action: Action): ReportState {
         ...state,
         config: {
           ...state.config,
-          custom_calculated_fields: state.config.custom_calculated_fields.filter((_, i) => i !== action.payload)
+          custom_calculated_fields: (state.config.custom_calculated_fields || []).filter((_, i) => i !== action.payload)
         }
       };
 
     case "UPDATE_CALC":
-      const newCalcs = [...state.config.custom_calculated_fields];
+      const newCalcs = [...(state.config.custom_calculated_fields || [])];
       (newCalcs[action.payload.index] as any)[action.payload.field] = action.payload.value;
       
       return {
@@ -412,12 +423,15 @@ function reportReducer(state: ReportState, action: Action): ReportState {
       };
 
     case "ADD_CALC_DEP":
-      const calcToAdd = state.config.custom_calculated_fields[action.payload];
-      const updatedCalcsAdd = [...state.config.custom_calculated_fields];
-      updatedCalcsAdd[action.payload] = {
-        ...calcToAdd,
-        dependencies: [...calcToAdd.dependencies, ""]
-      };
+      const currentCalcs = state.config.custom_calculated_fields || [];
+      const calcToAdd = currentCalcs[action.payload];
+      const updatedCalcsAdd = [...currentCalcs];
+      if (calcToAdd) {
+        updatedCalcsAdd[action.payload] = {
+          ...calcToAdd,
+          dependencies: [...(calcToAdd.dependencies || []), ""]
+        };
+      }
       return {
         ...state,
         config: { ...state.config, custom_calculated_fields: updatedCalcsAdd }
@@ -425,12 +439,14 @@ function reportReducer(state: ReportState, action: Action): ReportState {
 
     case "REMOVE_CALC_DEP":
       const { calcIndex, depIndex } = action.payload;
-      const calcToRem = state.config.custom_calculated_fields[calcIndex];
-      const updatedCalcsRem = [...state.config.custom_calculated_fields];
-      updatedCalcsRem[calcIndex] = {
-        ...calcToRem,
-        dependencies: calcToRem.dependencies.filter((_, i) => i !== depIndex)
-      };
+      const calcToRem = (state.config.custom_calculated_fields || [])[calcIndex];
+      const updatedCalcsRem = [...(state.config.custom_calculated_fields || [])];
+      if (calcToRem) {
+        updatedCalcsRem[calcIndex] = {
+          ...calcToRem,
+          dependencies: (calcToRem.dependencies || []).filter((_, i) => i !== depIndex)
+        };
+      }
       return {
         ...state,
         config: { ...state.config, custom_calculated_fields: updatedCalcsRem }
@@ -438,11 +454,13 @@ function reportReducer(state: ReportState, action: Action): ReportState {
 
     case "UPDATE_CALC_DEP":
       const { calcIndex: cIdx, depIndex: dIdx, value } = action.payload;
-      const calcToUpd = state.config.custom_calculated_fields[cIdx];
-      const updatedCalcsUpd = [...state.config.custom_calculated_fields];
-      const newDeps = [...calcToUpd.dependencies];
-      newDeps[dIdx] = value;
-      updatedCalcsUpd[cIdx] = { ...calcToUpd, dependencies: newDeps };
+      const calcToUpd = (state.config.custom_calculated_fields || [])[cIdx];
+      const updatedCalcsUpd = [...(state.config.custom_calculated_fields || [])];
+      if (calcToUpd) {
+        const newDeps = [...(calcToUpd.dependencies || [])];
+        newDeps[dIdx] = value;
+        updatedCalcsUpd[cIdx] = { ...calcToUpd, dependencies: newDeps };
+      }
       return {
         ...state,
         config: { ...state.config, custom_calculated_fields: updatedCalcsUpd }
@@ -466,7 +484,7 @@ case "SYNC_DATE_RANGES":
         ...state,
         config: {
           ...state.config,
-          summary_fields: [...state.config.summary_fields, ""]
+          summary_fields: [...(state.config.summary_fields || []), ""]
         }
       };
 
@@ -504,7 +522,18 @@ case "SYNC_DATE_RANGES":
     case "LOAD_FULL_REPORT":
       return {
         ...state,
-        config: action.payload.config,
+        config: {
+          ...initialState.config,
+          ...action.payload.config,
+          db_defination: action.payload.config.db_defination || [],
+          report_columns: action.payload.config.report_columns || [],
+          body_sort_order: action.payload.config.body_sort_order || [],
+          summary_fields: action.payload.config.summary_fields || [],
+          custom_calculated_fields: action.payload.config.custom_calculated_fields || [],
+          group_by_fields: action.payload.config.group_by_fields || {},
+          filters: action.payload.config.filters || {},
+          date_range_fields: action.payload.config.date_range_fields || {}
+        },
         setup: action.payload.setup,
         fmRecordId: action.payload.fmRecordId,
         isLoading: false
