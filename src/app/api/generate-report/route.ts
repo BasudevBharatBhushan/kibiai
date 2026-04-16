@@ -1072,6 +1072,12 @@ async function stitch(
     let resultData: any[] = [];
     const firstOrder = Math.min(...fetchOrders);
 
+    // Find the primary table name (fetch_order = 1)
+    const primaryTableDef = reportStructure.db_defination.find(
+      (def) => def.fetch_order === firstOrder
+    );
+    const mainPrimaryTable = primaryTableDef?.primary_table;
+
     if (datasetsByOrder[firstOrder]) {
       resultData = datasetsByOrder[firstOrder].map((record) => ({
         ...record,
@@ -1101,7 +1107,13 @@ async function stitch(
           const newResultData: any[] = [];
           resultData.forEach((baseRecord) => {
             const matchingRecords = joinDataset.filter((joinRecord) => {
-              const baseValue = baseRecord[relationship.source];
+              // ✅ FIX: Determine source key (is it a prefixed field from a previous join?)
+              const sourceKey =
+                relationship.tables[0] === mainPrimaryTable
+                  ? relationship.source
+                  : `${relationship.tables[0]}::${relationship.source}`;
+
+              const baseValue = baseRecord[sourceKey];
               const joinValue = joinRecord[relationship.target];
               return (
                 baseValue !== undefined &&
@@ -1170,15 +1182,18 @@ async function stitch(
 
         let value = "--";
 
-        // base table fields (fetch_order = 1)
-        if (field.table === reportStructure.db_defination[0].primary_table) {
+        // ✅ FIX: Improved robustness for primary table check (case-insensitive)
+        const isPrimary =
+          field.table?.toLowerCase() === mainPrimaryTable?.toLowerCase();
+
+        if (isPrimary) {
+          // base table fields are NOT prefixed
           value = record[field.field];
-        }
-        // joined table fields
-        else {
+        } else {
+          // joined table fields ARE prefixed (e.g., TableName::FieldName)
           value = record[`${field.table}::${field.field}`];
         }
-        
+
         outputRecord[field.label] = value ?? "--";
       });
       return outputRecord;

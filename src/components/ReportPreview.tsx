@@ -9,9 +9,38 @@ export function ReportPreview() {
 
   if (!rawData) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-white shadow-sm border border-slate-200 min-h-[600px] rounded-lg">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
-        <p>Loading Report Preview...</p>
+      <div className="w-full flex flex-col gap-6 p-10 bg-white border border-slate-200 rounded-xl shadow-sm min-h-[600px]">
+        {/* Header Skeleton */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="h-8 bg-slate-100 rounded-lg w-1/3 animate-pulse"></div>
+          <div className="flex gap-2">
+            <div className="h-10 w-24 bg-slate-50 rounded-lg animate-pulse"></div>
+            <div className="h-10 w-24 bg-slate-50 rounded-lg animate-pulse"></div>
+          </div>
+        </div>
+        
+        {/* Table Mockup Skeleton */}
+        <div className="space-y-4">
+          <div className="h-12 bg-slate-50 rounded-md w-full animate-pulse border-b border-slate-100"></div>
+          <div className="space-y-3">
+             {[...Array(8)].map((_, i) => (
+                <div key={i} className="flex gap-4">
+                   <div className="h-4 bg-slate-50 rounded w-1/4 animate-pulse"></div>
+                   <div className="h-4 bg-slate-50 rounded w-1/4 animate-pulse"></div>
+                   <div className="h-4 bg-slate-100 rounded w-1/4 animate-pulse"></div>
+                   <div className="h-4 bg-slate-50 rounded w-1/4 animate-pulse"></div>
+                </div>
+             ))}
+          </div>
+        </div>
+
+        {/* Status indicator */}
+        <div className="mt-auto pt-10 flex flex-col items-center">
+            <div className="flex items-center gap-3 text-slate-400">
+               <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+               <span className="text-sm font-medium">Stitching report data...</span>
+            </div>
+        </div>
       </div>
     );
   }

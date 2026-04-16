@@ -56,18 +56,26 @@ export async function GET(request: Request) {
 
     // 3. Clean & Parse Data (Server-Side Logic)
     const record = data.records[0];
+
+
     
-    // Handle potential empty strings or parsing errors safely
-    const config = record.AIResponseJson ? JSON.parse(record.AIResponseJson) : {};
-    const setup = record.SetupJson ? JSON.parse(record.SetupJson) : null;
+    // Handle fully qualified names or simple names
+    const getField = (name: string) => record[`MultiTableReport::${name}`] || record[name];
+
+    const configStr = getField("AIResponseJson");
+    const setupStr = getField("SetupJson");
+    const threadId = getField("OpenAI_AssistantThreadID");
+    console.log('threadId', threadId)
+    const config = configStr ? JSON.parse(configStr) : {};
+    const setup = setupStr ? JSON.parse(setupStr) : null;
 
     // 4. Return CLEAN data to frontend
     return NextResponse.json({
       fmRecordId: record.recordId,
       config,
       setup,
-      reportStructuredData: record.ReportStructuredData,
-      threadId: record.OpenAI_AssistantThreadID || null
+      reportStructuredData: getField("ReportStructuredData"),
+      threadId: threadId || null
     });
 
   } catch (error) {
@@ -86,8 +94,12 @@ export async function POST(request: Request) {
     }
 
     const payloadRecord: any = {};
-    if (config !== undefined) payloadRecord.AIResponseJson = JSON.stringify(config, null, 2);
-    if (threadId !== undefined) payloadRecord.OpenAI_AssistantThreadID = threadId;
+    if (config !== undefined) {
+      payloadRecord["MultiTableReport::AIResponseJson"] = JSON.stringify(config, null, 2);
+    }
+    if (threadId !== undefined) {
+      payloadRecord["MultiTableReport::OpenAI_AssistantThreadID"] = threadId;
+    }
 
     // 1. Construct FileMaker Update
     const body = {

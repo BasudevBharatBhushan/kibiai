@@ -187,9 +187,17 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
   // Portal Target State
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 
-  // Mount logic for Portal
   useEffect(() => {
-    setPortalTarget(document.getElementById('portal-report-actions'));
+    // Attempt to mount to the header portal
+    const target = document.getElementById('portal-report-actions');
+    if (target) {
+      setPortalTarget(target);
+    } else {
+      // Retry in case it mounts slightly after
+      setTimeout(() => {
+        setPortalTarget(document.getElementById('portal-report-actions'));
+      }, 50);
+    }
   }, []);
 
   // 1. Generate HTML
@@ -489,60 +497,116 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
   return (
     <div className="flex flex-col h-full relative bg-gray-100">
       
-      {/* --- Controls  Toolbar (Portaled to header) --- */}
-      {portalTarget && createPortal(
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 shadow-xs px-2 py-1 rounded-md">
-            
-            {/* Pagination Controls */}
-            <button 
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1 || isCalculating}
-              className="p-1 rounded-sm hover:bg-white disabled:opacity-30 text-slate-600 transition-colors"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            
-            <span className="text-xs font-semibold text-slate-600 min-w-[90px] text-center flex items-center justify-center gap-1.5 uppercase tracking-wide">
-              {isCalculating ? (
-                  <><RefreshCw size={12} className="animate-spin"/> Calc...</>
-              ) : (
-                  `Page ${currentPage} / ${totalPages}`
-              )}
-            </span>
+      {/* --- Controls  Toolbar --- */}
+      {portalTarget ? createPortal(
+        <div className="flex shrink-0 items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm transform transition-all translate-y-0.5">
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded p-1 mr-4">
+              {/* Pagination Controls */}
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || isCalculating}
+                className="p-1 rounded-sm hover:bg-slate-200 disabled:opacity-30 text-slate-700 transition-colors"
+                title="Previous Page"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              
+              <span className="text-xs font-semibold text-slate-700 min-w-[90px] text-center flex items-center justify-center gap-1.5 uppercase tracking-wide">
+                {isCalculating ? (
+                    <><RefreshCw size={12} className="animate-spin"/> Calc...</>
+                ) : (
+                    `Page ${currentPage} / ${totalPages}`
+                )}
+              </span>
 
-            <button 
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || isCalculating}
-              className="p-1 rounded-sm hover:bg-white disabled:opacity-30 text-slate-600 transition-colors"
-            >
-              <ChevronRight size={16} />
-            </button>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || isCalculating}
+                className="p-1 rounded-sm hover:bg-slate-200 disabled:opacity-30 text-slate-700 transition-colors"
+                title="Next Page"
+              >
+                <ChevronRight size={16} />
+              </button>
+          </div>
 
-            <div className="h-4 w-px bg-slate-300 mx-1"></div>
+          <div className="flex items-center gap-2">
+              {/* Expand Toggle */}
+              <button 
+                  onClick={() => setShowExpandedModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded shadow-sm transition-colors"
+              >
+                  <Maximize size={13} /> Expand
+              </button>
 
-            {/* Expand Toggle */}
-            <button 
-                onClick={() => setShowExpandedModal(true)}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-white rounded-sm transition-colors"
-            >
-                <Maximize size={13} /> Expand
-            </button>
+              <button 
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded shadow-sm transition-colors"
+              >
+                  <Printer size={13} /> PDF
+              </button>
 
-            <button 
-                onClick={handleExportPDF}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-white rounded-sm transition-colors"
-            >
-                <Printer size={13} /> Print/PDF
-            </button>
-
-            <button 
-                onClick={handleExportExcel}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-white rounded-sm transition-colors"
-            >
-                <FileSpreadsheet size={13} /> Excel
-            </button>
+              <button 
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded shadow-sm transition-colors"
+              >
+                  <FileSpreadsheet size={13} /> Excel
+              </button>
+          </div>
         </div>,
         portalTarget
+      ) : (
+        <div className="flex shrink-0 items-center justify-between bg-white border-b border-slate-200 px-4 py-2 shadow-sm z-10 w-full mb-2">
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded p-1">
+              {/* Pagination Controls */}
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || isCalculating}
+                className="p-1 rounded-sm hover:bg-slate-200 disabled:opacity-30 text-slate-700 transition-colors"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              
+              <span className="text-xs font-semibold text-slate-700 min-w-[90px] text-center flex items-center justify-center gap-1.5 uppercase tracking-wide">
+                {isCalculating ? (
+                    <><RefreshCw size={12} className="animate-spin"/> Calc...</>
+                ) : (
+                    `Page ${currentPage} / ${totalPages}`
+                )}
+              </span>
+
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || isCalculating}
+                className="p-1 rounded-sm hover:bg-slate-200 disabled:opacity-30 text-slate-700 transition-colors"
+              >
+                <ChevronRight size={16} />
+              </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+              {/* Expand Toggle */}
+              <button 
+                  onClick={() => setShowExpandedModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded shadow-sm transition-colors"
+              >
+                  <Maximize size={13} /> Expand
+              </button>
+
+              <button 
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded shadow-sm transition-colors"
+              >
+                  <Printer size={13} /> PDF
+              </button>
+
+              <button 
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded shadow-sm transition-colors"
+              >
+                  <FileSpreadsheet size={13} /> Excel
+              </button>
+          </div>
+        </div>
       )}
 
       {/* --- Normal Viewport --- */}

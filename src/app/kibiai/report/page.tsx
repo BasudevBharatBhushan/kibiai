@@ -6,7 +6,15 @@ import { ReportProvider, useReport } from "@/context/ReportContext";
 import "@/styles/reportConfig.css"; 
 import { ReportConfigurator } from "@/components/ReportConfigurator";
 import { ReportPreview }  from "@/components/ReportPreview";
-import { ChevronLeft, ChevronRight, MessageSquare, Settings } from "lucide-react";
+import {
+  BarChart3,
+  FileText,
+  Filter,
+  PanelLeft,
+  PanelRight,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { ModularChatbot } from "@/components/chat/ModularChatbot";
 import { REPORTS_SYSTEM_INSTRUCTION } from "@/constants/reportsSystemInstruction";
@@ -164,6 +172,34 @@ function ReportPageContent() {
     }
   }, [state.setup, state.config]);
 
+  const reportPromptOptions = useMemo(() => ([
+    {
+      title: "Executive Summary",
+      description: "Create a report with totals, month-wise trend, and top-performing segments for leadership review.",
+      icon: <BarChart3 className="h-5 w-5 text-indigo-500" />,
+    },
+    {
+      title: "Segment Filters",
+      description: "Build a report with flexible filters for date range, region, owner, and status so teams can drill in quickly.",
+      icon: <Filter className="h-5 w-5 text-indigo-500" />,
+    },
+    {
+      title: "Configurable Layout",
+      description: "Set up grouped sections, summary rows, and ordered columns for a clean operational report layout.",
+      icon: <SlidersHorizontal className="h-5 w-5 text-indigo-500" />,
+    },
+  ]), []);
+
+  const reportTitle =
+    (state.setup as any)?.reportName ||
+    (state.setup as any)?.report_name ||
+    "Report Builder";
+  const reportStateLabel = state.isLoading
+    ? "Syncing report"
+    : reportId
+      ? "Saved configuration"
+      : "New draft";
+
 
   // Toggle helpers
   const toggleChat = useCallback(() => setIsChatOpen(prev => !prev), []);
@@ -173,52 +209,74 @@ function ReportPageContent() {
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50 font-sans">
 
       {/* ── PAGE HEADER ── */}
-      <header className="h-14 shrink-0 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-30 shadow-sm justify-between">
-        {/* Left: panel toggle + report title */}
-        <div className="flex items-center gap-3 min-w-0">
-          <button
-            onClick={toggleChat}
-            title={isChatOpen ? "Close Copilot" : "Open Copilot"}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-              isChatOpen
-                ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700"
-            }`}
-          >
-            <MessageSquare size={15} />
-            <span className="hidden sm:inline">Copilot</span>
-          </button>
-
-          <span className="text-slate-300 select-none">|</span>
-
-          <div className="min-w-0">
-            <h1 className="text-sm font-semibold text-slate-800 truncate leading-tight">
-              {(state.setup as any)?.reportName || (state.setup as any)?.report_name || "Report Builder"}
-            </h1>
-            <p className="text-xs text-slate-400 truncate leading-tight flex items-center gap-2">
-              {reportId ? `ID: ${reportId}` : "New Report"}
-              {state.isLoading && <span className="text-indigo-500 animate-pulse text-[10px]">(Loading...)</span>}
-            </p>
+      <header className="shrink-0 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur flex items-center justify-between gap-4 z-20">
+        {/* Left: Title & Status */}
+        <div className="flex flex-1 items-center gap-3 min-w-0">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50 text-indigo-600 shadow-sm">
+            <FileText className="h-5 w-5" />
+          </div>
+          
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-sm font-bold tracking-tight text-slate-900">
+                {reportTitle}
+              </h1>
+              {reportId && (
+                <span className="hidden sm:inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                  ID: {reportId}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider ${
+                state.isLoading ? "text-indigo-600" : "text-emerald-600"
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${
+                  state.isLoading ? "animate-pulse bg-indigo-500" : "bg-emerald-500"
+                }`} />
+                {reportStateLabel}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Center: Action toolbar placeholder (moved from DynamicReport) */}
-        <div id="portal-report-actions" className="flex-1 flex justify-center items-center gap-2 min-w-0" />
+        {/* Center/Actions Portal */}
+        <div 
+          id="portal-report-actions"
+          className="flex-shrink-0 flex items-center justify-center"
+        />
 
-        {/* Right: config toggle */}
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={toggleConfig}
-            title={isConfigOpen ? "Close Configuration" : "Open Configuration"}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-              isConfigOpen
-                ? "bg-slate-800 text-white border-slate-800 hover:bg-slate-700"
-                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700"
-            }`}
-          >
-            <Settings size={15} />
-            <span className="hidden sm:inline">Configure</span>
-          </button>
+        {/* Right: Panels Toggle */}
+        <div className="flex flex-1 justify-end shrink-0 items-center">
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-sm">
+            <button
+              onClick={toggleChat}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all ${
+                isChatOpen
+                  ? "bg-white text-indigo-600 shadow-sm border border-indigo-100"
+                  : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+              }`}
+              title="Toggle AI Copilot"
+              aria-pressed={isChatOpen}
+            >
+              <PanelLeft size={16} strokeWidth={isChatOpen ? 2 : 1.5} />
+              <span className="hidden sm:inline-block text-[11px] font-semibold tracking-wide">Copilot</span>
+            </button>
+
+            <button
+              onClick={toggleConfig}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all ${
+                isConfigOpen
+                  ? "bg-white text-slate-800 shadow-sm border border-slate-200"
+                  : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+              }`}
+              title="Toggle Report Configurator"
+              aria-pressed={isConfigOpen}
+            >
+              <PanelRight size={16} strokeWidth={isConfigOpen ? 2 : 1.5} />
+              <span className="hidden sm:inline-block text-[11px] font-semibold tracking-wide">Configure</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -234,15 +292,27 @@ function ReportPageContent() {
 
           <div className="flex-1 overflow-hidden flex flex-col">
             {(!state.setup && state.isLoading) ? (
-              <div className="p-4 text-sm text-slate-400 flex items-center gap-2">
-                <span className="animate-pulse">●</span> Loading AI context…
-              </div>
+               <div className="flex-1 flex flex-col p-6 gap-6 bg-white animate-in grow h-full">
+                  <div className="flex gap-3 items-end mt-4">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 animate-pulse shrink-0 border border-slate-200"></div>
+                      <div className="h-16 bg-slate-100 rounded-2xl rounded-bl-sm w-2/3 animate-pulse"></div>
+                  </div>
+                  <div className="flex gap-3 items-end justify-end">
+                      <div className="h-12 bg-indigo-50 rounded-2xl rounded-br-sm w-1/2 animate-pulse"></div>
+                  </div>
+                  <div className="flex gap-3 items-end">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 animate-pulse shrink-0 border border-slate-200"></div>
+                      <div className="h-24 bg-slate-100 rounded-2xl rounded-bl-sm w-4/5 animate-pulse"></div>
+                  </div>
+                  <div className="mt-auto h-12 bg-slate-50 border border-slate-100 rounded-3xl w-full animate-pulse mb-4"></div>
+               </div>
             ) : (
               <ModularChatbot
                 botName="Report Copilot"
                 instructionSet={REPORTS_SYSTEM_INSTRUCTION}
                 predefinedPrompt=""
                 formatPrompt={formatPrompt}
+                suggestedPrompts={reportPromptOptions}
                 initialConversationId={conversationId}
                 onAssistantResponse={handleAssistantResponse}
                 onConversationIdChange={handleConversationIdChange}
@@ -268,8 +338,26 @@ function ReportPageContent() {
         >
 
           {/* The actual builder content */}
-          <div className="flex-1 overflow-hidden relative">
-            <ReportConfigurator />
+          <div className="flex-1 overflow-hidden relative flex flex-col">
+            {(!state.setup && state.isLoading) ? (
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+                  <div className="flex justify-between items-center mb-6">
+                      <div className="h-6 bg-slate-200 rounded w-1/4 animate-pulse"></div>
+                      <div className="h-8 bg-slate-200 rounded w-24 animate-pulse"></div>
+                  </div>
+                  {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex flex-col gap-3 border bg-white p-5 rounded-lg shadow-sm border-slate-100">
+                          <div className="flex items-center gap-2">
+                             <div className="h-5 w-5 bg-slate-200 rounded animate-pulse"></div>
+                             <div className="h-5 bg-slate-200 rounded w-1/3 animate-pulse"></div>
+                          </div>
+                          <div className="h-10 bg-slate-50 rounded w-full animate-pulse border border-slate-100 mt-2"></div>
+                      </div>
+                  ))}
+              </div>
+            ) : (
+              <ReportConfigurator />
+            )}
           </div>
         </div>
 

@@ -18,6 +18,27 @@ interface FilterRow {
   endDate?: string;
 }
 
+// Helper functions for Date conversion between FileMaker (MM/DD/YYYY) and HTML5 (YYYY-MM-DD)
+const toHtmlDate = (fmDate: string) => {
+  if (!fmDate) return "";
+  const parts = fmDate.trim().split("/");
+  if (parts.length === 3) {
+    const [m, d, y] = parts;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  return fmDate;
+};
+
+const toFmDate = (htmlDate: string) => {
+  if (!htmlDate) return "";
+  const parts = htmlDate.split("-");
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    return `${parseInt(m)}/${parseInt(d)}/${y}`;
+  }
+  return htmlDate;
+};
+
 export function ReportFiltersSection() {
   // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
@@ -40,8 +61,8 @@ export function ReportFiltersSection() {
           field,
           operator: "...",
           value,
-          startDate: start,
-          endDate: end
+          startDate: toHtmlDate(start),
+          endDate: toHtmlDate(end)
         });
       });
     });
@@ -79,7 +100,9 @@ export function ReportFiltersSection() {
     dateRows.forEach(row => {
       if (row.table && row.field && row.startDate && row.endDate) {
         if (!newConfig[row.table]) newConfig[row.table] = {};
-        newConfig[row.table][row.field] = `${row.startDate}...${row.endDate}`;
+        const fmStart = toFmDate(row.startDate);
+        const fmEnd = toFmDate(row.endDate);
+        newConfig[row.table][row.field] = `${fmStart}...${fmEnd}`;
       }
     });
     dispatch({ type: "SYNC_DATE_RANGES", payload: newConfig });

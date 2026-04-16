@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { HelpCircle, FileText, Download, Plus } from "lucide-react"; 
+import {
+  ArrowUp,
+  Bot,
+  HelpCircle,
+  MessageSquareText,
+  Plus,
+  Sparkles,
+  User,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -71,6 +79,7 @@ export function ModularChatbot({
   useEffect(() => {
     if (initialConversationId !== undefined && initialConversationId !== conversationId) {
       setConversationId(initialConversationId);
+      setMessages([]); // Clear messages to trigger fetch
     }
   }, [initialConversationId]);
 
@@ -79,15 +88,30 @@ export function ModularChatbot({
     if (messages.length > 0) return;
 
     getConversation(conversationId).then((items) => {
-      const restored = items.flatMap((item: any) =>
-        item.content
-          .filter((c: any) => c.type === "output_text")
-          .map((c: any) => ({
-            role: item.role,
-            text: item.role === "assistant" ? parseAssistantResponse(c.text || "") : c.text || "",
-          }))
-      );
-      setMessages(restored);
+      const restored = items.flatMap((item: any) => {
+        return item.content
+          .filter((c: any) => c.type === "output_text" || c.type === "input_text")
+          .map((c: any) => {
+            let text = c.text || "";
+            
+            if (item.role === "assistant") {
+              text = parseAssistantResponse(text);
+            } else if (item.role === "user") {
+              // Clean technical context if it exists in restored messages
+              // Look for the "Today's date" or "Here is my DB Schema" markers
+              const contextIndex = text.indexOf("Today's date");
+              if (contextIndex !== -1) {
+                 text = text.substring(0, contextIndex).trim();
+              }
+            }
+            
+            return {
+              role: item.role,
+              text: text
+            };
+          });
+      });
+      setMessages(restored.reverse());
     });
   }, [conversationId]);
 
@@ -177,28 +201,113 @@ export function ModularChatbot({
     }, 0);
   };
 
-  const containerClasses = className || "w-full max-w-120 h-[90vh] flex flex-col shadow-2 border-0 bg-white";
+  const hasMessages = messages.length > 0;
+  const showPromptRail = suggestedPrompts.length > 0 && showPrompts && hasMessages;
+  const containerClasses =
+    className ||
+    "w-full max-w-[34rem] h-[90vh] flex flex-col overflow-hidden border-r border-slate-200 bg-slate-50 font-sans";
 
   return (
     <div className={containerClasses}>
-      <Card className="w-full h-full flex flex-col shadow-none border-0 bg-white">
-        
-        <CardContent className="flex-1 p-0 overflow-hidden relative">
-          <ScrollArea className="h-full p-6">
-            <div className="space-y-6 pb-15">
-              
-              {/* Welcome Message */}
-               <div className="flex w-full justify-start">
-                  <div className="flex items-start gap-3 max-w-[85%]">
-                      <Avatar className="w-10 h-10 border bg-white shadow-sm mt-1">
-                          <AvatarImage src={botAvatar} className="object-contain p-1" />
-                          <AvatarFallback>AI</AvatarFallback>
-                      </Avatar>
-                      <div className="bg-gray-100 rounded-2xl rounded-tl-none px-5 py-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                          {welcomeMessage}
+      <Card className="flex h-full w-full flex-col overflow-hidden border-0 bg-white shadow-none">
+        <CardHeader className="border-b border-slate-200/80 bg-slate-50/50 px-4 py-3 shrink-0 flex flex-row items-center justify-between gap-3 space-y-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-100 bg-white text-indigo-600 shadow-sm">
+              <Bot className="size-4" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-sm font-bold tracking-tight text-slate-900">
+                  {botName}
+                </h2>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
+                  loading
+                    ? "bg-indigo-100 text-indigo-700"
+                    : "bg-emerald-100 text-emerald-700"
+                }`}>
+                  <span className={`h-1 w-1 rounded-full ${
+                    loading ? "animate-pulse bg-indigo-500" : "bg-emerald-500"
+                  }`} />
+                  {loading ? "Thinking" : "Ready"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {suggestedPrompts.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setShowPrompts((prev) => !prev)}
+                className={`size-8 rounded-lg border transition-all ${
+                  showPrompts
+                    ? "border-indigo-200 bg-indigo-50 text-indigo-600 shadow-inner"
+                    : "border-slate-200 bg-white text-slate-500 hover:border-indigo-200 hover:text-indigo-600 shadow-sm"
+                }`}
+                title={showPrompts ? "Hide prompts" : "Show prompts"}
+              >
+                <HelpCircle className="size-3.5" />
+              </Button>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleNewChat}
+              className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs font-semibold tracking-wide text-slate-600 shadow-sm hover:border-indigo-200 hover:text-indigo-600 transition-all font-sans"
+              title="Start New Chat"
+            >
+              <Plus className="size-3.5 mr-1" />
+              New
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="flex-1 p-0 overflow-hidden relative bg-slate-50">
+          <ScrollArea className="h-full">
+            <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 px-5 pb-40 pt-6">
+              {/* Welcome Message (Only visible if no messages) */}
+              {!hasMessages && (
+                <div className="flex w-full justify-start">
+                  <div className="flex w-full max-w-[88%] items-start gap-3">
+                    <Avatar className="mt-1 h-10 w-10 border border-slate-200 bg-white shadow-sm shrink-0">
+                      <AvatarImage src={botAvatar} className="object-contain p-1" />
+                      <AvatarFallback>AI</AvatarFallback>
+                    </Avatar>
+
+                    <div className="space-y-4">
+                      <div className="rounded-2xl rounded-tl-sm border border-slate-200 bg-white text-slate-700 shadow-sm px-5 py-4 text-[13.5px] leading-relaxed whitespace-pre-wrap">
+                        {welcomeMessage}
                       </div>
+                      
+                      {suggestedPrompts.length > 0 && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {suggestedPrompts.map((prompt, index) => (
+                              <button
+                                key={index}
+                                onClick={() => selectPrompt(prompt.description)}
+                                className="group flex flex-col rounded-xl border border-slate-200 bg-white/70 hover:bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"
+                              >
+                                <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 transition-colors group-hover:bg-indigo-100 pb-0.5">
+                                  {prompt.icon}
+                                </div>
+                                <h3 className="text-xs font-semibold text-slate-800">
+                                  {prompt.title}
+                                </h3>
+                                <p className="mt-1 text-[10.5px] leading-5 text-slate-500 line-clamp-2">
+                                  {prompt.description}
+                                </p>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-               </div>
+                </div>
+              )}
 
               {/* Dynamic Messages */}
               {messages.map((m, i) => (
@@ -208,39 +317,35 @@ export function ModularChatbot({
                     m.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  <div className={`flex items-start gap-3 max-w-[85%] ${m.role === "user" ? "flex-row-reverse" : ""}`}>
+                  <div
+                    className={`flex max-w-[88%] items-start gap-3 ${
+                      m.role === "user" ? "flex-row-reverse" : ""
+                    }`}
+                  >
                     
-                    {m.role === "assistant" && (
-                      <Avatar className="w-10 h-10 border bg-white shadow-sm mt-1">
+                    {m.role === "assistant" ? (
+                      <Avatar className="mt-1 h-10 w-10 border border-slate-200 bg-white shadow-sm shrink-0">
                         <AvatarImage src={botAvatar} className="object-contain p-1" />
                         <AvatarFallback>AI</AvatarFallback>
                       </Avatar>
+                    ) : (
+                      <Avatar className="mt-1 h-10 w-10 border border-slate-200 bg-white shadow-sm shrink-0">
+                        <div className="flex h-full w-full items-center justify-center bg-indigo-100 text-indigo-700">
+                          <User className="size-5" />
+                        </div>
+                      </Avatar>
                     )}
 
-                    <div
-                      className={`rounded-2xl px-5 py-4 text-sm shadow-sm leading-relaxed whitespace-pre-wrap ${
-                        m.role === "user"
-                          ? "bg-indigo-500 text-white rounded-tr-none" 
-                          : "bg-gray-100 text-gray-800 rounded-tl-none" 
-                      }`}
-                    >
-                      {m.text}
-
-                      {/* Mock Report Attachment placeholder condition, based on original logic */}
-                      {m.role === "assistant" && m.text.toLowerCase().includes("report") && (
-                         <div className="mt-3 bg-white rounded-xl p-3 flex items-center gap-3 shadow-sm border border-gray-100 w-full max-w-sm">
-                            <div className="bg-indigo-100 p-2 rounded-lg">
-                                <FileText className="text-indigo-600 w-5 h-5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-gray-800 text-xs truncate">Report.pdf</p>
-                                <p className="text-[10px] text-gray-400">Generated just now</p>
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-indigo-600 border-none">
-                                <Download size={16} />
-                            </Button>
-                         </div>
-                      )}
+                    <div className={`space-y-2 ${m.role === "user" ? "text-right" : ""}`}>
+                      <div
+                        className={`rounded-2xl px-5 py-4 text-[13.5px] leading-relaxed whitespace-pre-wrap break-words ${
+                          m.role === "user"
+                            ? "rounded-tr-sm bg-indigo-600 text-white"
+                            : "rounded-tl-sm border border-slate-200 bg-white text-slate-700 shadow-sm"
+                        }`}
+                      >
+                        {m.text}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -248,15 +353,19 @@ export function ModularChatbot({
 
               {loading && (
                 <div className="flex w-full justify-start">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10 border bg-white shadow-sm">
+                  <div className="flex max-w-[88%] items-start gap-3">
+                    <Avatar className="mt-1 h-10 w-10 border border-slate-200 bg-white shadow-sm shrink-0">
                       <AvatarImage src={botAvatar} className="object-contain p-1" />
                         <AvatarFallback>AI</AvatarFallback>
                     </Avatar>
-                    <div className="bg-gray-100 rounded-2xl rounded-tl-none px-5 py-3 flex items-center gap-2 text-gray-500">
-                      <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"></span>
+                    <div className="space-y-2">
+                      <div className="w-48 rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                        <div className="flex flex-col gap-2">
+                          <div className="h-2 w-full animate-pulse rounded bg-slate-200"></div>
+                          <div className="h-2 w-5/6 animate-pulse rounded bg-slate-200"></div>
+                          <div className="h-2 w-4/6 animate-pulse rounded bg-slate-200"></div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -265,70 +374,81 @@ export function ModularChatbot({
             </div>
           </ScrollArea>
           
-          {showPrompts && suggestedPrompts.length > 0 && (
-             <div className="absolute bottom-20 left-4 right-4 z-10">
-                <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-                   {suggestedPrompts.map((prompt, index) => (
-                      <button
-                        key={index}
-                        onClick={() => selectPrompt(prompt.description)}
-                        className="shrink-0 w-64 text-left bg-white border border-gray-200 p-4 rounded-2xl shadow-lg hover:border-indigo-500 hover:shadow-md transition-all group"
-                      >
-                         <div className="bg-indigo-50 w-8 h-8 rounded-lg flex items-center justify-center mb-3 group-hover:bg-indigo-100 transition-colors">
-                            {prompt.icon}
-                         </div>
-                         <h3 className="font-semibold text-gray-800 text-sm mb-1">{prompt.title}</h3>
-                         <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
-                            {prompt.description}
-                         </p>
-                      </button>
-                   ))}
-                </div>
-             </div>
+          {showPromptRail && (
+            <div className="absolute inset-x-0 bottom-28 z-10 px-4">
+              <div className="mx-auto flex max-w-4xl gap-3 overflow-x-auto pb-2 no-scrollbar">
+                {suggestedPrompts.map((prompt, index) => (
+                  <button
+                    key={index}
+                    onClick={() => selectPrompt(prompt.description)}
+                    className="group w-64 shrink-0 rounded-[22px] border border-slate-200 bg-white p-4 text-left shadow-lg transition-all hover:-translate-y-0.5 hover:border-indigo-200"
+                  >
+                    <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-50 transition-colors group-hover:bg-indigo-100">
+                      {prompt.icon}
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-800">
+                      {prompt.title}
+                    </h3>
+                    <p className="mt-1 text-xs leading-6 text-slate-500">
+                      {prompt.description}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           
-          <div className="absolute bottom-4 left-0 right-0 px-4 w-full pt-4 bg-white ">
-            <form
-                onSubmit={handleSend}
-                className="flex items-center gap-2 w-full max-w-2xl mx-auto">
-                
+          <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-white px-4 pb-4 pt-3">
+            <form onSubmit={handleSend} className="mx-auto flex w-full max-w-4xl items-end gap-3">
+              <div className="flex flex-1 items-end gap-3 rounded-2xl border border-slate-300 bg-white px-3 py-2 shadow-sm focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-shadow">
                 {suggestedPrompts.length > 0 && (
-                  <Button 
-                      type="button" 
-                      variant="ghost" 
-                      onClick={() => setShowPrompts(!showPrompts)}
-                      className="h-14 w-14 rounded-full bg-indigo-50 text-indigo-500 hover:bg-indigo-100">
-                      <HelpCircle className="w-8! h-8!" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowPrompts((prev) => !prev)}
+                    className={`mb-0.5 size-9 shrink-0 rounded-xl p-0 transition-all ${
+                      showPrompts
+                        ? "bg-indigo-50 text-indigo-600"
+                        : "bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
+                    }`}
+                  >
+                    <HelpCircle className="size-5" />
                   </Button>
                 )}
 
-            <div className="flex-1 relative">
-            <TextareaAutosize
-                ref={inputRef} 
-                minRows={1}
-                maxRows={4} 
-                placeholder="Type here the message..."
-                className="w-full resize-none bg-white rounded-3xl border border-gray-200 pl-6 pr-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm leading-relaxed scrollbar-hide"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend(e);
-                  }
-                }}
-                disabled={loading}
-                autoFocus
-            />
-            </div>
+                <div className="flex-1">
+                  <TextareaAutosize
+                    ref={inputRef}
+                    minRows={1}
+                    maxRows={8}
+                    placeholder="Describe the report you want to build..."
+                    className="w-full resize-none border-0 bg-transparent px-1 py-2 text-sm leading-7 text-slate-700 shadow-none outline-none focus:outline-none focus:ring-0"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e);
+                      }
+                    }}
+                    disabled={loading}
+                    autoFocus
+                  />
+                </div>
 
-                <Button 
-                    type="submit" 
-                    disabled={loading || !input.trim()}
-                    className="h-12 px-6 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white shadow-md transition-all border-none">
-                    Send
+                <Button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="mb-0.5 size-9 rounded-xl bg-indigo-600 p-0 text-white transition-all hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400 shrink-0"
+                >
+                  <ArrowUp className="size-4" />
                 </Button>
+              </div>
             </form>
+
+            <p className="mt-2 text-center text-[11px] text-slate-400">
+              Ask for fields, groupings, filters, date ranges, or summary logic.
+            </p>
           </div>
         </CardContent>
       </Card>
