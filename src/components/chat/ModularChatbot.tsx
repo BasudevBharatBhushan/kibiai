@@ -400,7 +400,7 @@ export function ModularChatbot({
           
           <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-white px-4 pb-4 pt-3">
             <form onSubmit={handleSend} className="mx-auto flex w-full max-w-4xl items-end gap-3">
-              <div className="flex flex-1 items-end gap-3 rounded-2xl border border-slate-300 bg-white px-3 py-2 shadow-sm focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-shadow">
+              <div className="flex min-h-[44px] flex-1 items-end gap-3 rounded-2xl border border-slate-300 bg-white px-3 py-2 shadow-sm focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-shadow">
                 {suggestedPrompts.length > 0 && (
                   <Button
                     type="button"
@@ -416,13 +416,14 @@ export function ModularChatbot({
                   </Button>
                 )}
 
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <TextareaAutosize
                     ref={inputRef}
+                    rows={1}
                     minRows={1}
                     maxRows={8}
                     placeholder="Describe the report you want to build..."
-                    className="w-full resize-none border-0 bg-transparent px-1 py-2 text-sm leading-7 text-slate-700 shadow-none outline-none focus:outline-none focus:ring-0"
+                    className="chat-textarea text-slate-700"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => {

@@ -1,0 +1,564 @@
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 15px;
+            font-family: Arial, sans-serif;
+            line-height: 1.2;
+            color: #000000;
+            font-size: 9pt;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .dynamic-report {
+            width: 215.9mm;
+            min-height: 297mm;
+            padding: 15mm 10mm;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: none;
+            border-radius: 0;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            margin-top: 5px;
+            font-family: Arial, sans-serif;
+            color: #000000;
+            box-shadow: none;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .current-date {
+            position: absolute;
+            top: 10mm;
+            right: 15mm;
+            font-size: 9pt;
+            color: #000000;
+            font-weight: normal;
+        }
+
+        .title-header {
+            text-align: right;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #000000;
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+     
+        }
+
+        .title-header h1 {
+            font-size: 14pt;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            font-weight: bold;
+            color: #000000;
+            letter-spacing: 0.5px;
+        }
+
+        .title-header h2 {
+            font-size: 10pt;
+            font-weight: normal;
+            color: #000000;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .subsummary {
+            margin-bottom: 15px;
+            border: none;
+            border-radius: 0;
+            background-color: transparent;
+            overflow: visible;
+            page-break-inside: auto;
+            margin-left: 0;
+            margin-right: 0;
+        }
+
+        .subsummary.level-0 {
+            margin-left: 0;
+        }
+
+        .subsummary.level-1 {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .subsummary.level-2 {
+            margin-left: 40px;
+            margin-top: 8px;
+        }
+
+        .subsummary-header {
+            padding: 8px 0;
+            margin: 0 5px;
+            font-weight: bold;
+            background-color: transparent;
+            color: #000000;
+            border-bottom-style: solid;
+            border-bottom-color: #333333;
+        }
+
+        .subsummary.level-0 .subsummary-header {
+            font-size: 11pt;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            border-bottom-width: 3px;
+        }
+
+        .subsummary.level-1 .subsummary-header {
+            font-size: 10pt;
+            border-bottom-width: 2px;
+            border-bottom-color: #666666;
+        }
+
+        .subsummary.level-2 .subsummary-header {
+            font-size: 9pt;
+            border-bottom-width: 1px;
+            border-bottom-color: #999999;
+        }
+
+        .field-name {
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .subsummary-display {
+            padding: 8px 0;
+            margin: 0 5px;
+            background-color: transparent;
+            border-bottom: none;
+            font-size: 9pt;
+            color: #000000;
+        }
+
+        .display-item {
+            margin-right: 15px;
+            display: inline-block;
+        }
+
+        .display-label {
+            font-weight: bold;
+            color: #000000;
+            text-transform: none;
+            font-size: 9pt;
+        }
+
+        .display-value {
+            color: #000000;
+            font-weight: normal;
+        }
+
+        .subsummary-content {
+            padding: 0;
+        }
+
+        .body-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            border: none;
+            font-family: Arial, sans-serif;
+            page-break-inside: auto;
+        }
+
+        .body-table th {
+            background-color: transparent;
+            color: #000000;
+            font-weight: bold;
+            padding: 6px 8px;
+            text-align: left;
+            font-size: 9pt;
+            border: none;
+            border-bottom: 1px solid #000000;
+            text-transform: uppercase;
+            letter-spacing: 0;
+        }
+
+        .body-table td {
+            padding: 4px 8px;
+            text-align: left;
+            font-size: 9pt;
+            border: none;
+            color: #000000;
+            background-color: transparent;
+        }
+
+        .body-table tr:nth-child(even) td {
+            background-color: transparent;
+        }
+
+        .body-table tr:hover td {
+            background-color: transparent;
+        }
+
+        .body-table tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+        }
+
+        .section-totals {
+            margin-top: 10px;
+            padding: 8px 0;
+            margin-left: 5px;
+            margin-right: 5px;
+            border: none;
+            border-radius: 0;
+            background-color: transparent;
+        }
+
+        .totals-title {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #000000;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #666666;
+            padding-bottom: 2px;
+            letter-spacing: 0;
+        }
+
+        .totals-grid {
+            display: block;
+        }
+
+        .total-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+            background-color: transparent;
+            border: none;
+            border-radius: 0;
+        }
+
+        .total-label {
+            font-weight: bold;
+            color: #000000;
+            text-transform: none;
+            font-size: 9pt;
+        }
+
+        .total-value {
+            font-weight: normal;
+            color: #000000;
+        }
+
+        .trailing-summary {
+            margin-top: 20px;
+            border: none;
+            border-radius: 0;
+            padding: 10px 0;
+            background-color: transparent;
+        }
+
+        .trailing-summary h3 {
+            font-size: 12pt;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #000000;
+            text-transform: uppercase;
+            text-align: center;
+            border-bottom: 2px solid #000000;
+            padding-bottom: 6px;
+            letter-spacing: 0.3px;
+        }
+
+        .trailing-summary table {
+            width: 100%;
+            border-collapse: collapse;
+            border: none;
+            border-radius: 0;
+            overflow: visible;
+        }
+
+        .trailing-summary td {
+            padding: 6px 0;
+            border: none;
+            font-size: 9pt;
+        }
+
+        .trailing-summary td:first-child {
+            background-color: transparent;
+            color: #000000;
+            font-weight: bold;
+            text-transform: uppercase;
+            width: 40%;
+        }
+
+        .trailing-summary td:last-child {
+            text-align: right;
+            font-weight: normal;
+            color: #000000;
+            background-color: transparent;
+        }
+
+        /* -------------------- Report Themes (Simplified) -------------------- */
+        .dynamic-report.classic-theme,
+        .dynamic-report.modern-theme,
+        .dynamic-report.elegant-theme {
+            font-family: Arial, sans-serif;
+            color: #000000;
+        }
+
+        /* -------------------- UI Controls & Layout -------------------- */
+        .main-div {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .gear-button {
+            background: #ffffff;
+            border: 1px solid #000000;
+            border-radius: 0;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000000;
+            box-shadow: none;
+        }
+
+        .gear-button:hover {
+            background: #f0f0f0;
+            border-color: #000000;
+            color: #000000;
+        }
+
+        .gear-button i {
+            font-size: 14px;
+            margin-right: 5px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 999;
+            display: none;
+        }
+
+        .modal-overlay.active {
+            display: block;
+        }
+
+        .controls-modal {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            bottom: 20px;
+            width: 280px;
+            background: #ffffff;
+            border: 1px solid #000000;
+            border-radius: 0;
+            padding: 20px;
+            z-index: 1000;
+            display: none;
+            overflow-y: auto;
+            box-shadow: none;
+        }
+
+        .controls-modal.active {
+            display: block;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #000000;
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #000000;
+        }
+
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 18px;
+            color: #000000;
+            cursor: pointer;
+            font-weight: normal;
+            padding: 4px;
+        }
+
+        .close-button:hover {
+            color: #333333;
+        }
+
+        .control-section {
+            margin-bottom: 15px;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #000000;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 0.3px;
+        }
+
+        .control-group,
+        .theme-group,
+        .format-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .control-button,
+        .theme-button,
+        .format-button {
+            background: #ffffff;
+            border: 1px solid #000000;
+            border-radius: 0;
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            text-align: center;
+            font-weight: normal;
+            color: #000000;
+            font-size: 10px;
+        }
+
+        .control-button:hover,
+        .theme-button:hover,
+        .format-button:hover {
+            background: #f0f0f0;
+            border-color: #000000;
+            color: #000000;
+        }
+
+        .theme-button.active,
+        .format-button.active {
+            background: #e0e0e0;
+            color: #000000;
+            border-color: #000000;
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .pagination-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: 1px solid #000000;
+            border-radius: 0;
+            background: #ffffff;
+            color: #000000;
+            font-size: 11px;
+            cursor: pointer;
+            font-weight: normal;
+            transition: all 0.2s ease;
+        }
+
+        .pagination-button:hover:not(:disabled) {
+            background: #f0f0f0;
+            border-color: #000000;
+            color: #000000;
+        }
+
+        .pagination-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .pagination-info {
+            font-size: 11px;
+            color: #000000;
+            font-weight: normal;
+        }
+
+        /* -------------------- Print Only Overrides -------------------- */
+        @media print {
+            body {
+                background-color: white !important;
+                padding: 0;
+                color: #000000;
+            }
+
+            .gear-button,
+            .modal-overlay,
+            .controls-modal,
+            .control-section,
+            .pagination-controls {
+                display: none !important;
+            }
+
+            .dynamic-report {
+                width: 180mm;
+                height: auto;
+                min-height: 297mm;
+                padding: 15mm 5mm;
+                margin: 0;
+                border: none;
+                border-radius: 0;
+                box-shadow: none;
+                display: block;
+                background-color: white;
+                color: #000000;
+            }
+
+            .title-header h1,
+            .title-header h2 {
+                color: #000000;
+            }
+
+            .subsummary-header {
+                background-color: transparent !important;
+                color: #000000 !important;
+            }
+
+            .body-table th {
+                background-color: transparent !important;
+                color: #000000 !important;
+            }
+
+            .body-table td {
+                background-color: transparent !important;
+                color: #000000 !important;
+            }
+
+            .trailing-summary td:first-child {
+                background-color: transparent !important;
+                color: #000000 !important;
+            }
+        }

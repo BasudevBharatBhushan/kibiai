@@ -101,12 +101,13 @@
   }
 
   .chat-textarea {
-    @apply w-full resize-none bg-white rounded-3xl border border-gray-200
-           pl-6 pr-4 py-3 shadow-sm text-sm leading-relaxed
-           focus:outline-none focus:ring-2 focus:ring-indigo-500
-           focus:border-transparent;
+    @apply w-full resize-none bg-transparent border-0
+           pl-1 pr-4 py-2 text-sm leading-6
+           outline-none focus:outline-none focus:ring-0;
            
     scrollbar-width: none; 
+    min-height: 24px;
+    height: auto;
   }
   
   .chat-textarea::-webkit-scrollbar {

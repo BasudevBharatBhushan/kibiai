@@ -35,6 +35,7 @@ function ReportPageContent() {
 
   // Function to fetch live preview
   const fetchLivePreview = useCallback(async (setupData: any, configData: any) => {
+    dispatch({ type: "SET_LOADING", payload: true });
     try {
       const res = await fetch("/api/generate-report", {
         method: "POST",
@@ -49,6 +50,8 @@ function ReportPageContent() {
       }
     } catch (e) {
       console.error("Preview Generation Failed", e);
+    } finally {
+      dispatch({ type: "SET_LOADING", payload: false });
     }
   }, [dispatch]);
 
@@ -193,7 +196,7 @@ function ReportPageContent() {
   const reportTitle =
     (state.setup as any)?.reportName ||
     (state.setup as any)?.report_name ||
-    "Report Builder";
+    "KiBiAI";
   const reportStateLabel = state.isLoading
     ? "Syncing report"
     : reportId
@@ -212,42 +215,37 @@ function ReportPageContent() {
       <header className="shrink-0 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur flex items-center justify-between gap-4 z-20">
         {/* Left: Title & Status */}
         <div className="flex flex-1 items-center gap-3 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50 text-indigo-600 shadow-sm">
-            <FileText className="h-5 w-5" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md">
+            <Sparkles className="h-5 w-5" />
           </div>
           
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="truncate text-sm font-bold tracking-tight text-slate-900">
-                {reportTitle}
+              <h1 className="text-lg font-black tracking-tighter text-indigo-700 italic">
+                KiBiAI
               </h1>
-              {reportId && (
-                <span className="hidden sm:inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                  ID: {reportId}
-                </span>
+              {reportTitle !== "KiBiAI" && (
+                <>
+                  <span className="text-slate-300 font-light">/</span>
+                  <span className="truncate text-sm font-medium text-slate-600">
+                    {reportTitle}
+                  </span>
+                </>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider ${
-                state.isLoading ? "text-indigo-600" : "text-emerald-600"
-              }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${
-                  state.isLoading ? "animate-pulse bg-indigo-500" : "bg-emerald-500"
-                }`} />
-                {reportStateLabel}
-              </span>
-            </div>
+            <span className={`text-[10px] font-medium tracking-wide ${
+              state.isLoading ? "text-indigo-600" : "text-slate-500"
+            }`}>
+              ReportId: {reportId || "New"}
+            </span>
           </div>
         </div>
 
-        {/* Center/Actions Portal */}
-        <div 
-          id="portal-report-actions"
-          className="flex-shrink-0 flex items-center justify-center"
-        />
-
-        {/* Right: Panels Toggle */}
-        <div className="flex flex-1 justify-end shrink-0 items-center">
+        <div className="flex flex-1 justify-end shrink-0 items-center gap-3">
+          <div 
+            id="portal-report-actions"
+            className="flex-shrink-0 flex items-center justify-center"
+          />
           <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-sm">
             <button
               onClick={toggleChat}
@@ -282,33 +280,67 @@ function ReportPageContent() {
 
       {/* ── BODY (the three-column panel layout) ── */}
       <div className="flex flex-1 overflow-hidden relative">
+        
+        {/* --- FULL PAGE SKELETON LOADER --- */}
+        {state.isLoading && (
+          <div className="absolute inset-0 z-[100] flex bg-white/90 backdrop-blur-[2px]">
+            {/* Column 1 Skeleton */}
+            <div className={`border-r border-slate-200 shrink-0 flex flex-col p-6 gap-6 transition-all duration-300 ${isChatOpen ? (isConfigOpen ? "w-[420px]" : "w-[600px]") : "w-0 opacity-0"}`}>
+               <div className="h-8 w-32 bg-slate-100 rounded-lg animate-pulse"></div>
+               <div className="space-y-4">
+                  <div className="h-20 w-full bg-slate-50 rounded-2xl animate-pulse"></div>
+                  <div className="h-12 w-3/4 bg-slate-50 rounded-2xl animate-pulse ml-auto"></div>
+                  <div className="h-24 w-5/6 bg-slate-50 rounded-2xl animate-pulse"></div>
+               </div>
+               <div className="mt-auto h-12 w-full bg-slate-100 rounded-3xl animate-pulse"></div>
+            </div>
+            
+            {/* Column 2 Skeleton */}
+            <div className="flex-1 bg-slate-50 p-8 flex justify-center">
+               <div className="w-full max-w-[210mm] aspect-[1/1.414] bg-white shadow-sm rounded-sm p-12 space-y-8 animate-pulse">
+                  <div className="flex justify-between items-center">
+                    <div className="h-6 w-32 bg-slate-100 rounded"></div>
+                    <div className="h-10 w-48 bg-slate-100 rounded"></div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="h-4 w-full bg-slate-100 rounded"></div>
+                    <div className="h-4 w-full bg-slate-100 rounded"></div>
+                    <div className="h-4 w-2/3 bg-slate-100 rounded"></div>
+                  </div>
+                  <div className="border-t border-slate-100 pt-8 space-y-4">
+                    <div className="h-32 w-full bg-slate-50 rounded"></div>
+                    <div className="h-32 w-full bg-slate-50 rounded"></div>
+                  </div>
+               </div>
+            </div>
+
+            {/* Column 3 Skeleton */}
+            <div className={`border-l border-slate-200 shrink-0 flex flex-col p-6 gap-6 transition-all duration-300 ${isConfigOpen ? (isChatOpen ? "w-[500px]" : "w-[600px]") : "w-0 opacity-0"}`}>
+               <div className="flex justify-between">
+                  <div className="h-10 w-32 bg-slate-100 rounded-lg animate-pulse"></div>
+                  <div className="h-10 w-24 bg-slate-100 rounded-lg animate-pulse"></div>
+               </div>
+               <div className="space-y-6 pt-4">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-24 w-full bg-slate-50 rounded-xl animate-pulse border border-slate-100"></div>
+                  ))}
+               </div>
+            </div>
+          </div>
+        )}
 
         {/* --- COLUMN 1: CHAT (Left) --- */}
         <div
-          className={`bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out shrink-0 ${
+          className={`bg-white border-r border-slate-200 flex flex-col transition-[width] duration-300 ease-in-out shrink-0 ${
             isChatOpen ? (isConfigOpen ? "w-[420px]" : "w-[600px] flex-1 max-w-[50%]") : "w-0 border-none overflow-hidden"
           }`}
         >
-
-          <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-hidden flex flex-col min-w-[420px]">
             {(!state.setup && state.isLoading) ? (
-               <div className="flex-1 flex flex-col p-6 gap-6 bg-white animate-in grow h-full">
-                  <div className="flex gap-3 items-end mt-4">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 animate-pulse shrink-0 border border-slate-200"></div>
-                      <div className="h-16 bg-slate-100 rounded-2xl rounded-bl-sm w-2/3 animate-pulse"></div>
-                  </div>
-                  <div className="flex gap-3 items-end justify-end">
-                      <div className="h-12 bg-indigo-50 rounded-2xl rounded-br-sm w-1/2 animate-pulse"></div>
-                  </div>
-                  <div className="flex gap-3 items-end">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 animate-pulse shrink-0 border border-slate-200"></div>
-                      <div className="h-24 bg-slate-100 rounded-2xl rounded-bl-sm w-4/5 animate-pulse"></div>
-                  </div>
-                  <div className="mt-auto h-12 bg-slate-50 border border-slate-100 rounded-3xl w-full animate-pulse mb-4"></div>
-               </div>
+               <div className="flex-1" /> // Spacer for the overlay
             ) : (
               <ModularChatbot
-                botName="Report Copilot"
+                botName="Kibiai Report Assistant"
                 instructionSet={REPORTS_SYSTEM_INSTRUCTION}
                 predefinedPrompt=""
                 formatPrompt={formatPrompt}
@@ -317,7 +349,7 @@ function ReportPageContent() {
                 onAssistantResponse={handleAssistantResponse}
                 onConversationIdChange={handleConversationIdChange}
                 className="h-full w-full flex flex-col bg-white overflow-hidden relative"
-                welcomeMessage="Hello! I am the Report Copilot. I can help you generate ERP reports from your data. What would you like to see?"
+                welcomeMessage="Hello! I am your KiBiAI Assistant. I can help you generate ERP reports from your data. What would you like to see?"
               />
             )}
           </div>
@@ -332,32 +364,13 @@ function ReportPageContent() {
 
         {/* --- COLUMN 3: CONFIGURATOR (Right) --- */}
         <div
-          className={`bg-white border-l border-slate-200 h-full shadow-xl z-10 transition-all duration-300 ease-in-out flex flex-col shrink-0 ${
+          className={`bg-white border-l border-slate-200 h-full shadow-xl z-10 transition-[width] duration-300 ease-in-out flex flex-col shrink-0 ${
             isConfigOpen ? (isChatOpen ? "w-[500px]" : "w-[600px] flex-1 max-w-[50%]") : "w-0 border-none overflow-hidden"
           }`}
         >
-
           {/* The actual builder content */}
-          <div className="flex-1 overflow-hidden relative flex flex-col">
-            {(!state.setup && state.isLoading) ? (
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
-                  <div className="flex justify-between items-center mb-6">
-                      <div className="h-6 bg-slate-200 rounded w-1/4 animate-pulse"></div>
-                      <div className="h-8 bg-slate-200 rounded w-24 animate-pulse"></div>
-                  </div>
-                  {[...Array(5)].map((_, i) => (
-                      <div key={i} className="flex flex-col gap-3 border bg-white p-5 rounded-lg shadow-sm border-slate-100">
-                          <div className="flex items-center gap-2">
-                             <div className="h-5 w-5 bg-slate-200 rounded animate-pulse"></div>
-                             <div className="h-5 bg-slate-200 rounded w-1/3 animate-pulse"></div>
-                          </div>
-                          <div className="h-10 bg-slate-50 rounded w-full animate-pulse border border-slate-100 mt-2"></div>
-                      </div>
-                  ))}
-              </div>
-            ) : (
-              <ReportConfigurator />
-            )}
+          <div className="flex-1 overflow-hidden relative flex flex-col min-w-[500px]">
+            <ReportConfigurator />
           </div>
         </div>
 

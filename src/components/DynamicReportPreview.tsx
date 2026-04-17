@@ -619,7 +619,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
             style={{ 
                 width: '210mm', 
                 minHeight: '297mm', 
-                padding: '15mm 10mm', 
+                padding: '5mm 10mm', 
                 boxSizing: 'border-box',
                 opacity: isCalculating ? 0.5 : 1
             }}

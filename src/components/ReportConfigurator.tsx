@@ -44,6 +44,7 @@ export function ReportConfigurator() {
 
     if (!state.fmRecordId) return;
     setIsSaving(true);
+    dispatch({ type: "SET_LOADING", payload: true });
 
     try {
       // 1. Save Config to DB
@@ -83,12 +84,12 @@ export function ReportConfigurator() {
       addToast("error", "Error", "Failed to update configuration.");
     } finally {
       setIsSaving(false);
+      dispatch({ type: "SET_LOADING", payload: false });
     }
   };
 
   // Loading and Setup States
-  if (state.isLoading) return <div className="p-8 text-center text-indigo-600 font-medium">Loading Configuration...</div>;
-  if (!state.setup) return <div className="p-8 text-center text-slate-400">Select a report to configure.</div>;
+  if (!state.setup) return <div className="p-8 text-center text-slate-400 font-sans">Select a report to configure.</div>;
 
   return (
     <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200 shadow-xl">
@@ -100,7 +101,6 @@ export function ReportConfigurator() {
            disabled={isSaving}
            className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2.5 rounded-md text-sm font-semibold shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
          >
-           {isSaving ? <RotateCw size={16} className="animate-spin" /> : null}
            {isSaving ? "Updating..." : "Update Report"}
          </button>
          

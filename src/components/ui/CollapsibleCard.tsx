@@ -40,18 +40,20 @@ export function CollapsibleCard({
           <h2>{title}</h2>
         </div>
 
-        {icon && (
+        <div className="flex items-center gap-3">
+          {icon && (
             <span className="text-indigo-600 bg-indigo-50 p-1.5 rounded-md">
               {icon}
             </span>
           )}
-        
-        {/* Action Button (Prevent bubble up) */}
-        {action && (
-          <div onClick={(e) => e.stopPropagation()}>
-            {action}
-          </div>
-        )}
+          
+          {/* Action Button (Prevent bubble up) */}
+          {action && (
+            <div onClick={(e) => e.stopPropagation()}>
+              {action}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Content */}
