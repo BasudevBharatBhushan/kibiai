@@ -280,23 +280,33 @@ function ReportPageContent() {
 
       {/* ── BODY (the three-column panel layout) ── */}
       <div className="flex flex-1 overflow-hidden relative">
-        
-        {/* --- FULL PAGE SKELETON LOADER --- */}
-        {state.isLoading && (
-          <div className="absolute inset-0 z-[100] flex bg-white/90 backdrop-blur-[2px]">
-            {/* Column 1 Skeleton */}
-            <div className={`border-r border-slate-200 shrink-0 flex flex-col p-6 gap-6 transition-all duration-300 ${isChatOpen ? (isConfigOpen ? "w-[420px]" : "w-[600px]") : "w-0 opacity-0"}`}>
-               <div className="h-8 w-32 bg-slate-100 rounded-lg animate-pulse"></div>
-               <div className="space-y-4">
-                  <div className="h-20 w-full bg-slate-50 rounded-2xl animate-pulse"></div>
-                  <div className="h-12 w-3/4 bg-slate-50 rounded-2xl animate-pulse ml-auto"></div>
-                  <div className="h-24 w-5/6 bg-slate-50 rounded-2xl animate-pulse"></div>
-               </div>
-               <div className="mt-auto h-12 w-full bg-slate-100 rounded-3xl animate-pulse"></div>
-            </div>
-            
-            {/* Column 2 Skeleton */}
-            <div className="flex-1 bg-slate-50 p-8 flex justify-center">
+
+        {/* --- COLUMN 1: CHAT (Left) --- */}
+        <div
+          className={`bg-white border-r border-slate-200 flex flex-col transition-[width] duration-300 ease-in-out shrink-0 ${
+            isChatOpen ? (isConfigOpen ? "w-[420px]" : "w-[600px] flex-1 max-w-[50%]") : "w-0 border-none overflow-hidden"
+          }`}
+        >
+          <div className="flex-1 overflow-hidden flex flex-col min-w-[420px]">
+            <ModularChatbot
+              botName="Kibiai Report Assistant"
+              instructionSet={REPORTS_SYSTEM_INSTRUCTION}
+              predefinedPrompt=""
+              formatPrompt={formatPrompt}
+              suggestedPrompts={reportPromptOptions}
+              initialConversationId={conversationId}
+              onAssistantResponse={handleAssistantResponse}
+              onConversationIdChange={handleConversationIdChange}
+              className="h-full w-full flex flex-col bg-white overflow-hidden relative"
+              welcomeMessage="Hello! I am your KiBiAI Assistant. I can help you generate ERP reports from your data. What would you like to see?"
+            />
+          </div>
+        </div>
+
+        {/* --- COLUMN 2: PREVIEW (Middle) --- */}
+        <div className={`bg-gray-100 p-4 overflow-auto flex justify-center items-start transition-all duration-300 relative ${(!isChatOpen && !isConfigOpen) ? 'flex-1' : 'flex-1 min-w-[500px]'}`}>
+          {state.isLoading ? (
+            <div className="w-full h-full flex justify-center py-8">
                <div className="w-full max-w-[210mm] aspect-[1/1.414] bg-white shadow-sm rounded-sm p-12 space-y-8 animate-pulse">
                   <div className="flex justify-between items-center">
                     <div className="h-6 w-32 bg-slate-100 rounded"></div>
@@ -313,53 +323,11 @@ function ReportPageContent() {
                   </div>
                </div>
             </div>
-
-            {/* Column 3 Skeleton */}
-            <div className={`border-l border-slate-200 shrink-0 flex flex-col p-6 gap-6 transition-all duration-300 ${isConfigOpen ? (isChatOpen ? "w-[500px]" : "w-[600px]") : "w-0 opacity-0"}`}>
-               <div className="flex justify-between">
-                  <div className="h-10 w-32 bg-slate-100 rounded-lg animate-pulse"></div>
-                  <div className="h-10 w-24 bg-slate-100 rounded-lg animate-pulse"></div>
-               </div>
-               <div className="space-y-6 pt-4">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-24 w-full bg-slate-50 rounded-xl animate-pulse border border-slate-100"></div>
-                  ))}
-               </div>
+          ) : (
+            <div className={`w-full transition-all duration-300 max-w-full flex justify-center`}>
+              <ReportPreview />
             </div>
-          </div>
-        )}
-
-        {/* --- COLUMN 1: CHAT (Left) --- */}
-        <div
-          className={`bg-white border-r border-slate-200 flex flex-col transition-[width] duration-300 ease-in-out shrink-0 ${
-            isChatOpen ? (isConfigOpen ? "w-[420px]" : "w-[600px] flex-1 max-w-[50%]") : "w-0 border-none overflow-hidden"
-          }`}
-        >
-          <div className="flex-1 overflow-hidden flex flex-col min-w-[420px]">
-            {(!state.setup && state.isLoading) ? (
-               <div className="flex-1" /> // Spacer for the overlay
-            ) : (
-              <ModularChatbot
-                botName="Kibiai Report Assistant"
-                instructionSet={REPORTS_SYSTEM_INSTRUCTION}
-                predefinedPrompt=""
-                formatPrompt={formatPrompt}
-                suggestedPrompts={reportPromptOptions}
-                initialConversationId={conversationId}
-                onAssistantResponse={handleAssistantResponse}
-                onConversationIdChange={handleConversationIdChange}
-                className="h-full w-full flex flex-col bg-white overflow-hidden relative"
-                welcomeMessage="Hello! I am your KiBiAI Assistant. I can help you generate ERP reports from your data. What would you like to see?"
-              />
-            )}
-          </div>
-        </div>
-
-        {/* --- COLUMN 2: PREVIEW (Middle) --- */}
-        <div className={`bg-gray-100 p-4 overflow-auto flex justify-center items-start transition-all duration-300 ${(!isChatOpen && !isConfigOpen) ? 'flex-1' : 'flex-1 min-w-[500px]'}`}>
-          <div className={`w-full transition-all duration-300 max-w-full flex justify-center`}>
-            <ReportPreview />
-          </div>
+          )}
         </div>
 
         {/* --- COLUMN 3: CONFIGURATOR (Right) --- */}
