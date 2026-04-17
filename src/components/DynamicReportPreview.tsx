@@ -183,6 +183,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
   
   // Modal State
   const [showExpandedModal, setShowExpandedModal] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   // Portal Target State
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
@@ -448,6 +449,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
   };
 
   const handleExportExcel = async () => {
+     setIsExportingExcel(true);
      const tables = document.querySelectorAll('table.body-table') as NodeListOf<HTMLTableElement>;
      const sections: any[] = [];
      
@@ -476,7 +478,9 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
          a.click();
          a.remove();
      } catch (err: any) {
-         alert("Export Failed: " + err.message);
+         console.error("Export Failed:", err);
+     } finally {
+         setIsExportingExcel(false);
      }
   };
 
@@ -547,9 +551,10 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
 
               <button 
                   onClick={handleExportExcel}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded shadow-sm transition-colors"
+                  disabled={isExportingExcel}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                  <FileSpreadsheet size={13} /> Excel
+                  <FileSpreadsheet size={13} /> {isExportingExcel ? 'Exporting...' : 'Excel'}
               </button>
           </div>
         </div>,
@@ -601,9 +606,10 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
 
               <button 
                   onClick={handleExportExcel}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded shadow-sm transition-colors"
+                  disabled={isExportingExcel}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                  <FileSpreadsheet size={13} /> Excel
+                  <FileSpreadsheet size={13} /> {isExportingExcel ? 'Exporting...' : 'Excel'}
               </button>
           </div>
         </div>
@@ -640,6 +646,22 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
           htmlContent={getRawHtml()} 
           onClose={() => setShowExpandedModal(false)} 
         />
+      )}
+
+      {/* --- EXPORT TOAST LOADER --- */}
+      {isExportingExcel && (
+         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[10000] animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="bg-slate-900/90 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10">
+               <div className="relative flex h-5 w-5 justify-center items-center">
+                  <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-20"></span>
+               </div>
+               <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-slate-100">Generating Excel Report</span>
+                  <span className="text-[10px] text-slate-400 font-medium">Please wait a moment...</span>
+               </div>
+            </div>
+         </div>
       )}
 
     </div>
