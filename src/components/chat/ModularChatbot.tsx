@@ -51,6 +51,10 @@ export interface ModularChatbotProps {
   onAssistantResponse?: (parsedResponse: string, rawResponse: any) => void;
   onConversationIdChange?: (id: string | null) => void;
   className?: string;
+  /** When set, auto-populates the input with this text and submits it */
+  pendingInput?: string;
+  /** Called after pendingInput has been consumed (so parent can clear it) */
+  onPendingInputConsumed?: () => void;
 }
 
 export function ModularChatbot({
@@ -65,7 +69,9 @@ export function ModularChatbot({
   initialConversationId = null,
   onAssistantResponse,
   onConversationIdChange,
-  className
+  className,
+  pendingInput,
+  onPendingInputConsumed,
 }: ModularChatbotProps) {
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -82,6 +88,105 @@ export function ModularChatbot({
       setMessages([]); // Clear messages to trigger fetch
     }
   }, [initialConversationId]);
+
+  // Auto-send when a suggestion chip is clicked from parent
+  const pendingInputRef = useRef<string>("");
+  useEffect(() => {
+    if (!pendingInput || loading) return;
+    pendingInputRef.current = pendingInput;
+    setInput(pendingInput);
+    if (onPendingInputConsumed) onPendingInputConsumed();
+    // Defer so React flushes the input state before the send fires
+    setTimeout(() => {
+      const textToSend = pendingInputRef.current;
+      if (!textToSend.trim()) return;
+      setMessages((prev) => [...prev, { role: "user", text: textToSend }]);
+      setInput("");
+      setLoading(true);
+      setShowPrompts(false);
+      pendingInputRef.current = "";
+
+      (async () => {
+        try {
+          const finalPrompt = formatPrompt ? formatPrompt(textToSend) : formatUserPrompt(textToSend);
+          const payload = {
+            conversation_id: conversationId,
+            instruction_set: instructionSet,
+            predefined_prompt: predefinedPrompt,
+            metadata: conversationMetadata || {},
+            user_prompt: finalPrompt,
+          };
+          const res = await apiSendMessage(payload);
+          if (res.conversation_id !== conversationId) {
+            setConversationId(res.conversation_id);
+            if (onConversationIdChange) onConversationIdChange(res.conversation_id);
+          }
+          const rawResponseText = res.response ?? "";
+          let displayedText = rawResponseText;
+          try {
+            let jsonStr = rawResponseText;
+            const match = rawResponseText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+            if (match) jsonStr = match[1];
+            else { const pm = rawResponseText.match(/(\{[\s\S]*\})/); if (pm) jsonStr = pm[1]; }
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.response_to_user) displayedText = parsed.response_to_user;
+          } catch (_) {}
+          if (displayedText) {
+            setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);
+            if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
+          }
+        } catch (error: any) {
+          console.error("Failed to send pending message", error);
+          
+          // Check for invalid conversation ID error (e.g., legacy thread_ vs new conv_ IDs)
+          if (error.message && error.message.includes("Invalid 'conversation_id'")) {
+            console.warn("[Chatbot] Invalid conversation ID detected. Clearing and retrying with new thread...");
+            setConversationId(null);
+            if (onConversationIdChange) onConversationIdChange(null);
+            
+            // Re-trigger after state update (the pendingInput effect will run again because pendingInput is still set)
+            // But we need to make sure we don't loop forever.
+            // Actually, we can just call handleSend() with null conversation ID here.
+            try {
+               const retryPayload = {
+                conversation_id: null,
+                instruction_set: instructionSet,
+                predefined_prompt: predefinedPrompt,
+                metadata: conversationMetadata || {},
+                user_prompt: formatPrompt ? formatPrompt(textToSend) : formatUserPrompt(textToSend),
+              };
+              const res = await apiSendMessage(retryPayload);
+              setConversationId(res.conversation_id);
+              if (onConversationIdChange) onConversationIdChange(res.conversation_id);
+              
+              const rawResponseText = res.response ?? "";
+              let displayedText = rawResponseText;
+              try {
+                let jsonStr = rawResponseText;
+                const match = rawResponseText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+                if (match) jsonStr = match[1];
+                else { const pm = rawResponseText.match(/(\{[\s\S]*\})/); if (pm) jsonStr = pm[1]; }
+                const parsed = JSON.parse(jsonStr);
+                if (parsed.response_to_user) displayedText = parsed.response_to_user;
+              } catch (_) {}
+              if (displayedText) {
+                setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);
+                if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
+              }
+              return; // Success on retry
+            } catch (retryError) {
+              console.error("Retry failed:", retryError);
+            }
+          }
+          
+          setMessages((prev) => [...prev, { role: "assistant", text: "Sorry, I encountered an error. Please try again." }]);
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }, 50);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInput]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -133,9 +238,9 @@ export function ModularChatbot({
     setLoading(true);
     setShowPrompts(false);
 
-    try {
-      const finalPrompt = formatPrompt ? formatPrompt(userText) : formatUserPrompt(userText);
+    const finalPrompt = formatPrompt ? formatPrompt(userText) : formatUserPrompt(userText);
 
+    try {
       const payload = {
         conversation_id: conversationId,
         instruction_set: instructionSet,
@@ -179,8 +284,51 @@ export function ModularChatbot({
           onAssistantResponse(displayedText, rawResponseText);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to send message", error);
+
+      // Check for invalid conversation ID error (e.g., legacy thread_ vs new conv_ IDs)
+      if (error.message && error.message.includes("Invalid 'conversation_id'")) {
+        console.warn("[Chatbot] Invalid conversation ID detected. Retrying with new thread...");
+        setConversationId(null);
+        if (onConversationIdChange) onConversationIdChange(null);
+
+        try {
+          const retryPayload = {
+            conversation_id: null,
+            instruction_set: instructionSet,
+            predefined_prompt: predefinedPrompt,
+            metadata: conversationMetadata || {},
+            user_prompt: finalPrompt,
+          };
+          const res = await apiSendMessage(retryPayload);
+          setConversationId(res.conversation_id);
+          if (onConversationIdChange) onConversationIdChange(res.conversation_id);
+
+          const rawResponseText = res.response ?? "";
+          let displayedText = rawResponseText;
+          try {
+            let jsonStr = rawResponseText;
+            const match = rawResponseText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+            if (match) jsonStr = match[1];
+            else {
+              const plainMatch = rawResponseText.match(/(\{[\s\S]*\})/);
+              if (plainMatch) jsonStr = plainMatch[1];
+            }
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.response_to_user) displayedText = parsed.response_to_user;
+          } catch (err) {}
+
+          if (displayedText) {
+            setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);
+            if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
+          }
+          return; // Success on retry
+        } catch (retryError) {
+          console.error("Retry failed:", retryError);
+        }
+      }
+
       setMessages((prev) => [
         ...prev,
         {

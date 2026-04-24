@@ -33,8 +33,8 @@ function ReportPageContent() {
   const [isConfigOpen, setIsConfigOpen] = useState(true);
   const [conversationId, setConversationId] = useState<string | null>(null);
 
-  // Function to fetch live preview
-  const fetchLivePreview = useCallback(async (setupData: any, configData: any) => {
+  // Function to fetch live preview — also persists snapshot to DB when fmRecordId is available
+  const fetchLivePreview = useCallback(async (setupData: any, configData: any, fmRecordId?: string | null) => {
     dispatch({ type: "SET_LOADING", payload: true });
     try {
       const res = await fetch("/api/generate-report", {
@@ -45,8 +45,19 @@ function ReportPageContent() {
       const result = await res.json();
       
       if(result.status === "ok" && result.report_structure_json) {
-         // Store just the array part
          dispatch({ type: "SET_REPORT_PREVIEW", payload: result.report_structure_json });
+
+         // Persist snapshot to DB so next load doesn't show stale data
+         if (fmRecordId) {
+           fetch("/api/report-config", {
+             method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify({
+               fmRecordId,
+               reportStructuredData: result.report_structure_json
+             })
+           }).catch(e => console.error("Failed to persist report snapshot:", e));
+         }
       }
     } catch (e) {
       console.error("Preview Generation Failed", e);
@@ -109,14 +120,6 @@ function ReportPageContent() {
     try {
       const parsedJson = JSON.parse(jsonString);
       if (parsedJson.db_defination || parsedJson.report_columns) {
-        if (state.fmRecordId) {
-           await fetch("/api/report-config", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ fmRecordId: state.fmRecordId, config: parsedJson })
-           });
-        }
-        
         const safeConfig = {
           ...state.config,
           report_header: parsedJson.report_header || state.config.report_header || "",
@@ -130,9 +133,19 @@ function ReportPageContent() {
           summary_fields: parsedJson.summary_fields || state.config.summary_fields || [],
           custom_calculated_fields: parsedJson.custom_calculated_fields || state.config.custom_calculated_fields || []
         };
-        
+
+        // Save config to DB first (fire & forget)
+        if (state.fmRecordId) {
+          fetch("/api/report-config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fmRecordId: state.fmRecordId, config: parsedJson })
+          }).catch(e => console.error("Failed to save AI config:", e));
+        }
+
         dispatch({ type: "LOAD_INITIAL_CONFIG", payload: safeConfig });
-        await fetchLivePreview(state.setup, safeConfig);
+        // Pass fmRecordId so fetchLivePreview can persist the generated snapshot too
+        await fetchLivePreview(state.setup, safeConfig, state.fmRecordId);
       }
     } catch(e) {}
   }, [state.fmRecordId, state.setup, state.config, dispatch, fetchLivePreview]);

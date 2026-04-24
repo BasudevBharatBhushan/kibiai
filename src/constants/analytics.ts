@@ -64,6 +64,8 @@ export const CHART_TYPE_MAP: Record<string, string> = {
 export const API_ROUTES = {
   DASHBOARD_SAVE: '/api/dashboard',
   CHART_SAVE: '/api/charts/save',
+  CHART_CONFIG: '/api/charts/chart-config',
+  CHART_DATA: '/api/charts/data',
 } as const;
 
 // 7. AI Configuration

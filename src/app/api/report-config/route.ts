@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
     const data = await response.json();
 
-    if (!data.records || data.records.length === 0) {
+    if (!data?.records || !Array.isArray(data.records) || data.records.length === 0) {
       return NextResponse.json({ error: "Report not found in FM" }, { status: 404 });
     }
 
@@ -87,7 +87,7 @@ export async function GET(request: Request) {
 // --- POST: Update Report Configuration ---
 export async function POST(request: Request) {
   try {
-    const { fmRecordId, config, threadId } = await request.json();
+    const { fmRecordId, config, threadId, reportStructuredData } = await request.json();
 
     if (!fmRecordId) {
       return NextResponse.json({ error: "Missing Data" }, { status: 400 });
@@ -99,6 +99,9 @@ export async function POST(request: Request) {
     }
     if (threadId !== undefined) {
       payloadRecord["MultiTableReport::OpenAI_AssistantThreadID"] = threadId;
+    }
+    if (reportStructuredData !== undefined) {
+      payloadRecord["MultiTableReport::ReportStructuredData"] = JSON.stringify(reportStructuredData);
     }
 
     // 1. Construct FileMaker Update

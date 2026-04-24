@@ -20,7 +20,8 @@ export async function sendMessage(payload: SendMessagePayload) {
   });
 
   if (!res.ok) {
-    throw new Error("Failed to send message");
+    const errorText = await res.text();
+    throw new Error(errorText || "Failed to send message");
   }
 
   return res.json() as Promise<{

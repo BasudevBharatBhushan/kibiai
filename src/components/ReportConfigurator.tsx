@@ -36,7 +36,6 @@ export function ReportConfigurator() {
     // Validate Config Before Saving
     const validation = validateConfig(state.config);
 
-
     if (!validation.isValid) {
       addToast("error", "Validation Error", validation.error || "Invalid Config");
       return;
@@ -47,19 +46,7 @@ export function ReportConfigurator() {
     dispatch({ type: "SET_LOADING", payload: true });
 
     try {
-      // 1. Save Config to DB
-      const saveRes = await fetch("/api/report-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fmRecordId: state.fmRecordId,
-          config: state.config
-        })
-      });
-
-      if (!saveRes.ok) throw new Error("Update failed");
-
-      // 2. Call Generation API for Live Preview
+      // 1. Generate live preview first
       const genRes = await fetch("/api/generate-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -70,10 +57,26 @@ export function ReportConfigurator() {
       });
 
       const result = await genRes.json();
-      
+
+      // 2. Save config + generated snapshot to DB in one call
+      const saveRes = await fetch("/api/report-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fmRecordId: state.fmRecordId,
+          config: state.config,
+          // persist snapshot only if generation succeeded
+          ...(result.status === "ok" && result.report_structure_json
+            ? { reportStructuredData: result.report_structure_json }
+            : {})
+        })
+      });
+
+      if (!saveRes.ok) throw new Error("Save to DB failed");
+
       if (result.status === "ok" && result.report_structure_json) {
         dispatch({ type: "SET_REPORT_PREVIEW", payload: result.report_structure_json });
-        addToast("success", "Success", "Configuration updated and preview generated.");
+        addToast("success", "Success", "Configuration saved and preview updated.");
       } else {
         console.warn("Generation Warning:", result);
         addToast("warning", "Warning", "Configuration saved but preview generation had issues.");

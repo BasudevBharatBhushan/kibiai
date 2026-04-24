@@ -53,7 +53,11 @@ async function fmPost<T>(payload: unknown): Promise<T> {
     throw new Error(`[FM API] ${res.status} ${await res.text()}`);
   }
 
-  return res.json();
+  const data = await res.json();
+  if (data === null) {
+    console.warn(`[FM API] Received null response for payload:`, JSON.stringify(payload));
+  }
+  return data;
 }
 
 // --- Fetch Functions ---
@@ -78,7 +82,7 @@ export async function fetchChartConfiguration(
     const data = await fmPost<FMResponse>(payload);
     // console.log(data)
     return (
-      (data.records
+      (data?.records
         ?.map(parseChartRecord)
         .filter(Boolean) as ReportChartSchema[]) ?? []
     );
@@ -123,7 +127,7 @@ export async function fetchReportData(
 
   try {
     const data = await fmPost<any>(payload);
-    const record = data.records?.[0];
+    const record = data?.records?.[0];
 
     if (!record?.ReportStructuredData) {
       return emptyReport();

@@ -9,7 +9,6 @@ import React, {
   useMemo, 
   useRef,
   ReactNode,
-  use
 } from 'react';
 import { Layout } from 'react-grid-layout';
 
@@ -42,8 +41,9 @@ interface DashboardContextType {
   layoutMode: LayoutMode;
   isEditOpen: boolean;
   isMounted: boolean;
-  currentLayouts: { lg: Layout[] }; // For React-Grid-Layout
+  currentLayouts: { lg: Layout[] };
   reportRecordId?: string;
+  dataset: any[]; // Exposed report rows for AI chart processing
 
   // Actions
   setEditOpen: (isOpen: boolean) => void;
@@ -54,6 +54,10 @@ interface DashboardContextType {
   removeChart: (id: string) => void;
   updateChartKind: (id: string, kind: ChartKind) => void;
   
+  // AI Chart Injection
+  addNewChartFromAI: (schema: ReportChartSchema) => void;
+  addMultipleChartsFromAI: (schemas: ReportChartSchema[]) => void;
+
   // Layout Operations
   updateLayout: (newLayout: Layout[]) => void; 
   applyLayoutPreset: (mode: LayoutMode) => void; 
@@ -67,6 +71,7 @@ interface DashboardProviderProps {
   initialCanvasState?: any; 
   initialLayoutMode?: string;   
   reportRecordId?: string;
+  onNewChart?: (schema: ReportChartSchema) => void;
 }
 
 // --- Helpers ---
@@ -87,7 +92,8 @@ export function DashboardProvider({
   initialDataset = [], 
   initialCanvasState, 
   initialLayoutMode = 'grid',
-  reportRecordId 
+  reportRecordId,
+  onNewChart,
 }: DashboardProviderProps) {
   
   // --- STATE ---
@@ -96,6 +102,7 @@ export function DashboardProvider({
   const [activeLayout, setActiveLayout] = useState<LayoutMode>(normalizeLayoutMode(initialLayoutMode));
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [dataset, setDataset] = useState<any[]>(initialDataset);
 
   // Refs
   const hasInitialized = useRef(false);
@@ -115,12 +122,11 @@ export function DashboardProvider({
   }, [activeCharts]);
 
   // --- INITIALIZATION ---
-  
 
-useEffect(() => {
-  setIsMounted(true);
+  useEffect(() => {
+    setIsMounted(true);
 
-  if (hasInitialized.current) return;
+    if (hasInitialized.current) return;
 
     console.log("[Ctx] Init START", { 
       schemaCount: initialSchemas?.length, 
@@ -202,8 +208,16 @@ useEffect(() => {
       console.log("[Ctx] Init COMPLETE", { finalCount: finalCharts.length, visibleCount: initialVisibleIds.size });
     } else {
       console.warn("[Ctx] Skipping init: No schemas provided");
+      hasInitialized.current = true;
     }
-}, [initialSchemas, initialDataset, initialCanvasState, initialLayoutMode]);
+  }, [initialSchemas, initialDataset, initialCanvasState, initialLayoutMode]);
+
+  // Keep dataset in sync when initialDataset changes (e.g. after client fetch)
+  useEffect(() => {
+    if (initialDataset && initialDataset.length > 0) {
+      setDataset(initialDataset);
+    }
+  }, [initialDataset]);
 
   // --- AUTO-SAVE ---
   const triggerAutoSave = useDebouncedCallback(
@@ -228,7 +242,7 @@ useEffect(() => {
 
       saveDashboardState(reportRecordId, payload);
     }, 
-    500 // Delay
+    500
   );
 
   // --- ACTIONS ---
@@ -367,6 +381,76 @@ useEffect(() => {
     }
   };
 
+  // 6. Add a single AI-generated chart schema into the dashboard
+  const addNewChartFromAI = useCallback((schema: ReportChartSchema) => {
+    const processed = processData(dataset, [schema]);
+    if (!processed.length) return;
+
+    setAllCharts(prev => {
+      const newChart = processed[0];
+      const colorIndex = prev.length % COLOR_PALETTES.length;
+      const defaultW = PROCESSOR_DEFAULTS.LAYOUT_WIDTH;
+      const defaultH = PROCESSOR_DEFAULTS.LAYOUT_HEIGHT;
+
+      // Place after last active chart
+      const activeCount = prev.filter(c => visibleChartIds.has(c.id)).length;
+      const chartWithLayout: ChartConfig = {
+        ...newChart,
+        colors: COLOR_PALETTES[colorIndex],
+        layout: {
+          x: (activeCount % 2) * defaultW,
+          y: Math.floor(activeCount / 2) * defaultH,
+          w: defaultW,
+          h: newChart.kind === 'insight' ? 8 : defaultH,
+          i: newChart.id,
+        },
+      };
+
+      const next = [...prev, chartWithLayout];
+      const nextIds = new Set([...Array.from(visibleChartIds), newChart.id]);
+      setVisibleChartIds(nextIds);
+      triggerAutoSave(next, nextIds, activeLayout);
+      return next;
+    });
+
+    if (onNewChart) onNewChart(schema);
+  }, [dataset, visibleChartIds, activeLayout, triggerAutoSave, onNewChart]);
+
+  // 7. Add multiple AI-generated charts at once (Scenario 4: report analysis)
+  const addMultipleChartsFromAI = useCallback((schemas: ReportChartSchema[]) => {
+    if (!schemas.length) return;
+    const processed = processData(dataset, schemas);
+    if (!processed.length) return;
+
+    setAllCharts(prev => {
+      const defaultW = PROCESSOR_DEFAULTS.LAYOUT_WIDTH;
+      const defaultH = PROCESSOR_DEFAULTS.LAYOUT_HEIGHT;
+      const startIdx = prev.filter(c => visibleChartIds.has(c.id)).length;
+
+      const newCharts: ChartConfig[] = processed.map((chart, i) => {
+        const colorIndex = (prev.length + i) % COLOR_PALETTES.length;
+        const idx = startIdx + i;
+        return {
+          ...chart,
+          colors: COLOR_PALETTES[colorIndex],
+          layout: {
+            x: (idx % 2) * defaultW,
+            y: Math.floor(idx / 2) * defaultH,
+            w: defaultW,
+            h: chart.kind === 'insight' ? 8 : defaultH,
+            i: chart.id,
+          },
+        };
+      });
+
+      const next = [...prev, ...newCharts];
+      const nextIds = new Set([...Array.from(visibleChartIds), ...newCharts.map(c => c.id)]);
+      setVisibleChartIds(nextIds);
+      triggerAutoSave(next, nextIds, activeLayout);
+      return next;
+    });
+  }, [dataset, visibleChartIds, activeLayout, triggerAutoSave]);
+
   // --- VALUE ---
   
   const value = {
@@ -378,6 +462,7 @@ useEffect(() => {
     isMounted,
     currentLayouts,
     reportRecordId,
+    dataset,
 
     // Actions
     setEditOpen: setIsEditOpen,
@@ -385,6 +470,8 @@ useEffect(() => {
     addChart,
     removeChart,
     updateChartKind,
+    addNewChartFromAI,
+    addMultipleChartsFromAI,
     updateLayout,
     applyLayoutPreset,
     resetDashboard

@@ -150,7 +150,7 @@ export default function PaymentSection({
       console.log("Raw FileMaker Plans Response:", data);
 
       let list = [];
-      if (data.records && Array.isArray(data.records)) {
+      if (data?.records && Array.isArray(data.records)) {
         list = data.records.map((r: any) => (r.fieldData ? r.fieldData : r));
       } else if (data.response?.data) {
         list = data.response.data.map((r: any) => r.fieldData);
