@@ -43,3 +43,14 @@ next-env.d.ts
 openspec/
 # Added by code-review-graph
 .code-review-graph/
+
+# Temporary Scripts
+/tmp
+/temp
+tests/
+test-results/
+graphify-out/
+html_designs/
+agent-code/
+.agents/
+

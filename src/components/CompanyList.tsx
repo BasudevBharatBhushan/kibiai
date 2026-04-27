@@ -11,12 +11,15 @@ import {
 } from "lucide-react";
 
 interface Company {
-  recordId: string;
-  CompanyID: string;
-  CompanyAuthID: string;
-  CompanyPassword: string;
-  LicenseID: string;
-  CompanyName?: string;
+  company_id: string;
+  company_name: string;
+  plan_code: string;
+  status: string;
+  license_key?: string;
+  company_logo?: string;
+  company_address?: string;
+  created_on: string;
+  superadmins: { userId: string; email: string; fullName: string }[];
 }
 
 interface CompanyListProps {
@@ -42,20 +45,30 @@ export default function CompanyList({
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyEmail, setNewCompanyEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const handleAddCompany = async () => {
-    if (!newCompanyName.trim() || !newPassword.trim()) {
-      setError("Company name and password are required");
+    if (!newCompanyName.trim() || !adminEmail.trim() || !adminPassword.trim()) {
+      setError("Company name, email, and password are required");
+      return;
+    }
+
+    // Check for duplicate names locally first
+    const isDuplicate = companies.some(c => c.company_name.toLowerCase() === newCompanyName.toLowerCase());
+    if (isDuplicate) {
+      setError("A company with this name already exists");
       return;
     }
 
     setSubmitting(true);
     const result = await onCreateCompany(
       newCompanyName,
-      newCompanyEmail,
-      newPassword
+      adminEmail,
+      adminPassword
     );
     setSubmitting(false);
 
@@ -64,6 +77,9 @@ export default function CompanyList({
       setNewCompanyName("");
       setNewCompanyEmail("");
       setNewPassword("");
+      setAdminName("");
+      setAdminEmail("");
+      setAdminPassword("");
       setError("");
     } else {
       setError(result.error || "Failed to create company");
@@ -75,6 +91,9 @@ export default function CompanyList({
     setNewCompanyName("");
     setNewCompanyEmail("");
     setNewPassword("");
+    setAdminName("");
+    setAdminEmail("");
+    setAdminPassword("");
     setError("");
   };
 
@@ -108,7 +127,7 @@ export default function CompanyList({
               New Company Details
             </h3>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-700 mb-1 block">
                   Company Name
@@ -123,12 +142,12 @@ export default function CompanyList({
 
               <div>
                 <label className="text-xs font-medium text-gray-700 mb-1 block">
-                  Company Email
+                  Superadmin Email
                 </label>
                 <input
                   type="email"
-                  value={newCompanyEmail}
-                  onChange={(e) => setNewCompanyEmail(e.target.value)}
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
                   className="w-full px-3 py-2 border-2 border-gray-200 rounded-md text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-300 placeholder-gray-500"
                 />
               </div>
@@ -139,8 +158,8 @@ export default function CompanyList({
                 </label>
                 <input
                   type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
                   className="w-full px-3 py-2 border-2 border-gray-200 rounded-md text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-300 placeholder-gray-500"
                 />
               </div>
@@ -191,20 +210,20 @@ export default function CompanyList({
         ) : (
           companies.map((company) => (
             <button
-              key={company.recordId}
+              key={company.company_id}
               onClick={() => onSelectCompany(company)}
               className={`w-full text-left p-3 border rounded-md transition-all ${
-                selectedCompany?.recordId === company.recordId
+                selectedCompany?.company_id === company.company_id
                   ? "border-indigo-300 bg-indigo-50"
                   : "border-gray-200 bg-white hover:bg-gray-50"
               }`}
             >
               <p className="flex items-center gap-2 text-sm font-medium text-gray-900 truncate">
                 <Building2 className="w-4 h-4 text-indigo-600" />
-                {company.CompanyName || "Unnamed Company"}
+                {company.company_name || "Unnamed Company"}
               </p>
               <p className="text-xs text-gray-600 truncate mt-0.5">
-                {company.CompanyAuthID || company.CompanyID}
+                {company.company_id}
               </p>
             </button>
           ))

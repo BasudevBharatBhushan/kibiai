@@ -8,17 +8,16 @@ import PaymentSection from "@/components/PaymentSection";
 import Logo from "../../assets/kibiai.png";
 import Image from "next/image";
 
-// -------------------- STATIC LOGIN DATA --------------------
-const STATIC_ADMIN_EMAIL = "priya@kibizsystems.com";
-const STATIC_ADMIN_PASSWORD = "kibiz";
-
 interface Company {
-  recordId: string;
-  CompanyID: string;
-  CompanyAuthID: string;
-  CompanyPassword: string;
-  LicenseID: string;
-  CompanyName?: string;
+  company_id: string;
+  company_name: string;
+  plan_code: string;
+  status: string;
+  license_key?: string;
+  company_logo?: string;
+  company_address?: string;
+  created_on: string;
+  superadmins: { userId: string; email: string; fullName: string }[];
 }
 
 interface License {
@@ -155,24 +154,70 @@ const PLAN_DEFAULTS: Record<string, Partial<License>> = {
 export default function AdminPage() {
   // -------------------- LOGIN HOOKS --------------------
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const handleLogin = () => {
-    // TODO: Replace with API login later
-    if (email === STATIC_ADMIN_EMAIL && password === STATIC_ADMIN_PASSWORD) {
-      setIsLoggedIn(true);
-      setLoginError("");
-    } else {
-      setLoginError("Invalid credentials");
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const response = await fetch("/api/auth/me");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user.accountType === 'platform_admin') {
+            setIsLoggedIn(true);
+          }
+        }
+      } catch (err) {
+        console.error("Session check failed:", err);
+      } finally {
+        setSessionChecked(true);
+      }
+    };
+    checkSession();
+  }, []);
+
+  const handleLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginError("");
+    
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        if (data.user.accountType === 'platform_admin') {
+          setIsLoggedIn(true);
+        } else {
+          await fetch("/api/auth/logout", { method: "POST" });
+          setLoginError("Access denied. You are not a Platform Admin.");
+        }
+      } else {
+        setLoginError(data.error || "Login failed");
+      }
+    } catch (err) {
+      setLoginError("An unexpected error occurred");
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setEmail("");
-    setPassword("");
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      setIsLoggedIn(false);
+      setEmail("");
+      setPassword("");
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
   };
 
   // -------------------- DASHBOARD HOOKS (Always stay here to avoid hook order issues) --------------------
@@ -184,7 +229,6 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [globalLoading, setGlobalLoading] = useState(false);
 
-  const ADMIN_TOKEN = process.env.NEXT_PUBLIC_ADMIN_TOKEN || "";
 
   const fetchCompanies = async () => {
     try {
@@ -193,9 +237,18 @@ export default function AdminPage() {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_TOKEN}`,
         },
       });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Server error (${response.status}): ${text || response.statusText}`);
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Invalid response format from server (expected JSON)");
+      }
 
       const data = await response.json();
 
@@ -215,28 +268,20 @@ export default function AdminPage() {
     }
   };
 
-  const fetchLicense = async (companyAuthId: string, password: string) => {
+  const fetchLicense = async (company_id: string) => {
     try {
       setLicenseLoading(true);
-      const credentials = btoa(`${companyAuthId}:${password}`);
-      const response = await fetch("/api/license/fetch", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Basic ${credentials}`,
-        },
-        body: JSON.stringify({}),
-      });
+      const response = await fetch(`/api/license?company_id=${company_id}`);
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to fetch license");
+      }
 
       const data = await response.json();
-
-      if (data.success) {
-        setLicense(data.license);
-      } else {
-        setLicense(null);
-      }
-    } catch (err) {
-      console.error("Error fetching license:", err);
+      setLicense(data.license);
+    } catch (err: any) {
+      console.error("License fetch error:", err);
       setLicense(null);
     } finally {
       setLicenseLoading(false);
@@ -245,24 +290,21 @@ export default function AdminPage() {
 
   const createCompany = async (
     companyName: string,
-    companyEmail: string,
-    password: string
+    adminEmail: string,
+    adminPassword: string
   ) => {
     try {
       setGlobalLoading(true);
-      const companyId = `COMP-${Date.now()}`;
-      const companyAuthId = companyEmail;
       const response = await fetch("/api/company", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_TOKEN}`,
         },
         body: JSON.stringify({
-          companyId,
-          companyAuthId,
-          companyPassword: password,
+          companyAuthId: adminEmail,
+          companyPassword: adminPassword,
           companyName,
+          planCode: "FREE TRIAL",
         }),
       });
 
@@ -282,42 +324,32 @@ export default function AdminPage() {
   };
 
   const updateCompany = async (
-    companyId: string,
+    company_id: string,
     updates: Partial<Company>
   ) => {
     try {
       setGlobalLoading(true);
 
-      const normalizedUpdates: Partial<Company> = {};
-      if ("companyAuthId" in updates)
-        normalizedUpdates.CompanyAuthID = updates.companyAuthId as string;
-      if ("companyPassword" in updates)
-        normalizedUpdates.CompanyPassword = updates.companyPassword as string;
-      if ("companyName" in updates)
-        normalizedUpdates.CompanyName = updates.companyName as string;
-
-      const payload = { companyId, ...updates };
       const response = await fetch("/api/company", {
-        method: "POST",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_TOKEN}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ company_id, ...updates }),
       });
 
       const data = await response.json();
       if (!data.success) return { success: false, error: data.error };
 
       const updatedCompanies = companies.map((company) =>
-        company.CompanyID === companyId
-          ? { ...company, ...normalizedUpdates }
+        company.company_id === company_id
+          ? { ...company, ...updates }
           : company
       );
 
       setCompanies(updatedCompanies);
       const freshCompany = updatedCompanies.find(
-        (c) => c.CompanyID === companyId
+        (c) => c.company_id === company_id
       );
       if (freshCompany) setSelectedCompany(freshCompany);
 
@@ -336,7 +368,6 @@ export default function AdminPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_TOKEN}`,
         },
         body: JSON.stringify(licenseData),
       });
@@ -345,12 +376,8 @@ export default function AdminPage() {
 
       if (data.success) {
         if (selectedCompany) {
-          await fetchLicense(
-            selectedCompany.CompanyAuthID,
-            selectedCompany.CompanyPassword
-          );
+          await fetchLicense(selectedCompany.company_id);
         }
-        await fetchCompanies();
         return { success: true };
       } else {
         return { success: false, error: data.error };
@@ -370,14 +397,13 @@ export default function AdminPage() {
     try {
       setGlobalLoading(true);
       const response = await fetch("/api/license", {
-        method: "POST",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_TOKEN}`,
         },
         body: JSON.stringify({
-          licenseId,
-          companyId,
+          license_id: licenseId,
+          company_id: companyId,
           ...updates,
         }),
       });
@@ -385,12 +411,8 @@ export default function AdminPage() {
       const data = await response.json();
 
       if (data.success) {
-        if (license) setLicense({ ...license, ...updates });
         if (selectedCompany)
-          await fetchLicense(
-            selectedCompany.CompanyAuthID,
-            selectedCompany.CompanyPassword
-          );
+          await fetchLicense(selectedCompany.company_id);
         return { success: true };
       } else {
         return { success: false, error: data.error };
@@ -403,15 +425,14 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    fetchCompanies();
-  }, []);
+    if (isLoggedIn) {
+      fetchCompanies();
+    }
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (selectedCompany)
-      fetchLicense(
-        selectedCompany.CompanyAuthID,
-        selectedCompany.CompanyPassword
-      );
+      fetchLicense(selectedCompany.company_id);
     else setLicense(null);
   }, [selectedCompany]);
 
@@ -419,6 +440,15 @@ export default function AdminPage() {
   const clearError = () => setError(null);
 
   // -------------------- SINGLE RETURN (NO HOOK ORDER ISSUES) --------------------
+  
+  if (!sessionChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent mx-auto"></div>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* LOGIN UI */}
@@ -458,9 +488,10 @@ export default function AdminPage() {
 
             <button
               onClick={handleLogin}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded text-sm transition"
+              disabled={isLoggingIn}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded text-sm transition disabled:opacity-50"
             >
-              Login
+              {isLoggingIn ? "Logging in..." : "Login"}
             </button>
           </div>
         </div>

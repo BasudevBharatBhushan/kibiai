@@ -8,15 +8,24 @@ import {
   Eye,
   EyeOff,
   Award,
+  Users,
+  Link,
+  Copy,
+  ExternalLink,
+  Upload,
+  Loader2
 } from "lucide-react";
 
 interface Company {
-  recordId: string;
-  CompanyID: string;
-  CompanyAuthID: string;
-  CompanyPassword: string;
-  LicenseID: string;
-  CompanyName?: string;
+  company_id: string;
+  company_name: string;
+  plan_code: string;
+  status: string;
+  license_key?: string;
+  company_logo?: string;
+  company_address?: string;
+  created_on: string;
+  superadmins: { userId: string; email: string; fullName: string }[];
 }
 
 interface License {
@@ -45,37 +54,82 @@ export default function CompanyDetails({
   onCreateLicense,
 }: CompanyDetailsProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editedAuthId, setEditedAuthId] = useState(company.CompanyAuthID);
-  const [editedPassword, setEditedPassword] = useState(company.CompanyPassword);
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
-  console.log("License Data:", license);
+  const slugify = (text: string) => {
+    return text
+      .toLowerCase()
+      .replace(/[^\w ]+/g, "")
+      .replace(/ +/g, "-");
+  };
 
-  useEffect(() => {
-    setEditedAuthId(company.CompanyAuthID);
-    setEditedPassword(company.CompanyPassword);
-  }, [company]);
+  const companySlug = slugify(company.company_name);
+  const workspaceUrl = typeof window !== "undefined" 
+    ? `${window.location.origin}/${companySlug}/login`
+    : `/${companySlug}/login`;
 
-  const handleSave = async () => {
-    const result = await onUpdateCompany(company.CompanyID, {
-      companyAuthId: editedAuthId,
-      companyPassword: editedPassword,
-    });
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(workspaceUrl);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
+  };
 
-    if (result.success) {
-      setIsEditing(false);
-      setError("");
-    } else {
-      setError(result.error || "Failed to update company");
+  const handleOpenWorkspace = () => {
+    window.open(workspaceUrl, "_blank");
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Logo must be less than 2MB");
+      return;
+    }
+
+    setIsUploading(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("companyId", company.company_id);
+
+      const res = await fetch("/api/company/logo", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Update local state if needed or trigger refresh
+        // For now, we rely on the parent component to refresh via onUpdateCompany if we were using that,
+        // but since we updated the DB directly in the API, we might need a refresh or manual update.
+        window.location.reload(); 
+      } else {
+        setError(data.error || "Failed to upload logo");
+      }
+    } catch (err) {
+      setError("An error occurred during upload");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const handleCancel = () => {
-    setEditedAuthId(company.CompanyAuthID);
-    setEditedPassword(company.CompanyPassword);
+  useEffect(() => {
+    // Reset state when company changes
+  }, [company]);
+
+  const handleSave = async () => {
+    // Other updates would go here
     setIsEditing(false);
-    setShowPassword(false);
+    setError("");
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
     setError("");
   };
 
@@ -117,77 +171,111 @@ export default function CompanyDetails({
         )}
 
         {/* Name + ID Row */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-          {/* Company Name */}
-          <h3 className="text-lg font-semibold text-gray-900 mb-3 md:mb-0">
-            {company.CompanyName || "Unnamed Company"}
-          </h3>
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between mb-8 gap-6">
+          <div className="flex-1 flex gap-6">
+            {/* Logo Preview/Upload */}
+            <div className="relative group">
+              <div className="w-24 h-24 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl flex items-center justify-center overflow-hidden transition-all group-hover:border-indigo-300">
+                {company.company_logo ? (
+                  <img 
+                    src={company.company_logo} 
+                    alt={company.company_name} 
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <Building2 className="w-10 h-10 text-gray-300" />
+                )}
+                
+                {isUploading && (
+                  <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+                  </div>
+                )}
+              </div>
+              
+              <label className="absolute -bottom-2 -right-2 p-1.5 bg-indigo-600 text-white rounded-lg shadow-lg cursor-pointer hover:bg-indigo-700 transition-all opacity-0 group-hover:opacity-100">
+                <Upload className="w-4 h-4" />
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  disabled={isUploading}
+                />
+              </label>
+            </div>
 
-          {/* Company ID Box */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-lg shadow-sm">
-            <Award className="w-4 h-4 text-indigo-600" />
-            <span className="text-sm font-mono font-medium text-gray-900">
-              {company.CompanyID}
-            </span>
+            <div className="flex-1">
+              <h3 className="text-2xl font-bold text-gray-900 mb-1">
+                {company.company_name || "Unnamed Company"}
+              </h3>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Award className="w-4 h-4 text-indigo-500" />
+                <span className="font-mono">{company.company_id}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Workspace Login Section */}
+          <div className="w-full md:w-auto p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+            <div className="flex items-center gap-2 mb-3">
+              <Link className="w-4 h-4 text-indigo-600" />
+              <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider">
+                Workspace Login
+              </h4>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-100 mb-3">
+              <code className="text-xs text-indigo-600 font-mono flex-1 truncate max-w-[200px]">
+                {workspaceUrl}
+              </code>
+              <button 
+                onClick={handleCopyUrl}
+                className="p-1.5 hover:bg-indigo-50 text-indigo-600 rounded-md transition-colors"
+                title="Copy URL"
+              >
+                {copySuccess ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+
+            <button 
+              onClick={handleOpenWorkspace}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Open Workspace
+            </button>
           </div>
         </div>
 
-        {/* Grid Fields */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-          {/* Company Auth Email */}
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">
-              Company Auth Email
-            </label>
-            <input
-              type="text"
-              value={editedAuthId}
-              onChange={(e) => setEditedAuthId(e.target.value)}
-              disabled={!isEditing}
-              placeholder="Enter company auth email"
-              className={`w-full px-4 py-2.5 border-2 rounded-lg text-sm transition-all ${
-                isEditing
-                  ? "border-gray-200 bg-white text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                  : "border-gray-200 bg-gradient-to-br from-gray-50 to-white text-gray-700"
-              }`}
-            />
+        {/* Superadmins Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="w-4 h-4 text-indigo-600" />
+            <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+              Company Superadmins
+            </h4>
           </div>
-
-          {/* Password */}
-          <div className="relative">
-            <label className="text-xs font-medium text-gray-600 mb-1 block">
-              Password
-            </label>
-            <input
-              type={
-                isEditing && showPassword
-                  ? "text"
-                  : isEditing
-                  ? "password"
-                  : "text"
-              }
-              value={isEditing ? editedPassword : "••••••••••••"}
-              onChange={(e) => setEditedPassword(e.target.value)}
-              disabled={!isEditing}
-              placeholder="Enter password"
-              className={`w-full px-4 py-2.5 border-2 rounded-lg text-sm pr-10 transition-all ${
-                isEditing
-                  ? "border-gray-200 bg-white text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                  : "border-gray-200 bg-gradient-to-br from-gray-50 to-white text-gray-700"
-              }`}
-            />
-            {isEditing && (
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-8 text-gray-500 hover:text-gray-700"
-              >
-                {showPassword ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
-              </button>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {company.superadmins && company.superadmins.length > 0 ? (
+              company.superadmins.map((admin) => (
+                <div 
+                  key={admin.userId}
+                  className="flex flex-col p-3 bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-lg shadow-sm hover:border-indigo-200 transition-colors"
+                >
+                  <span className="text-xs font-bold text-gray-900 truncate">
+                    {admin.fullName || "Unnamed Admin"}
+                  </span>
+                  <span className="text-xs text-gray-500 truncate">
+                    {admin.email}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-2 py-4 text-center border-2 border-dashed border-gray-200 rounded-lg">
+                <p className="text-xs text-gray-500 italic">No superadmins found</p>
+              </div>
             )}
           </div>
         </div>
@@ -203,7 +291,7 @@ export default function CompanyDetails({
                 ).toLocaleDateString("en-US"); // +7 days
 
                 onCreateLicense({
-                  companyId: company.CompanyID,
+                  companyId: company.company_id,
                   plan: "Free Trial",
                   isActive: 1,
                   expiryDate,

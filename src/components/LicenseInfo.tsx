@@ -38,7 +38,7 @@ interface License {
 }
 
 interface Company {
-  CompanyID: string;
+  company_id: string;
 }
 
 interface LicenseInfoProps {
@@ -66,12 +66,11 @@ const SUPPORT_OPTIONS = ["Community", "Email", "Priority", "Premium", "24/7"];
 
 // Expiry duration mapping
 const PLAN_EXPIRY_DAYS: Record<string, number> = {
-  "Free Trial": 7,
-  "Single End User": 365,
-  Pro: 30,
-  Teams: 30,
-  "Custom/Enterprise": 365,
-  Private: 365,
+  "FREE TRIAL": 7,
+  "SINGLE USER": 365,
+  PRO: 30,
+  TEAMS: 30,
+  CUSTOM: 365,
 };
 
 export default function LicenseInfo({
@@ -100,7 +99,7 @@ export default function LicenseInfo({
 
     const result = await onUpdateLicense(
       license.licenseId,
-      company.CompanyID,
+      company.company_id,
       editedLicense
     );
 

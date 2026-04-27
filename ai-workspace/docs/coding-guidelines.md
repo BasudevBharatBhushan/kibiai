@@ -31,3 +31,19 @@
 ## Git & Workflow
 - Branching: `feature/T-XXX-name`, `fix/T-XXX-name`.
 - Follow AI Governance: Ticket → Plan → Approved → Execution → Log → Test.
+
+## Robust API Handling
+- **Backend (Route Handlers)**:
+  - Always wrap logic in `try/catch` blocks.
+  - Return a valid JSON response even on failure using `NextResponse.json`.
+  - Include descriptive error messages and appropriate HTTP status codes.
+- **Frontend (Data Fetching)**:
+  - Never assume an API call returns JSON.
+  - Always check `if (!response.ok)` before parsing.
+  - Verify the `Content-Type: application/json` header before calling `response.json()`.
+  - Handle `SyntaxError` (Unexpected end of JSON input) gracefully by checking response status and body.
+  - Log errors with context (URL, Status Code, Status Text) to simplify debugging.
+
+## State Management & Optimization
+- **Prevent Infinite Loops**: When providing functions (e.g., `setHeader`, `resetHeader`) via Context, always wrap them in `useCallback` to ensure stable references. This prevents `useEffect` dependency loops in consuming components.
+- **Dependency Arrays**: Be meticulous with `useEffect` dependency arrays. Ensure all utilized functions and variables are included, but verify they have stable references (via `useMemo` or `useCallback`) if they are part of a parent component or context.

@@ -16,13 +16,15 @@ import {
   Zap,
   CheckCircle2,
 } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
+
+const supabase = createClient();
 
 interface PaymentSectionProps {
   company: {
-    CompanyID: string;
-    CompanyName?: string;
-    CompanyAuthID?: string;
-    CompanyPassword?: string;
+    company_id: string;
+    company_name?: string;
+    auth_user_id?: string;
   } | null;
   license: {
     plan?: string;
@@ -59,15 +61,15 @@ export default function PaymentSection({
   // Prefill company details
   useEffect(() => {
     if (company) {
-      setCompanyName(company.CompanyName || "");
-      setCompanyEmail(company.CompanyAuthID || "");
+      setCompanyName(company.company_name || "");
+      setCompanyEmail(company.auth_user_id || ""); // Will be updated to user email later
     }
   }, [company]);
   useEffect(() => {
     if (selectedPlan && plans.length > 0) {
-      const selected = plans.find((p) => p.PlanName === selectedPlan);
+      const selected = plans.find((p) => p.plan_name === selectedPlan);
       if (selected) {
-        const match = String(selected.StripeResponseJSON || "").match(
+        const match = String(selected.stripe_response_json || "").match(
           /\$?(\d+)/
         );
         const numericPrice = match ? Number(match[1]) : 0;
@@ -89,17 +91,15 @@ export default function PaymentSection({
     if (license?.plan && plans.length > 0) {
       const normalizedLicensePlan = license.plan.trim().toLowerCase();
       const matchedPlan = plans.find(
-        (p) => p.PlanName?.trim().toLowerCase() === normalizedLicensePlan
+        (p) => p.plan_name?.trim().toLowerCase() === normalizedLicensePlan
       );
 
       if (matchedPlan) {
-        setSelectedPlan(matchedPlan.PlanName);
+        setSelectedPlan(matchedPlan.plan_name);
 
-        // Use the dedicated PlanPrice field from FileMaker
-        const numericPrice = Number(matchedPlan.PlanPrice || 0);
+        const numericPrice = Number(matchedPlan.plan_price || 0);
 
-        console.log("Matched Plan Price from FileMaker:", numericPrice);
-        // Update both monthly base and display price
+        console.log("Matched Plan Price from Supabase:", numericPrice);
         setBaseMonthlyPrice(numericPrice);
         setPrice(numericPrice);
       }
@@ -108,12 +108,10 @@ export default function PaymentSection({
 
   useEffect(() => {
     if (billingTerm === "year") {
-      // You can apply discount logic here, e.g., 10% off annual
       setPrice((prev) => Math.round(prev * 12 * 0.9));
     } else if (billingTerm === "month" && selectedPlan && plans.length > 0) {
-      const selected = plans.find((p) => p.PlanName === selectedPlan);
-      const match = selected?.StripeResponseJSON?.match(/\$?(\d+)/);
-      const monthlyPrice = match ? Number(match[1]) : 0;
+      const selected = plans.find((p) => p.plan_name === selectedPlan);
+      let monthlyPrice = Number(selected?.plan_price || 0);
       setPrice(monthlyPrice);
     }
   }, [billingTerm]);
@@ -123,47 +121,14 @@ export default function PaymentSection({
     if (license?.plan) setSelectedPlan(license.plan);
   }, [license]);
 
-  // Fetch plans from FileMaker
+  // Fetch plans from Supabase
   const fetchPlans = async () => {
-    console.log("Fetching plans from FileMaker...");
     try {
-      const res = await fetch("https://py-fmd.vercel.app/api/dataApi", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Basic RGV2ZWxvcGVyOmFkbWluYml6",
-        },
-        body: JSON.stringify({
-          fmServer: "kibiz-linux.smtech.cloud",
-          method: "getAllRecords",
-          methodBody: {
-            database: "KiBIAI_Admin",
-            layout: "Plans",
-            offset: "1",
-            limit: "50",
-          },
-          session: { token: "", required: "" },
-        }),
-      });
-
-      const data = await res.json();
-      console.log("Raw FileMaker Plans Response:", data);
-
-      let list = [];
-      if (data?.records && Array.isArray(data.records)) {
-        list = data.records.map((r: any) => (r.fieldData ? r.fieldData : r));
-      } else if (data.response?.data) {
-        list = data.response.data.map((r: any) => r.fieldData);
-      } else if (data.data?.records) {
-        list = data.data.records.map((r: any) =>
-          r.fieldData ? r.fieldData : r
-        );
-      }
-
-      setPlans(list);
-      console.log("Extracted Plan List:", list);
+      const { data, error } = await supabase.from("plans").select("*");
+      if (error) throw error;
+      setPlans(data || []);
     } catch (e) {
-      console.error("Error fetching plans:", e);
+      console.error("Error fetching plans from Supabase:", e);
     }
   };
 
@@ -197,10 +162,10 @@ export default function PaymentSection({
         body: reqPayload,
       });
       const data = await res.json();
-      await logToFileMaker(reqPayload, JSON.stringify(data));
+      await logToSupabase(reqPayload, JSON.stringify(data));
       return data;
     } catch (e) {
-      await logToFileMaker(reqPayload, JSON.stringify({ error: e }));
+      await logToSupabase(reqPayload, JSON.stringify({ error: e }));
     }
   };
 
@@ -209,14 +174,14 @@ export default function PaymentSection({
     setStatus("Creating payment link...");
     setPaymentLink("");
 
-    const selected = plans.find((p) => p.PlanName === selectedPlan);
-    if (!selected || !selected.StripeProductID) {
+    const selected = plans.find((p) => p.plan_name === selectedPlan);
+    if (!selected || !selected.stripe_product_id) {
       setStatus("Invalid or unmapped plan.");
       setIsGenerating(false);
       return;
     }
 
-    const priceRes = await createPrice(selected.StripeProductID);
+    const priceRes = await createPrice(selected.stripe_product_id);
     const priceId = priceRes?.data?.id || priceRes?.id;
 
     const reqPayload = JSON.stringify({
@@ -231,7 +196,7 @@ export default function PaymentSection({
         body: reqPayload,
       });
       const data = await res.json();
-      await logToFileMaker(reqPayload, JSON.stringify(data));
+      await logToSupabase(reqPayload, JSON.stringify(data));
       if (data.success && (data.data?.url || data.url)) {
         setPaymentLink(data.data?.url || data.url);
         setStatus("Payment link generated successfully.");
@@ -241,36 +206,22 @@ export default function PaymentSection({
       }
     } catch (e) {
       setStatus("Error generating link.");
-      await logToFileMaker(reqPayload, JSON.stringify({ error: e }));
+      await logToSupabase(reqPayload, JSON.stringify({ error: e }));
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const logToFileMaker = async (req: string, res: string) => {
+  const logToSupabase = async (req: string, res: string) => {
     try {
-      await fetch("https://py-fmd.vercel.app/api/dataApi", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Basic RGV2ZWxvcGVyOmFkbWluYml6",
-        },
-        body: JSON.stringify({
-          fmServer: "kibiz-linux.smtech.cloud",
-          method: "createRecord",
-          methodBody: {
-            database: "KiBIAI_Admin",
-            layout: "PaymentLog",
-            record: {
-              API_Request: req,
-              API_Response: res,
-            },
-          },
-          session: { token: "", required: "" },
-        }),
+      await supabase.from("payment_logs").insert({
+        company_id: company?.company_id,
+        api_request: JSON.parse(req),
+        api_response: JSON.parse(res),
+        status: "logged"
       });
     } catch (e) {
-      console.error("Failed to log to FileMaker:", e);
+      console.error("Failed to log to Supabase:", e);
     }
   };
 
@@ -290,7 +241,7 @@ export default function PaymentSection({
         body: reqPayload,
       });
       const data = await res.json();
-      await logToFileMaker(reqPayload, JSON.stringify(data));
+      await logToSupabase(reqPayload, JSON.stringify(data));
       if (data.success) {
         fetchPromocodes();
         setNewPromo({
@@ -301,7 +252,7 @@ export default function PaymentSection({
         });
       }
     } catch (e) {
-      await logToFileMaker(reqPayload, JSON.stringify({ error: e }));
+      await logToSupabase(reqPayload, JSON.stringify({ error: e }));
     } finally {
       setIsCreatingPromo(false);
     }

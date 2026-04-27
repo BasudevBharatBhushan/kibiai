@@ -1,198 +1,134 @@
-import { jsonResponse, requireEnv } from "@/lib/utils/utility";
-import { fmFindOne, fmCreateRecord, fmEditRecord } from "@/lib/utils/filemaker";
-import { verifyBearerToken, getCompanyByCompanyId } from "@/lib/auth";
+import { NextResponse } from "next/server";
+import { createAdminClient } from "@/utils/supabase/server";
+import { getSession } from "@/utils/auth";
 
-const FM_LICENSE_LAYOUT = requireEnv("FM_LICENSE_LAYOUT");
-const FM_COMPANY_LAYOUT = requireEnv("FM_COMPANY_LAYOUT");
-
-type LicenseBody = {
-  licenseId?: string;
-  companyId?: string;
-  plan?: string;
-  price?: string;
-  users?: string;
-  workspaces?: string;
-  reports?: string;
-  charts?: string;
-  AI_Features?: string;
-  licensingTerms?: string;
-  support?: string;
-  isActive?: number;
-  expiryDate?: string;
+const mapDBToFrontend = (dbLicense: any) => {
+  if (!dbLicense) return null;
+  return {
+    licenseId: dbLicense.license_id,
+    companyId: dbLicense.company_id,
+    plan: dbLicense.plan_name,
+    price: dbLicense.price ? parseFloat(dbLicense.price.toString()).toString() : "0",
+    users: dbLicense.users_limit?.toString(),
+    workspaces: dbLicense.workspaces_limit?.toString(),
+    reports: dbLicense.reports_limit?.toString(),
+    charts: dbLicense.charts_limit?.toString(),
+    AI_Features: dbLicense.ai_features,
+    licensingTerms: dbLicense.licensing_terms,
+    support: dbLicense.support_level,
+    isActive: dbLicense.is_active ? 1 : 0,
+    expiryDate: dbLicense.expiry_date ? new Date(dbLicense.expiry_date).toLocaleDateString('en-US') : undefined
+  };
 };
+
+const mapFrontendToDB = (feLicense: any) => {
+  const db: any = {};
+  if (feLicense.companyId) db.company_id = feLicense.companyId;
+  if (feLicense.plan) db.plan_name = feLicense.plan;
+  if (feLicense.price !== undefined) db.price = parseFloat(feLicense.price) || 0;
+  if (feLicense.users !== undefined) db.users_limit = parseInt(feLicense.users) || 0;
+  if (feLicense.workspaces !== undefined) db.workspaces_limit = parseInt(feLicense.workspaces) || 0;
+  if (feLicense.reports !== undefined) db.reports_limit = parseInt(feLicense.reports) || 0;
+  if (feLicense.charts !== undefined) db.charts_limit = parseInt(feLicense.charts) || 0;
+  if (feLicense.AI_Features) db.ai_features = feLicense.AI_Features;
+  if (feLicense.licensingTerms) db.licensing_terms = feLicense.licensingTerms;
+  if (feLicense.support) db.support_level = feLicense.support;
+  if (feLicense.isActive !== undefined) db.is_active = feLicense.isActive === 1;
+  if (feLicense.expiryDate) db.expiry_date = new Date(feLicense.expiryDate).toISOString();
+  return db;
+};
+
+export async function GET(req: Request) {
+  try {
+    const session = await getSession();
+    if (!session || session.accountType !== 'platform_admin') {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const companyId = searchParams.get('company_id');
+
+    if (!companyId) {
+      return NextResponse.json({ success: false, error: "company_id is required" }, { status: 400 });
+    }
+
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("licenses")
+      .select("*")
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, license: mapDBToFrontend(data) });
+  } catch (err: any) {
+    console.error("GET /api/license error:", err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
 
 export async function POST(req: Request) {
   try {
-    // 1. Verify Bearer Token
-    const auth = await verifyBearerToken(req.headers.get("authorization"));
-    if (!auth.ok)
-      return jsonResponse(401, { success: false, error: auth.reason });
-
-    // 2. Parse body
-    let body: LicenseBody;
-    try {
-      body = await req.json();
-    } catch {
-      return jsonResponse(400, { success: false, error: "Invalid JSON body" });
+    const session = await getSession();
+    if (!session || session.accountType !== 'platform_admin') {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const {
-      licenseId,
-      companyId,
-      plan,
-      price,
-      users,
-      workspaces,
-      reports,
-      charts,
-      AI_Features,
-      licensingTerms,
-      support,
-      isActive,
-      expiryDate,
-    } = body;
+    const body = await req.json();
+    const dbBody = mapFrontendToDB(body);
+    const supabase = createAdminClient();
+    
+    const { data, error } = await supabase
+      .from("licenses")
+      .insert(dbBody)
+      .select()
+      .single();
 
-    const toFieldData = () => {
-      const f: Record<string, any> = {};
-      if (plan !== undefined) f.Plan = plan;
-      if (price !== undefined) f.Price = price;
-      if (users !== undefined) f.Users = users;
-      if (workspaces !== undefined) f.Workspaces = workspaces;
-      if (reports !== undefined) f.Reports = reports;
-      if (charts !== undefined) f.Charts = charts;
-      if (AI_Features !== undefined) f.AI_Features = AI_Features;
-      if (licensingTerms !== undefined) f.LicensingTerms = licensingTerms;
-      if (support !== undefined) f.Support = support;
-      if (isActive !== undefined) f.isActive = isActive;
-      if (expiryDate !== undefined) f.ExpiryDate = expiryDate;
-      return f;
-    };
+    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
 
-    // ✅ CREATE
-    if (!licenseId) {
-      if (!companyId) {
-        return jsonResponse(400, {
-          success: false,
-          error: "companyId is required for create",
-        });
-      }
-
-      // Fetch full company record so we have recordId
-      const companyRec = await fmFindOne(
-        FM_COMPANY_LAYOUT,
-        "CompanyID",
-        companyId
-      );
-      if (!companyRec)
-        return jsonResponse(404, {
-          success: false,
-          error: "Company not found",
-        });
-
-      // recordId must be used for edit
-      const companyRecordId = companyRec.recordId;
-      const companyData = companyRec.fieldData;
-
-      console.log("Company data for license creation:", companyData);
-
-      // ✅ Prevent duplicate license creation
-      if (companyData.LicenseID) {
-        return jsonResponse(409, {
-          success: false,
-          error: "Company already has an active license",
-        });
-      }
-
-      const newId = `KIBIAI-${Math.random()
-        .toString(36)
-        .slice(2, 10)
-        .toUpperCase()}`;
-
-      const fieldData = {
-        ...toFieldData(),
-        LicenseID: newId,
-        CompanyID: companyId,
-      };
-
-      const created = await fmCreateRecord(FM_LICENSE_LAYOUT, fieldData);
-      if (created?.messages?.[0]?.code !== "0") {
-        return jsonResponse(500, {
-          success: false,
-          error: "Failed to create license record",
-          detail: created,
-        });
-      }
-
-      const linkUpdate = await fmEditRecord(
-        FM_COMPANY_LAYOUT,
-        companyRecordId,
-        {
-          LicenseID: newId,
-        }
-      );
-
-      if (linkUpdate?.messages?.[0]?.code !== "0") {
-        return jsonResponse(500, {
-          success: false,
-          error: "License created but failed to link to company",
-          detail: linkUpdate,
-        });
-      }
-
-      return jsonResponse(200, {
-        success: true,
-        action: "created",
-        licenseId: newId,
-        companyId,
-        scope: fieldData,
-        recordId: created?.response?.recordId,
-      });
-    }
-
-    // ✅ UPDATE
-    const existing = await fmFindOne(FM_LICENSE_LAYOUT, "LicenseID", licenseId);
-    if (!existing)
-      return jsonResponse(404, { success: false, error: "License not found" });
-
-    const existingCompanyId = existing.fieldData.CompanyID;
-    if (!companyId || companyId !== existingCompanyId) {
-      return jsonResponse(409, {
-        success: false,
-        error: "License does not belong to provided companyId",
-      });
-    }
-
-    // recordId is required for update
-    const licenseRecordId = existing.recordId;
-
-    const update = toFieldData();
-    if (Object.keys(update).length === 0)
-      return jsonResponse(400, { success: false, error: "Nothing to update" });
-
-    const updated = await fmEditRecord(
-      FM_LICENSE_LAYOUT,
-      licenseRecordId,
-      update
-    );
-    if (updated?.messages?.[0]?.code !== "0") {
-      return jsonResponse(500, {
-        success: false,
-        error: "Failed to update license record",
-        detail: updated,
-      });
-    }
-
-    return jsonResponse(200, {
-      success: true,
-      action: "updated",
-      licenseId,
-      companyId,
-    });
+    return NextResponse.json({ success: true, license: mapDBToFrontend(data) });
   } catch (err: any) {
-    return jsonResponse(500, {
-      success: false,
-      error: "Server error in /api/license",
-      detail: err?.message ?? err,
-    });
+    console.error("POST /api/license error:", err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export async function PUT(req: Request) {
+  try {
+    const session = await getSession();
+    if (!session || session.accountType !== 'platform_admin') {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { license_id, company_id, ...updates } = body;
+    const dbUpdates = mapFrontendToDB(updates);
+
+    const actualLicenseId = license_id || updates.licenseId;
+
+    if (!actualLicenseId) return NextResponse.json({ success: false, error: "license_id is required" }, { status: 400 });
+
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("licenses")
+      .update(dbUpdates)
+      .eq("license_id", actualLicenseId)
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, license: mapDBToFrontend(data) });
+  } catch (err: any) {
+    console.error("PUT /api/license error:", err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+
+
