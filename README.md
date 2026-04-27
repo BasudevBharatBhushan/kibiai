@@ -17,6 +17,7 @@ The application uses:
 * **Modular component architecture**
 * **Controlled AI-assisted development workflow**
 
+
 The goal of this project is to maintain:
 
 * clean and scalable code structure
