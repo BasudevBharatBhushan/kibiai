@@ -6,6 +6,7 @@
 
 ## PROJECT OVERVIEW
 
+
 This repository contains a **Next.js full-stack application** built with a structured and scalable architecture.
 
 The application uses:
