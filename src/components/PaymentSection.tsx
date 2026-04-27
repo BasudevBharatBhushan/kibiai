@@ -18,8 +18,6 @@ import {
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
-const supabase = createClient();
-
 interface PaymentSectionProps {
   company: {
     company_id: string;
@@ -35,6 +33,8 @@ export default function PaymentSection({
   company,
   license,
 }: PaymentSectionProps) {
+  const supabase = createClient();
+
   const [plans, setPlans] = useState<any[]>([]);
   const [price, setPrice] = useState<number>(0);
 

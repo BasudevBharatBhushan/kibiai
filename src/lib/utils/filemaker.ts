@@ -4,7 +4,10 @@ import { requireEnv } from "./utility";
 var FM_HOST = requireEnv("FM_HOST") || "kibiz.smtech.cloud";
 var FM_VERSION = requireEnv("FM_VERSION") || "vLatest";
 var FM_DATABASE = requireEnv("FM_DATABASE") || "KibiAI";
-var FM_BASE_URL = `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}`;
+
+function getFmBaseUrl() {
+  return `https://${FM_HOST}/fmi/data/${FM_VERSION}/databases/${FM_DATABASE}`;
+}
 var FM_USERNAME = requireEnv("FM_USERNAME");
 var FM_PASSWORD = requireEnv("FM_PASSWORD");
 
@@ -166,7 +169,7 @@ export async function fmFindRecords(
     autoSession = true;
   }
 
-  const url = `${FM_BASE_URL}/layouts/${layout}/_find`;
+  const url = `${getFmBaseUrl()}/layouts/${layout}/_find`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -224,7 +227,7 @@ export async function fmCreateRecord(
     autoSession = true;
   }
 
-  const url = `${FM_BASE_URL}/layouts/${layout}/records`;
+  const url = `${getFmBaseUrl()}/layouts/${layout}/records`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -262,7 +265,7 @@ export async function fmEditRecord(
     autoSession = true;
   }
 
-  const url = `${FM_BASE_URL}/layouts/${layout}/records/${recordId}`;
+  const url = `${getFmBaseUrl()}/layouts/${layout}/records/${recordId}`;
 
   const res = await fetch(url, {
     method: "PATCH",
@@ -295,7 +298,7 @@ export async function fmFindAllRecords(
     autoSession = true;
   }
 
-  const url = `${FM_BASE_URL}/layouts/${layout}/records`;
+  const url = `${getFmBaseUrl()}/layouts/${layout}/records`;
 
   const res = await fetch(url, {
     method: "GET",
