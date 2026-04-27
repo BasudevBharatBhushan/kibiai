@@ -16,4 +16,5 @@ The Vercel build is failing during the prerendering of `/admin` and other pages 
 - [x] Move Supabase client initialization inside component
 - [x] Make `requireEnv` non-throwing during build
 - [x] Remove strict assertions in Supabase helpers
+- [x] Fix OPENAI_API_KEY build error in `src/lib/ai/client.ts`
 - [ ] Verify build locally (simulated)

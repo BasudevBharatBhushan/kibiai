@@ -19,3 +19,8 @@
 - **Change**: Moved `FM_BASE_URL` to a function `getFmBaseUrl()`.
 - **File**: `src/lib/utils/filemaker.ts`
 - **Rationale**: Ensures URL calculation happens at runtime, not during module evaluation.
+
+## Step 5: Fix AI Client Build Error
+- **Change**: Used the build-safe `requireEnv` for `OPENAI_API_KEY` initialization.
+- **File**: `src/lib/ai/client.ts`
+- **Rationale**: Prevents `Missing OPENAI_API_KEY environment variable` error during Vercel build phase.
