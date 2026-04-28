@@ -1,0 +1,527 @@
+"use client";
+
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useParams } from "next/navigation";
+import { BarChart3, Loader2, PanelLeft, PanelRight } from "lucide-react";
+
+import DashboardGrid from "@/components/chart-dashboard/DashboardGrid";
+import { ModularChatbot } from "@/components/chat/ModularChatbot";
+import { CHART_PROMPT_OPTIONS } from "@/constants/chartPromptOptions";
+import { CHARTS_SYSTEM_INSTRUCTION } from "@/constants/chartsSystemInstruction";
+import { DashboardProvider, useDashboard } from "@/context/DashboardContext";
+import { useHeader } from "@/context/HeaderContext";
+import { useToast } from "@/context/ToastContext";
+import {
+  buildChartPredefinedPrompt,
+  formatChartPrompt,
+} from "@/lib/bot/chartPromptFormatter";
+import {
+  CHART_BOOTSTRAP_ANALYSIS_PROMPT,
+  shouldBootstrapStarterCharts,
+} from "@/lib/charts/bootstrap";
+import type { ReportChartSchema } from "@/lib/charts/ChartTypes";
+import { apiClient } from "@/utils/apiClient";
+
+type ChartBuilderResponse = {
+  template_id: string;
+  template_name: string;
+  chart_conversation_id: string | null;
+  report_insight: string | null;
+  fieldNames: string[];
+  rows: Array<Record<string, unknown>>;
+  schemas: ReportChartSchema[];
+  canvasState: Array<Record<string, unknown>>;
+  layoutMode: string;
+};
+
+type ParsedChartAssistantItem = Partial<ReportChartSchema> & {
+  business_insights?: string[];
+  response_to_user?: string;
+};
+
+type ParsedChartAssistantResponse = ParsedChartAssistantItem & {
+  responses?: ParsedChartAssistantItem[];
+  chart_suggestions?: string[];
+};
+
+function extractJson(raw: string): ParsedChartAssistantResponse | null {
+  try {
+    let jsonStr = raw.trim();
+    const fenced = jsonStr.match(/```json\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```/);
+    if (fenced) jsonStr = fenced[1];
+    else {
+      const plain = jsonStr.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      if (plain) jsonStr = plain[1];
+    }
+    return JSON.parse(jsonStr) as ParsedChartAssistantResponse;
+  } catch {
+    return null;
+  }
+}
+
+function SuggestionChips({
+  suggestions,
+  onSelect,
+}: {
+  suggestions: string[];
+  onSelect: (text: string) => void;
+}) {
+  if (!suggestions.length) return null;
+
+  return (
+    <div className="px-4 pb-2 flex flex-col gap-2">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+        Suggested Charts
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {suggestions.map((suggestion, index) => (
+          <button
+            key={`${suggestion}-${index}`}
+            onClick={() => onSelect(suggestion)}
+            className="text-left text-[12px] rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-blue-700 font-medium hover:bg-blue-100 hover:border-blue-300 transition-all active:scale-95"
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="flex min-h-[calc(100vh-64px)] w-full items-center justify-center bg-slate-50">
+      <div className="flex flex-col items-center gap-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg animate-pulse">
+          <BarChart3 className="h-6 w-6" />
+        </div>
+        <div className="space-y-2 text-center">
+          <div className="h-4 w-48 rounded bg-slate-200 animate-pulse" />
+          <div className="h-3 w-32 rounded bg-slate-100 animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChartHeaderActions({
+  isChatOpen,
+  isConfigOpen,
+  onToggleChat,
+  onToggleConfig,
+}: {
+  isChatOpen: boolean;
+  isConfigOpen: boolean;
+  onToggleChat: () => void;
+  onToggleConfig: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-sm">
+      <button
+        onClick={onToggleChat}
+        className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all text-[11px] font-semibold ${
+          isChatOpen
+            ? "bg-white text-blue-600 shadow-sm border border-blue-100"
+            : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+        }`}
+        title="Toggle Chart Copilot"
+        aria-pressed={isChatOpen}
+      >
+        <PanelLeft size={14} strokeWidth={isChatOpen ? 2 : 1.5} />
+        <span className="hidden sm:inline">Copilot</span>
+      </button>
+      <button
+        onClick={onToggleConfig}
+        className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all text-[11px] font-semibold ${
+          isConfigOpen
+            ? "bg-white text-slate-800 shadow-sm border border-slate-200"
+            : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+        }`}
+        title="Configure Charts"
+        aria-pressed={isConfigOpen}
+      >
+        <PanelRight size={14} strokeWidth={isConfigOpen ? 2 : 1.5} />
+        <span className="hidden sm:inline">Configure</span>
+      </button>
+    </div>
+  );
+}
+
+function ChartBuilderWorkspace({
+  templateId,
+  fieldNames,
+  reportInsight,
+  initialConversationId,
+  shouldBootstrapCharts,
+}: {
+  templateId: string;
+  fieldNames: string[];
+  reportInsight: string | null;
+  initialConversationId: string | null;
+  shouldBootstrapCharts: boolean;
+}) {
+  const {
+    addNewChartFromAI,
+    addMultipleChartsFromAI,
+    isEditOpen,
+    setEditOpen,
+  } = useDashboard();
+  const { addToast } = useToast();
+  const { resetHeader, setHeaderActions } = useHeader();
+
+  const [isChatOpen, setIsChatOpen] = useState(true);
+  const [conversationId, setConversationId] = useState<string | null>(
+    initialConversationId
+  );
+  const [chartSuggestions, setChartSuggestions] = useState<string[]>([]);
+  const [pendingSuggestion, setPendingSuggestion] = useState("");
+  const [isAutoGeneratingCharts, setIsAutoGeneratingCharts] = useState(false);
+  const hasBootstrappedRef = useRef(false);
+
+  useEffect(() => {
+    setConversationId(initialConversationId);
+  }, [initialConversationId]);
+
+  const formatPrompt = useCallback(
+    (userText: string) => formatChartPrompt(userText),
+    []
+  );
+  const predefinedPrompt = useMemo(
+    () => buildChartPredefinedPrompt(fieldNames, reportInsight ?? undefined),
+    [fieldNames, reportInsight]
+  );
+  const toggleChat = useCallback(() => setIsChatOpen((prev) => !prev), []);
+  const toggleConfig = useCallback(
+    () => setEditOpen(!isEditOpen),
+    [isEditOpen, setEditOpen]
+  );
+
+  useLayoutEffect(() => {
+    setHeaderActions(
+      <ChartHeaderActions
+        isChatOpen={isChatOpen}
+        isConfigOpen={isEditOpen}
+        onToggleChat={toggleChat}
+        onToggleConfig={toggleConfig}
+      />
+    );
+
+    return () => resetHeader();
+  }, [
+    isChatOpen,
+    isEditOpen,
+    resetHeader,
+    setHeaderActions,
+    toggleChat,
+    toggleConfig,
+  ]);
+
+  useEffect(() => {
+    if (!shouldBootstrapCharts || hasBootstrappedRef.current) return;
+    hasBootstrappedRef.current = true;
+    setIsAutoGeneratingCharts(true);
+    setPendingSuggestion(CHART_BOOTSTRAP_ANALYSIS_PROMPT);
+  }, [shouldBootstrapCharts]);
+
+  const persistChartToSupabase = useCallback(
+    async (schema: ReportChartSchema) => {
+      await apiClient.post(`/api/report-templates/${templateId}/charts`, {
+        chart: schema,
+      });
+    },
+    [templateId]
+  );
+
+  const handleConversationIdChange = useCallback(
+    async (id: string | null) => {
+      setConversationId(id);
+      await apiClient.patch(`/api/report-templates/${templateId}/chart-thread`, {
+        chart_conversation_id: id,
+      });
+    },
+    [templateId]
+  );
+
+  const createSchemaId = () => crypto.randomUUID();
+
+  const handleAssistantResponse = useCallback(
+    async (displayedText: string, rawResponseText: string) => {
+      const parsed = extractJson(rawResponseText || displayedText);
+      if (!parsed) return;
+
+      setChartSuggestions([]);
+
+      if (parsed.chart_suggestions && Array.isArray(parsed.chart_suggestions)) {
+        setChartSuggestions(parsed.chart_suggestions);
+        return;
+      }
+
+      if (parsed.responses && Array.isArray(parsed.responses)) {
+        const chartSchemas: ReportChartSchema[] = [];
+
+        parsed.responses.forEach((item) => {
+          if (!item) return;
+
+          if (item.business_insights) {
+            chartSchemas.push({
+              pKey: createSchemaId(),
+              chart_title: "Business Insights",
+              chart_type: "insight",
+              business_insights: item.business_insights,
+              response_to_user: item.response_to_user,
+            });
+            return;
+          }
+
+          if (item.chart_type && item.group_field) {
+            chartSchemas.push({
+              pKey: createSchemaId(),
+              chart_title: item.chart_title ?? "Chart",
+              chart_type: item.chart_type,
+              numerical_field: item.numerical_field,
+              group_field: item.group_field,
+              subgroup_field: item.subgroup_field,
+              mathematical_aggregation_method:
+                item.mathematical_aggregation_method,
+              filters: item.filters,
+              response_to_user: item.response_to_user,
+            });
+          }
+        });
+
+        if (!chartSchemas.length) return;
+
+        addMultipleChartsFromAI(chartSchemas);
+        await Promise.all(chartSchemas.map(persistChartToSupabase));
+        addToast(
+          "success",
+          "Charts Added",
+          `Added ${chartSchemas.length} chart(s) to the dashboard.`
+        );
+        return;
+      }
+
+      if (parsed.business_insights && Array.isArray(parsed.business_insights)) {
+        const schema: ReportChartSchema = {
+          pKey: createSchemaId(),
+          chart_title: "Business Insights",
+          chart_type: "insight",
+          business_insights: parsed.business_insights,
+          response_to_user: parsed.response_to_user,
+        };
+        addNewChartFromAI(schema);
+        await persistChartToSupabase(schema);
+        addToast(
+          "success",
+          "Insights Added",
+          "Business insights added to the dashboard."
+        );
+        return;
+      }
+
+      if (parsed.chart_type && parsed.group_field) {
+        const schema: ReportChartSchema = {
+          pKey: createSchemaId(),
+          chart_title: parsed.chart_title ?? "Chart",
+          chart_type: parsed.chart_type,
+          numerical_field: parsed.numerical_field,
+          group_field: parsed.group_field,
+          subgroup_field: parsed.subgroup_field,
+          mathematical_aggregation_method:
+            parsed.mathematical_aggregation_method,
+          filters: parsed.filters,
+          response_to_user: parsed.response_to_user,
+        };
+        addNewChartFromAI(schema);
+        await persistChartToSupabase(schema);
+        addToast(
+          "success",
+          "Chart Added",
+          `"${schema.chart_title}" added to the dashboard.`
+        );
+      }
+    },
+    [
+      addMultipleChartsFromAI,
+      addNewChartFromAI,
+      addToast,
+      persistChartToSupabase,
+    ]
+  );
+
+  return (
+    <div className="relative flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50 font-sans">
+      <div className="flex flex-1 overflow-hidden relative">
+        <div
+          className={`absolute left-4 top-4 bottom-4 z-20 w-[min(420px,calc(100vw-2rem))] max-w-full transform transition-transform duration-300 ease-in-out ${
+            isChatOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex h-full overflow-hidden flex-col">
+              {chartSuggestions.length > 0 && (
+                <SuggestionChips
+                  suggestions={chartSuggestions}
+                  onSelect={(text) => {
+                    setChartSuggestions([]);
+                    setPendingSuggestion(text);
+                  }}
+                />
+              )}
+
+              <ModularChatbot
+                botName="Chart Copilot"
+                instructionSet={CHARTS_SYSTEM_INSTRUCTION}
+                predefinedPrompt={predefinedPrompt}
+                formatPrompt={formatPrompt}
+                suggestedPrompts={CHART_PROMPT_OPTIONS}
+                initialConversationId={conversationId}
+                onAssistantResponse={handleAssistantResponse}
+                onConversationIdChange={handleConversationIdChange}
+                className="h-full w-full flex flex-col bg-white overflow-hidden relative"
+                welcomeMessage="Hello! I am the Chart Copilot. I can help you generate charts, business insights, and analysis from your report data. What would you like to visualize?"
+                pendingInput={pendingSuggestion}
+                onPendingInputConsumed={() => setPendingSuggestion("")}
+                onLoadingChange={(loading) => {
+                  if (!loading && isAutoGeneratingCharts) {
+                    setIsAutoGeneratingCharts(false);
+                  }
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div
+          className={`absolute inset-0 z-10 bg-slate-950/10 transition-opacity duration-300 ${
+            isChatOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          }`}
+          onClick={() => setIsChatOpen(false)}
+        />
+
+        <div className="relative z-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-50">
+          <DashboardGrid />
+        </div>
+      </div>
+
+      {isAutoGeneratingCharts && (
+        <div className="absolute inset-0 z-30 bg-slate-950/8 backdrop-blur-[2px] flex items-center justify-center px-6">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white/95 shadow-2xl p-6 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+            <h2 className="text-base font-bold text-slate-900">
+              Generating starter charts
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              Reviewing the template preview and creating an initial chart dashboard for you.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChartBuilderPageContent() {
+  const params = useParams();
+  const { addToast } = useToast();
+  const { setBackHref, setBreadcrumbs } = useHeader();
+
+  const slug = params?.company_slug as string;
+  const templateId = params?.template_id as string;
+
+  const [pageData, setPageData] = useState<ChartBuilderResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!templateId || !slug) return;
+
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const res = await apiClient.get<{ success: boolean; data: ChartBuilderResponse }>(
+          `/api/report-templates/${templateId}/charts`
+        );
+
+        if (!res.success || !res.data) {
+          throw new Error("Failed to load chart builder");
+        }
+
+        setPageData(res.data);
+        setBreadcrumbs([
+          { label: "Templates", href: `/${slug}/templates` },
+          {
+            label: res.data.template_name || templateId,
+            href: `/${slug}/templates/${templateId}/configurator`,
+          },
+          { label: "Charts" },
+        ]);
+        setBackHref(`/${slug}/templates/${templateId}/configurator`);
+
+        if (res.data.rows.length === 0) {
+          addToast(
+            "warning",
+            "No Preview Data",
+            "The template has no preview dataset yet. Update the configurator first for realistic chart previews."
+          );
+        }
+      } catch (error: unknown) {
+        addToast(
+          "error",
+          "Load Error",
+          error instanceof Error
+            ? error.message
+            : "Failed to load chart builder."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    load();
+  }, [addToast, setBackHref, setBreadcrumbs, slug, templateId]);
+
+  if (isLoading || !pageData) {
+    return <LoadingSkeleton />;
+  }
+
+  return (
+    <DashboardProvider
+      initialSchemas={pageData.schemas}
+      initialDataset={pageData.rows}
+      initialCanvasState={pageData.canvasState}
+      initialLayoutMode={pageData.layoutMode}
+      templateId={templateId}
+    >
+      <ChartBuilderWorkspace
+        templateId={templateId}
+        fieldNames={pageData.fieldNames}
+        reportInsight={pageData.report_insight}
+        initialConversationId={pageData.chart_conversation_id}
+        shouldBootstrapCharts={
+          shouldBootstrapStarterCharts({
+            schemaCount: pageData.schemas.length,
+            conversationId: pageData.chart_conversation_id,
+          })
+        }
+      />
+    </DashboardProvider>
+  );
+}
+
+export default function ChartBuilderPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <ChartBuilderPageContent />
+    </Suspense>
+  );
+}

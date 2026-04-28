@@ -196,7 +196,7 @@ export function processData(
       kind: mapChartType(chart_type),
       title: chart_title,
       isActive: activeStatus,
-      fmRecordId: aiResponse.fmRecordId,
+      supabaseId: aiResponse.supabaseId,
       categories: labels,
       series: series,     
       layout

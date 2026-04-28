@@ -12,7 +12,7 @@ export interface ChartConfig {
     kind: ChartKind;
     title: string;
     isActive?: boolean;
-    fmRecordId?: string;
+    supabaseId?: string;
 
     colors?: string[];
 
@@ -38,8 +38,8 @@ export interface ReportChartSchema {
   pKey: string;                
   chart_title: string;          
   chart_type: string;
-  isActive?: string | number;   
-  fmRecordId?: string;        
+  isActive?: string | number | boolean;   
+  supabaseId?: string;        
   
   numerical_field?: string;     
   group_field?: string;        

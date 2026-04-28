@@ -26,5 +26,5 @@
 }
 
 .dashboard-area {
-  @apply w-full min-h-[800px] bg-white border border-slate-200 rounded-xl shadow-sm p-6;
+  @apply w-full min-h-[800px] bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6 overflow-hidden;
 }

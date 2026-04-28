@@ -60,22 +60,14 @@ export const CHART_TYPE_MAP: Record<string, string> = {
   area: 'area'
 };
 
-// 6. API Routes
-export const API_ROUTES = {
-  DASHBOARD_SAVE: '/api/dashboard',
-  CHART_SAVE: '/api/charts/save',
-  CHART_CONFIG: '/api/charts/chart-config',
-  CHART_DATA: '/api/charts/data',
-} as const;
-
-// 7. AI Configuration
+// 6. AI Configuration
 export const AI_CONFIG = {
   MODEL: "gpt-4.1", 
   CONVERSATION_LIMIT: 50, 
   RESPONSE_FORMAT: { type: "json_object" } as const,
 } as const;
 
-// 8. Prompt Instructions
+// 7. Prompt Instructions
 export const PROMPT_INSTRUCTIONS = {
   REPORT_ANALYSIS: `
     Return a JSON object with:
@@ -98,7 +90,7 @@ export const PROMPT_INSTRUCTIONS = {
   `,
 } as const;
 
-// 9. AI Error Messages (User Facing)
+// 8. AI Error Messages (User Facing)
 export const AI_ERROR_MESSAGES = {
   EMPTY_RESPONSE: "Empty AI response",
   UNSUPPORTED_INTENT: "Unsupported intent",
@@ -112,13 +104,13 @@ export const AI_ERROR_MESSAGES = {
   }
 } as const;
 
-// 10. Insight Display Configuration
+// 9. Insight Display Configuration
 export const INSIGHT_CONFIG = {
   SEPARATOR: ' - ',
   BULLET_COLOR: 'bg-blue-500',
 } as const;
 
-// 11. Chat Configuration
+// 10. Chat Configuration
 export const CHAT_CONFIG = {
   BOT_NAME: "KiBi-AI",
   WELCOME_MESSAGE: "Welcome to KiBi-AI! Please select an available prompt from the suggestion button or enter a new prompt to generate a report.",

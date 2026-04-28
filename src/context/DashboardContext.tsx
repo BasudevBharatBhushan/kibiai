@@ -29,8 +29,7 @@ import { useDebouncedCallback } from '@/lib/hooks/useDebounce';
 
 // Logic & API
 import { processData } from '@/lib/charts/DataProcessor';
-import { updateChartStatus } from '@/lib/client/chartActions';
-import { saveDashboardState } from '@/lib/client/dashboardAction';
+import { apiClient } from '@/utils/apiClient';
 
 // --- Types ---
 
@@ -42,7 +41,8 @@ interface DashboardContextType {
   isEditOpen: boolean;
   isMounted: boolean;
   currentLayouts: { lg: Layout[] };
-  reportRecordId?: string;
+  templateId?: string;
+  isViewerMode: boolean;
   dataset: any[]; // Exposed report rows for AI chart processing
 
   // Actions
@@ -70,7 +70,8 @@ interface DashboardProviderProps {
   initialDataset?: any[];
   initialCanvasState?: any; 
   initialLayoutMode?: string;   
-  reportRecordId?: string;
+  templateId?: string;
+  isViewerMode?: boolean;
   onNewChart?: (schema: ReportChartSchema) => void;
 }
 
@@ -92,7 +93,8 @@ export function DashboardProvider({
   initialDataset = [], 
   initialCanvasState, 
   initialLayoutMode = 'grid',
-  reportRecordId,
+  templateId,
+  isViewerMode = false,
   onNewChart,
 }: DashboardProviderProps) {
   
@@ -222,15 +224,14 @@ export function DashboardProvider({
   // --- AUTO-SAVE ---
   const triggerAutoSave = useDebouncedCallback(
     (currentCharts: ChartConfig[], visibleIds: Set<string>, currentLayoutMode: string) => {
-      if (!reportRecordId) {
-        console.warn("[DashboardContext] Cannot save: Missing reportRecordId");
+      if (!templateId || isViewerMode) {
         return;
       }
 
       const chartsToSave = currentCharts
-        .filter(c => visibleIds.has(c.id))
         .map(c => ({
           id: c.id,
+          isActive: visibleIds.has(c.id),
           layout: c.layout,
           kind: c.kind
         }));
@@ -240,7 +241,11 @@ export function DashboardProvider({
         charts: chartsToSave
       };
 
-      saveDashboardState(reportRecordId, payload);
+      apiClient
+        .patch(`/api/report-templates/${templateId}/charts/canvas-batch`, payload)
+        .catch((error) => {
+          console.error("[DashboardContext] Failed to save canvas state:", error);
+        });
     }, 
     500
   );
@@ -249,6 +254,8 @@ export function DashboardProvider({
 
   // 1. React-Grid-Layout Change Handler (Drag/Resize)
   const updateLayout = useCallback((newLayout: Layout[]) => {
+    if (isViewerMode) return;
+
     setAllCharts(prevCharts => {
       let hasChanges = false;
       const layoutMap = new Map(newLayout.map(l => [l.i, l]));
@@ -275,52 +282,40 @@ export function DashboardProvider({
       }
       return prevCharts;
     });
-  }, [triggerAutoSave, visibleChartIds, activeLayout]);
+  }, [triggerAutoSave, visibleChartIds, activeLayout, isViewerMode]);
 
   // 2. Chart Visibility Actions
   const addChart = (id: string) => {
+    if (isViewerMode) return;
     const nextIds = new Set(visibleChartIds);
     nextIds.add(id);
     setVisibleChartIds(nextIds);
     
     triggerAutoSave(allCharts, nextIds, activeLayout);
-
-    // Sync to FileMaker 
-    const chart = allCharts.find(c => c.id === id);
-    if (chart && chart.fmRecordId) {
-      updateChartStatus(chart.fmRecordId, { isActive: true });
-    }
   };
 
   const removeChart = (id: string) => {
+    if (isViewerMode) return;
     const nextIds = new Set(visibleChartIds);
     nextIds.delete(id);
     setVisibleChartIds(nextIds);
     
     triggerAutoSave(allCharts, nextIds, activeLayout);
-
-    const chart = allCharts.find(c => c.id === id);
-    if (chart && chart.fmRecordId) {
-      updateChartStatus(chart.fmRecordId, { isActive: false });
-    }
   };
 
   // 3. Chart Type Change
   const updateChartKind = (id: string, kind: ChartKind) => {
+    if (isViewerMode) return;
     setAllCharts(prev => {
       const next = prev.map(c => c.id === id ? { ...c, kind } : c);
       triggerAutoSave(next, visibleChartIds, activeLayout); 
       return next;
     });
-  
-    const chart = allCharts.find(c => c.id === id);
-    if (chart && chart.fmRecordId) {
-       updateChartStatus(chart.fmRecordId, { type: kind });
-    }
   };
 
   // 4. Layout Presets (Grid, Columns, etc.)
   const applyLayoutPreset = (type: LayoutMode) => {
+    if (isViewerMode) return;
     setActiveLayout(type);
     
     setAllCharts(prev => {
@@ -369,12 +364,13 @@ export function DashboardProvider({
 
   // 5. Reset
   const resetDashboard = async () => {
-    if (reportRecordId) {
-      const resetState = {
+    if (isViewerMode) return;
+
+    if (templateId) {
+      await apiClient.patch(`/api/report-templates/${templateId}/charts/canvas-batch`, {
         layoutMode: 'grid',
         charts: []
-      };
-      await saveDashboardState(reportRecordId, resetState);
+      });
       window.location.reload();
     } else {
       window.location.reload();
@@ -461,7 +457,8 @@ export function DashboardProvider({
     isEditOpen,
     isMounted,
     currentLayouts,
-    reportRecordId,
+    templateId,
+    isViewerMode,
     dataset,
 
     // Actions

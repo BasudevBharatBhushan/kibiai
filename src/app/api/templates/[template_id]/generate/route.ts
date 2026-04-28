@@ -110,6 +110,30 @@ export async function POST(
 
     const reportStructureJson = engineResult.report_structure_json;
 
+    const { error: previewUpdateError } = await supabase
+      .from("report_templates")
+      .update({
+        report_template_data_json: reportStructureJson,
+        updated_on: new Date().toISOString(),
+      })
+      .eq("report_template_id", template_id)
+      .eq("company_id", session.companyId);
+
+    if (previewUpdateError) {
+      console.error(
+        "[POST /api/templates/[id]/generate] preview update error:",
+        previewUpdateError.message,
+        previewUpdateError.details
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Generated report data could not be cached on the template.",
+        },
+        { status: 500 }
+      );
+    }
+
     // 6. Optionally save to reports history
     let reportId: string | null = null;
     if (save_to_history) {

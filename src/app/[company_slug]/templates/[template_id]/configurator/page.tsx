@@ -177,7 +177,7 @@ function ConfiguratorPageContent({
         if (data.config_json && data.preview_data_json) {
           dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
         } else if (data.config_json && data.setup_json) {
-          fetchLivePreview(data.setup_json, data.config_json);
+          fetchLivePreview();
         }
       } catch (err: any) {
         addToast("error", "Load Error", err.message || "Failed to load configurator.");
@@ -192,15 +192,23 @@ function ConfiguratorPageContent({
 
   // ── Live preview ─────────────────────────────────────────────────────────────
   const fetchLivePreview = useCallback(
-    async (setupData: any, configData: any) => {
+    async () => {
+      if (!templateId) return;
+
       dispatch({ type: "SET_LOADING", payload: true });
       try {
-        const result = await apiClient.post<{ status: string; report_structure_json: any }>(
-          "/api/generate-report",
-          { report_setup: setupData, report_config: configData }
+        const result = await apiClient.post<{
+          success: boolean;
+          data?: { report_structure_json?: any };
+        }>(
+          `/api/templates/${templateId}/generate`,
+          {}
         );
-        if (result.status === "ok" && result.report_structure_json) {
-          dispatch({ type: "SET_REPORT_PREVIEW", payload: result.report_structure_json });
+        if (result.success && result.data?.report_structure_json) {
+          dispatch({
+            type: "SET_REPORT_PREVIEW",
+            payload: result.data.report_structure_json,
+          });
         }
       } catch (e) {
         console.error("Preview generation failed", e);
@@ -208,7 +216,7 @@ function ConfiguratorPageContent({
         dispatch({ type: "SET_LOADING", payload: false });
       }
     },
-    [dispatch]
+    [dispatch, templateId]
   );
 
   // ── AI response handler ───────────────────────────────────────────────────────
@@ -246,13 +254,13 @@ function ConfiguratorPageContent({
           }
 
           dispatch({ type: "LOAD_INITIAL_CONFIG", payload: safeConfig });
-          await fetchLivePreview(state.setup, safeConfig);
+          await fetchLivePreview();
         }
       } catch (e) {
         // Gracefully ignore suggestion-only / non-JSON responses
       }
     },
-    [state.templateId, state.setup, state.config, dispatch, fetchLivePreview]
+    [state.templateId, state.config, dispatch, fetchLivePreview]
   );
 
   // ── Conversation ID sync ──────────────────────────────────────────────────────

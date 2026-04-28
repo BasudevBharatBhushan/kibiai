@@ -146,6 +146,8 @@ AI-generated report definitions.
 | `updated_on` | timestamptz | DEFAULT now() | |
 | `chart_conversation_id` | varchar | | AI thread ID for Chart Builder session |
 
+> **Migration**: `ai-workspace/sql/015-add-chart-conv-id.sql`
+
 ### 8. reports
 Snapshots of generated reports.
 | Column | Type | Constraints | Description |

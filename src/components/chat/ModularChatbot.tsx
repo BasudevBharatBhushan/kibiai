@@ -24,7 +24,10 @@ import { useAutoScroll } from '@/lib/hooks/useAutoScroll';
 
 import { sendMessage as apiSendMessage, getConversation } from "@/lib/bot/conversationAPI";
 import { formatUserPrompt } from "@/lib/bot/promptFormatter";
-import { parseAssistantResponse } from "@/lib/bot/responseParser";
+import {
+  extractAssistantDisplayText,
+  parseAssistantResponse,
+} from "@/lib/bot/responseParser";
 import { SUGGESTED_PROMPTS } from "@/lib/utils/mockPrompts";
 
 export type Message = {
@@ -55,6 +58,7 @@ export interface ModularChatbotProps {
   pendingInput?: string;
   /** Called after pendingInput has been consumed (so parent can clear it) */
   onPendingInputConsumed?: () => void;
+  onLoadingChange?: (isLoading: boolean) => void;
 }
 
 export function ModularChatbot({
@@ -72,6 +76,7 @@ export function ModularChatbot({
   className,
   pendingInput,
   onPendingInputConsumed,
+  onLoadingChange,
 }: ModularChatbotProps) {
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -84,6 +89,9 @@ export function ModularChatbot({
   // Always holds the latest predefinedPrompt so async sends never use stale closures
   const predefinedPromptRef = useRef(predefinedPrompt);
   useEffect(() => { predefinedPromptRef.current = predefinedPrompt; }, [predefinedPrompt]);
+  useEffect(() => {
+    if (onLoadingChange) onLoadingChange(loading);
+  }, [loading, onLoadingChange]);
 
   /**
    * Returns true when the API error means the stored conversation_id is no
@@ -134,7 +142,7 @@ export function ModularChatbot({
             conversation_id: conversationId,
             instruction_set: instructionSet,
             predefined_prompt: predefinedPromptRef.current,
-            metadata: conversationMetadata || {},
+            conversation_metadata: conversationMetadata || {},
             user_prompt: finalPrompt,
           };
           const res = await apiSendMessage(payload);
@@ -143,15 +151,7 @@ export function ModularChatbot({
             if (onConversationIdChange) onConversationIdChange(res.conversation_id);
           }
           const rawResponseText = res.response ?? "";
-          let displayedText = rawResponseText;
-          try {
-            let jsonStr = rawResponseText;
-            const match = rawResponseText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-            if (match) jsonStr = match[1];
-            else { const pm = rawResponseText.match(/(\{[\s\S]*\})/); if (pm) jsonStr = pm[1]; }
-            const parsed = JSON.parse(jsonStr);
-            if (parsed.response_to_user) displayedText = parsed.response_to_user;
-          } catch (_) {}
+          const displayedText = extractAssistantDisplayText(rawResponseText);
           if (displayedText) {
             setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);
             if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
@@ -173,7 +173,7 @@ export function ModularChatbot({
                 conversation_id: null,
                 instruction_set: instructionSet,
                 predefined_prompt: predefinedPromptRef.current,
-                metadata: conversationMetadata || {},
+                conversation_metadata: conversationMetadata || {},
                 user_prompt: formatPrompt ? formatPrompt(textToSend) : formatUserPrompt(textToSend),
               };
               const res = await apiSendMessage(retryPayload);
@@ -181,15 +181,7 @@ export function ModularChatbot({
               if (onConversationIdChange) onConversationIdChange(res.conversation_id);
               
               const rawResponseText = res.response ?? "";
-              let displayedText = rawResponseText;
-              try {
-                let jsonStr = rawResponseText;
-                const match = rawResponseText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-                if (match) jsonStr = match[1];
-                else { const pm = rawResponseText.match(/(\{[\s\S]*\})/); if (pm) jsonStr = pm[1]; }
-                const parsed = JSON.parse(jsonStr);
-                if (parsed.response_to_user) displayedText = parsed.response_to_user;
-              } catch (_) {}
+              const displayedText = extractAssistantDisplayText(rawResponseText);
               if (displayedText) {
                 setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);
                 if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
@@ -237,7 +229,9 @@ export function ModularChatbot({
               const hasPredefined =
                 text.includes("Today's date") ||
                 text.includes("Here is my DB Schema") ||
-                text.includes("Here is my Previous Report Config");
+                text.includes("Here is my Previous Report Config") ||
+                text.includes("FieldName:") ||
+                text.includes("Report Insight:");
 
               if (hasPredefined) {
                 // The predefined block ends with ".\n" — user input follows
@@ -294,7 +288,7 @@ export function ModularChatbot({
         conversation_id: conversationId,
         instruction_set: instructionSet,
         predefined_prompt: predefinedPromptRef.current,
-        metadata: conversationMetadata || {},
+        conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
       };
 
@@ -308,21 +302,7 @@ export function ModularChatbot({
       }
 
       const rawResponseText = res.response ?? "";
-      let displayedText = rawResponseText;
-
-      try {
-        let jsonStr = rawResponseText;
-        const match = rawResponseText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-        if (match) jsonStr = match[1];
-        else {
-          const plainMatch = rawResponseText.match(/(\{[\s\S]*\})/);
-          if (plainMatch) jsonStr = plainMatch[1];
-        }
-        const parsed = JSON.parse(jsonStr);
-        if (parsed.response_to_user) {
-          displayedText = parsed.response_to_user;
-        }
-      } catch (err) {}
+      const displayedText = extractAssistantDisplayText(rawResponseText);
 
       if (displayedText) {
         setMessages((prev) => [
@@ -347,7 +327,7 @@ export function ModularChatbot({
             conversation_id: null,
             instruction_set: instructionSet,
             predefined_prompt: predefinedPromptRef.current,
-            metadata: conversationMetadata || {},
+            conversation_metadata: conversationMetadata || {},
             user_prompt: finalPrompt,
           };
           const res = await apiSendMessage(retryPayload);
@@ -355,18 +335,7 @@ export function ModularChatbot({
           if (onConversationIdChange) onConversationIdChange(res.conversation_id);
 
           const rawResponseText = res.response ?? "";
-          let displayedText = rawResponseText;
-          try {
-            let jsonStr = rawResponseText;
-            const match = rawResponseText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-            if (match) jsonStr = match[1];
-            else {
-              const plainMatch = rawResponseText.match(/(\{[\s\S]*\})/);
-              if (plainMatch) jsonStr = plainMatch[1];
-            }
-            const parsed = JSON.parse(jsonStr);
-            if (parsed.response_to_user) displayedText = parsed.response_to_user;
-          } catch (err) {}
+          const displayedText = extractAssistantDisplayText(rawResponseText);
 
           if (displayedText) {
             setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);

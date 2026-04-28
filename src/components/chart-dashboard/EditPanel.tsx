@@ -42,14 +42,14 @@ export default function EditPanel() {
       {/* Backdrop */}
       <div 
         className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 ${
-          isEditOpen ? 'opacity-0' : 'opacity-0 pointer-events-none'
+          isEditOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={() => setEditOpen(false)}
       />
 
       {/* Panel */}
       <div 
-        className={`fixed top-0 right-0 h-full w-100 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${
+        className={`fixed right-4 top-[80px] bottom-4 h-auto w-[min(400px,calc(100vw-1rem))] rounded-2xl border border-slate-200 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col overflow-hidden ${
           isEditOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -91,11 +91,11 @@ export default function EditPanel() {
                 {activeCharts.map(chart => (
                   <div key={chart.id} className="p-3 border border-slate-100 rounded-lg shadow-sm bg-white">
                     <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                         <div className="p-1.5 bg-blue-50 text-blue-600 rounded">
                           {getIcon(chart.kind)}
                         </div>
-                        <span className="text-sm font-medium text-slate-700 line-clamp-1">{chart.title}</span>
+                        <span className="min-w-0 flex-1 text-sm font-medium text-slate-700 truncate">{chart.title}</span>
                       </div>
                       <button 
                         onClick={() => removeChart(chart.id)}
@@ -148,8 +148,8 @@ export default function EditPanel() {
             {isInactiveOpen && (
               <div className="space-y-2 pt-1 pl-1 pr-1 animate-in slide-in-from-top-2 duration-200">
                 {inactiveCharts.map(chart => (
-                  <div key={chart.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
-                    <span className="text-sm text-slate-600 line-clamp-1">{chart.title}</span>
+                  <div key={chart.id} className="flex items-center justify-between gap-3 p-3 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
+                    <span className="min-w-0 flex-1 text-sm text-slate-600 truncate">{chart.title}</span>
                     <button 
                       onClick={() => addChart(chart.id)}
                       className="p-1.5 bg-white border border-slate-200 text-green-600 rounded hover:bg-green-50"

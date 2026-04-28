@@ -11,7 +11,7 @@ import Link from "next/link";
 
 // Icons
 import { 
-  Info, Zap 
+  BarChart3, Info, Zap 
 } from "lucide-react";
 
 // Components
@@ -52,22 +52,21 @@ export function ReportConfigurator() {
     dispatch({ type: "SET_LOADING", payload: true });
 
     try {
-      // 1. Generate live preview
-      const result = await apiClient.post<{ status: string; report_structure_json: any }>(
-        "/api/generate-report",
-        { report_setup: state.setup, report_config: state.config }
-      );
-
-      // 2. Save config + preview snapshot to Supabase
-      const previewData = result.status === "ok" ? result.report_structure_json : undefined;
       await apiClient.post(`/api/templates/${state.templateId}/config`, {
         config_json: state.config,
         bump_version: true,
-        ...(previewData ? { preview_data_json: previewData } : {}),
       });
 
-      if (result.status === "ok" && result.report_structure_json) {
-        dispatch({ type: "SET_REPORT_PREVIEW", payload: result.report_structure_json });
+      const result = await apiClient.post<{
+        success: boolean;
+        data?: { report_structure_json?: any };
+      }>(`/api/templates/${state.templateId}/generate`, {});
+
+      if (result.success && result.data?.report_structure_json) {
+        dispatch({
+          type: "SET_REPORT_PREVIEW",
+          payload: result.data.report_structure_json,
+        });
         addToast("success", "Success", "Configuration saved and preview updated.");
       } else {
         console.warn("Generation Warning:", result);
@@ -105,6 +104,17 @@ export function ReportConfigurator() {
             >
               <Zap size={13} />
               Generate
+            </Link>
+          )}
+
+          {slug && templateId && (
+            <Link
+              href={`/${slug}/templates/${templateId}/charts`}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 whitespace-nowrap"
+              style={{ background: "#2563eb" }}
+            >
+              <BarChart3 size={13} />
+              Charts
             </Link>
           )}
         </div>

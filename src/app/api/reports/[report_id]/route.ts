@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+
+import {
+  extractBodyRows,
+  normalizeChartTemplates,
+} from "@/lib/charts/supabaseAdapters";
 import { getSession } from "@/utils/auth";
 import { createAdminClient } from "@/utils/supabase/server";
 
@@ -32,9 +37,41 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Report not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, data });
-  } catch (err: any) {
+    const { data: chartTemplates, error: chartError } = await supabase
+      .from("chart_templates")
+      .select(
+        "chart_template_id, chart_template_name, chart_template_type, chart_template_setup_json, chart_template_dataset_json, chart_template_canvas_state"
+      )
+      .eq("report_template_id", data.report_template_id)
+      .eq("company_id", session.companyId)
+      .order("created_on", { ascending: true });
+
+    if (chartError) {
+      return NextResponse.json(
+        { success: false, error: chartError.message },
+        { status: 500 }
+      );
+    }
+
+    const normalized = normalizeChartTemplates(chartTemplates);
+    const rows = extractBodyRows(data.report_data_json);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...data,
+        rows,
+        ...normalized,
+      },
+    });
+  } catch (err: unknown) {
     console.error("[GET /api/reports/[report_id]]", err);
-    return NextResponse.json({ success: false, error: err.message || "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: err instanceof Error ? err.message : "Internal server error",
+      },
+      { status: 500 }
+    );
   }
 }

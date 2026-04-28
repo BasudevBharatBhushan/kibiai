@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
-import { FiGrid, FiColumns, FiList, FiSidebar, FiRotateCcw, FiEdit2 } from 'react-icons/fi';
-import { DashboardProvider, useDashboard } from '@/context/DashboardContext';
-import { ReportChartSchema } from '@/lib/charts/ChartTypes';
+import { FiGrid, FiColumns, FiList, FiSidebar, FiRotateCcw } from 'react-icons/fi';
+import { useDashboard } from '@/context/DashboardContext';
 import { GRID_CONFIG, UI_TEXT } from '@/constants/dashboard';
+import type { LayoutMode } from '@/constants/dashboard';
 
 import ChartCard from './ChartCard';
 import InsightCard from './InsightCard';
@@ -18,22 +18,9 @@ import '@/styles/dashboard.css';
 // Responsive Grid Layout
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
-// Dashboard Component
-interface DashboardProps {
-  initialSchemas?: ReportChartSchema[];
-  initialDataset?: any[];
-  initialCanvasState?: any; 
-  initialLayoutMode?: string;   
-  reportRecordId?: string;
-}
-
 // Main Dashboard Grid Component
-export default function DashboardGrid(props: DashboardProps) {
-  return (
-    <DashboardProvider {...props}>
-      <DashboardInner />
-    </DashboardProvider>
-  );
+export default function DashboardGrid() {
+  return <DashboardInner />;
 }
 
 // Inner Dashboard Component
@@ -43,20 +30,21 @@ function DashboardInner() {
     currentLayouts,
     layoutMode,
     isMounted,
-    setEditOpen,
     applyLayoutPreset,
     updateLayout,
-    resetDashboard
+    resetDashboard,
+    isViewerMode,
   } = useDashboard();
 
   if (!isMounted) return null;
 
   // Render
   return (
-    <div className="flex flex-col items-center w-full max-w-[1400px] mx-auto p-6">
-      <EditPanel />
+    <div className="flex w-full min-w-0 flex-col items-center px-4 py-6 lg:px-6">
+      {!isViewerMode && <EditPanel />}
 
       {/* Toolbar */}
+      {!isViewerMode && (
       <div className="w-full flex items-center justify-between bg-white border border-slate-200 rounded-xl shadow-sm p-3 mb-6 sticky top-4 z-10">
         <div className="flex items-center gap-3">
           <button 
@@ -78,7 +66,7 @@ function DashboardInner() {
           ].map(({ id, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => applyLayoutPreset(id as any)}
+              onClick={() => applyLayoutPreset(id as LayoutMode)}
               className={`p-2 rounded-md transition-all ${
                 layoutMode === id 
                   ? 'bg-white text-blue-600 shadow-sm' 
@@ -89,18 +77,13 @@ function DashboardInner() {
             </button>
           ))}
 
-          <button 
-            onClick={() => setEditOpen(true)}
-            className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm font-semibold text-blue-600 hover:bg-blue-100 transition-colors shadow-sm active:scale-95 flex items-center gap-2"
-          >
-            <FiEdit2 size={14} /> Configure
-          </button>
         </div>
       </div>
+      )}
 
       {/* Grid Canvas */}
       <div 
-        className="dashboard-area w-full min-h-screen"
+        className="dashboard-area w-full min-h-screen overflow-hidden"
         style={{
           backgroundImage: 'linear-gradient(#f1f5f9 1px, transparent 1px), linear-gradient(to right, #f1f5f9 1px, transparent 1px)',
           backgroundSize: '20px 20px'
@@ -120,7 +103,9 @@ function DashboardInner() {
           rowHeight={GRID_CONFIG.rowHeight}
           margin={GRID_CONFIG.margin}
           onLayoutChange={updateLayout}
-          draggableHandle=".dragHandle"
+          draggableHandle={isViewerMode ? undefined : ".dragHandle"}
+          isDraggable={!isViewerMode}
+          isResizable={!isViewerMode}
         >
           {activeCharts.map(cfg => (
             <div key={cfg.id} className="relative group">

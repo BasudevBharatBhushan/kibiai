@@ -24,7 +24,7 @@ type Props = {
 
 export default function ChartCard({ config }: Props) {
   // Use Context hook
-  const { removeChart, updateChartKind } = useDashboard();
+  const { removeChart, updateChartKind, isViewerMode } = useDashboard();
 
   const opts = useMemo(() => {
     const base = buildOptions(config);
@@ -62,25 +62,29 @@ export default function ChartCard({ config }: Props) {
         </div>
 
         <div className="flex items-center gap-2 pl-2">
-          <select
-            className="chart-kind-select"
-            value={config.kind}
-            onChange={(e) => updateChartKind(config.id, e.target.value as ChartKind)}
-          >
-            {AVAILABLE_CHART_TYPES.map(type => (
-              <option key={type} value={type}>
-                {type.charAt(0).toUpperCase() + type.slice(1).replace('Column', 'Bar')}
-              </option>
-            ))}
-          </select>
+          {!isViewerMode && (
+            <>
+              <select
+                className="chart-kind-select"
+                value={config.kind}
+                onChange={(e) => updateChartKind(config.id, e.target.value as ChartKind)}
+              >
+                {AVAILABLE_CHART_TYPES.map(type => (
+                  <option key={type} value={type}>
+                    {type.charAt(0).toUpperCase() + type.slice(1).replace('Column', 'Bar')}
+                  </option>
+                ))}
+              </select>
 
-          <button 
-            onClick={() => removeChart(config.id)}
-            className="delete-btn"
-            title="Remove Chart"
-          >
-            <FiTrash2 size={14} />
-          </button>
+              <button 
+                onClick={() => removeChart(config.id)}
+                className="delete-btn"
+                title="Remove Chart"
+              >
+                <FiTrash2 size={14} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
