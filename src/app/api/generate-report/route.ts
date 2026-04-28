@@ -1755,12 +1755,23 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < sortedFetchDefs.length; i++) {
       const fetchDef = sortedFetchDefs[i];
 
+      // Find the dataset of the primary table for this fetch definition
+      const sourceFetchDef = sortedFetchDefs.find(
+        (def) =>
+          (def.fetch_order === 1 ? def.primary_table : def.joined_table) ===
+          fetchDef.primary_table
+      );
+
+      const sourceDataset = sourceFetchDef
+        ? dataManager.getDataset(sourceFetchDef.fetch_order) || currentDataset
+        : currentDataset;
+
       const result = await processFetchOrder(
         fetchDef,
         setupJson,
         configJson,
         dataManager,
-        currentDataset
+        sourceDataset
       );
 
       currentDataset = result.data;

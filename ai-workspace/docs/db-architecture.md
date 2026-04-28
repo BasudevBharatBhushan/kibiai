@@ -15,7 +15,7 @@ Every table is protected by Row Level Security. A helper function `public.get_my
 
 ### Policy Logic
 - **Isolation**: Users can only see/modify records where the `company_id` matches their own assigned `company_id`.
-- **User Profiles**: Users can view all user profiles in their company but can only update their own profile (checked via `auth_user_id = auth.uid()`).
+- **User Profiles**: Users can view all user profiles in their company but can only update their own profile (checked via `account_id = auth.uid()`).
 - **AI Analytics**: Full CRUD access is granted to `report_templates`, `reports`, `chart_templates`, and `charts` within the user's company context.
 - **Logs**: Users have read-only access to their company's AI usage logs.
 
@@ -36,7 +36,10 @@ erDiagram
     COMPANIES ||--o{ AI_USAGE_LOGS : "belongs to"
     COMPANIES ||--o{ LICENSES : "owns"
     COMPANIES ||--o{ PAYMENT_LOGS : "makes"
+    COMPANIES ||--o{ ALLOWED_SUBDOMAINS : "has"
     PLATFORM_ADMINS ||--o{ COMPANIES : "manages"
+    AUTH_ACCOUNTS ||--o{ USERS : "authenticates"
+    AUTH_ACCOUNTS ||--o{ PLATFORM_ADMINS : "authenticates"
 
     MODULES ||--o{ REPORT_TEMPLATES : "contains"
     REPORT_TEMPLATES ||--o{ REPORTS : "generates"
@@ -52,7 +55,18 @@ erDiagram
 
 ## Detailed Table Definitions
 
-### 1. companies
+### 1. auth_accounts
+Authentication identities linked to Supabase Auth.
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `account_id` | uuid | PK, DEFAULT gen_random_uuid() | Unique ID mapping to `auth.users(id)` |
+| `email` | varchar | UNIQUE, NOT NULL | Account email |
+| `password_hash` | text | | Encrypted password |
+| `account_type` | varchar | | User / Admin type |
+| `created_at` | timestamptz | DEFAULT now() | Creation timestamp |
+| `updated_at` | timestamptz | DEFAULT now() | Update timestamp |
+
+### 2. companies
 Root tenant table.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -66,22 +80,22 @@ Root tenant table.
 | `created_on` | timestamptz | DEFAULT now() | Creation timestamp |
 | `updated_on` | timestamptz | DEFAULT now() | Last update timestamp |
 
-### 2. platform_admins
+### 3. platform_admins
 Dedicated table for KiBiAI internal admins.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `admin_id` | uuid | PK, DEFAULT gen_random_uuid() | Unique ID for the admin |
-| `auth_user_id` | uuid | UNIQUE, FK auth.users(id) | Reference to Supabase Auth |
+| `account_id` | uuid | UNIQUE, FK auth_accounts | Reference to Supabase Auth |
 | `email` | varchar(150) | UNIQUE, NOT NULL | Admin email address |
 | `is_active` | boolean | DEFAULT true | Activation status |
 | `created_at` | timestamptz | DEFAULT now() | Creation timestamp |
 
-### 3. users
+### 4. users
 Application users linked to Supabase Auth.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `user_id` | uuid | PK, DEFAULT gen_random_uuid() | Unique ID for the user |
-| `auth_user_id` | uuid | UNIQUE | Reference to `auth.users(id)` |
+| `account_id` | uuid | FK -> auth_accounts | Reference to `auth.users(id)` |
 | `company_id` | uuid | FK -> companies | Tenant association |
 | `user_email` | varchar(150) | NOT NULL | User's email |
 | `full_name` | varchar(150) | | Full name |
@@ -91,7 +105,7 @@ Application users linked to Supabase Auth.
 | `created_on` | timestamptz | DEFAULT now() | |
 | `updated_on` | timestamptz | DEFAULT now() | |
 
-### 3. roles
+### 5. roles
 RBAC definitions.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -101,7 +115,7 @@ RBAC definitions.
 | `is_super_admin` | boolean | DEFAULT false | Bypass permission checks |
 | `created_on` | timestamptz | DEFAULT now() | |
 
-### 4. modules
+### 6. modules
 High-level application modules.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -112,7 +126,7 @@ High-level application modules.
 | `module_status` | varchar(20) | DEFAULT 'Active' | |
 | `created_on` | timestamptz | DEFAULT now() | |
 
-### 5. report_templates
+### 7. report_templates
 AI-generated report definitions.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -130,8 +144,9 @@ AI-generated report definitions.
 | `created_by_user_id` | uuid | FK -> users | |
 | `created_on` | timestamptz | DEFAULT now() | |
 | `updated_on` | timestamptz | DEFAULT now() | |
+| `chart_conversation_id` | varchar | | AI thread ID for Chart Builder session |
 
-### 6. reports
+### 8. reports
 Snapshots of generated reports.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -145,7 +160,7 @@ Snapshots of generated reports.
 | `generated_by_user_id` | uuid | FK -> users | |
 | `created_on` | timestamptz | DEFAULT now() | |
 
-### 7. chart_templates
+### 9. chart_templates
 Visual configuration for charts.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -163,7 +178,7 @@ Visual configuration for charts.
 | `created_on` | timestamptz | DEFAULT now() | |
 | `updated_on` | timestamptz | DEFAULT now() | |
 
-### 8. charts
+### 10. charts
 Rendered chart instances.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -178,7 +193,7 @@ Rendered chart instances.
 | `created_by_user_id` | uuid | FK -> users | |
 | `created_on` | timestamptz | DEFAULT now() | |
 
-### 9. ai_usage_logs
+### 11. ai_usage_logs
 AI model consumption logs.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -192,7 +207,7 @@ AI model consumption logs.
 | `output_tokens` | integer | DEFAULT 0 | |
 | `created_on` | timestamptz | DEFAULT now() | |
 
-### 10. licenses
+### 12. licenses
 Replaces legacy licensing.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -212,7 +227,7 @@ Replaces legacy licensing.
 | `created_on` | timestamptz | DEFAULT now() | |
 | `updated_on` | timestamptz | DEFAULT now() | |
 
-### 11. plans
+### 13. plans
 Available subscription plans.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -223,7 +238,7 @@ Available subscription plans.
 | `stripe_response_json` | jsonb | | |
 | `created_on` | timestamptz | DEFAULT now() | |
 
-### 12. promocodes
+### 14. promocodes
 Discount codes for subscriptions.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -236,17 +251,18 @@ Discount codes for subscriptions.
 | `is_active` | boolean | DEFAULT true | |
 | `created_on` | timestamptz | DEFAULT now() | |
 
-### 13. payment_logs
+### 15. payment_logs
 Replaces FileMaker PaymentLog.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `payment_id` | uuid | PK, DEFAULT gen_random_uuid() | |
 | `company_id` | uuid | FK -> companies | |
 | `api_request` | jsonb | | Request payload to Stripe/etc |
+| `api_response` | jsonb | | Response from Stripe/etc |
 | `status` | varchar(50) | | |
 | `created_on` | timestamptz | DEFAULT now() | |
 
-### 14. user_module_access
+### 16. user_module_access
 Tracks which modules a user has access to.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -255,7 +271,7 @@ Tracks which modules a user has access to.
 | `company_id` | uuid | FK -> companies | |
 | `created_at` | timestamptz | DEFAULT now() | |
 
-### 15. user_template_permissions
+### 17. user_template_permissions
 Tracks granular permissions for a user on a specific report template.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -270,7 +286,7 @@ Tracks granular permissions for a user on a specific report template.
 | `created_at` | timestamptz | DEFAULT now() | |
 | `updated_at` | timestamptz | DEFAULT now() | |
 
-### 16. allowed_subdomains
+### 18. allowed_subdomains
 Registry of valid company subdomains for subdomain-based routing.
 > **Added**: T-014 — Subdomain-Based Routing
 | Column | Type | Constraints | Description |

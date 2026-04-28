@@ -165,17 +165,16 @@ PAGE 8 — Report History  [/company/reports]
 All previously generated reports. Timestamped, immutable snapshots.
 Searchable by template, user, date.
 
-RULE: Chart generation always starts from a saved report here — never from a
-template directly. This guarantees charts use a complete validated dataset.
+RULE: Chart widgets are defined on the Report Template. When opening charts for a saved report, they strictly follow the templates and display the validated dataset captured at generation time.
 
 --------------------------------------------------------------------------------
-PAGE 9 — Chart Template Builder  [/company/report/{reportId}/charts]
+PAGE 9 — Chart Template Builder  [/company/template/{templateId}/charts]
 --------------------------------------------------------------------------------
-AI-assisted chart creation from a specific saved report's dataset.
+AI-assisted chart creation bound to a Report Template.
 
-Why from a report, not a template:
-Report already contains validated filters, resolved joins, grouped totals,
-calculated fields, trusted metrics. Charts inherit all of this — no mismatch risk.
+Why on the template level, not the report level:
+Chart templates define the visual representation rules (e.g. axes, metrics) for the data structure defined by the report template. When a user generates a specific report, the charts are instantiated automatically by applying the chart templates to the frozen report data.
+The builder uses the report template's cached preview data (`report_template_data_json`) to render realistic previews during configuration.
 
 Available inputs: report columns, summary values, grouped rows, calculated metrics.
 Supported chart types: Bar | Line | Pie | Donut | Area
