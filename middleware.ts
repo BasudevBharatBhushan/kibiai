@@ -121,7 +121,9 @@ export async function middleware(request: NextRequest) {
   // ── 3. Handle reserved platform subdomains (e.g. "admin") ─────────────────
   if (RESERVED_SUBDOMAIN_ROUTES[subdomain]) {
     const rewritePath = RESERVED_SUBDOMAIN_ROUTES[subdomain];
-    const rewriteUrl = new URL(`${rewritePath}${pathname}`, request.url);
+    // Avoid doubling (e.g. admin.domain.com/admin -> /admin/admin)
+    const normalizedPath = pathname.startsWith(rewritePath) ? pathname : `${rewritePath}${pathname}`;
+    const rewriteUrl = new URL(normalizedPath, request.url);
     rewriteUrl.search = request.nextUrl.search;
     return NextResponse.rewrite(rewriteUrl);
   }
@@ -138,7 +140,9 @@ export async function middleware(request: NextRequest) {
 
   if (valid) {
     // Rewrite: acme-corp.kibiai.itsb3.xyz/templates → /acme-corp/templates
-    const rewriteUrl = new URL(`/${subdomain}${pathname}`, request.url);
+    // Avoid doubling: acme-corp.kibiai.itsb3.xyz/acme-corp/templates → /acme-corp/templates
+    const normalizedPath = pathname.startsWith(`/${subdomain}`) ? pathname : `/${subdomain}${pathname}`;
+    const rewriteUrl = new URL(normalizedPath, request.url);
     rewriteUrl.search = request.nextUrl.search;
     return NextResponse.rewrite(rewriteUrl);
   }
