@@ -110,6 +110,7 @@ export default function TemplateSetupPage() {
       {/* ── Setup Wizard ── */}
       <SetupWizard
         templateId={templateId}
+        companySlug={slug}
       />
 
       <style jsx>{`

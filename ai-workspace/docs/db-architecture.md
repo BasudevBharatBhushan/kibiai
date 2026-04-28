@@ -269,3 +269,21 @@ Tracks granular permissions for a user on a specific report template.
 | `can_create_charts` | boolean | DEFAULT false | |
 | `created_at` | timestamptz | DEFAULT now() | |
 | `updated_at` | timestamptz | DEFAULT now() | |
+
+### 16. allowed_subdomains
+Registry of valid company subdomains for subdomain-based routing.
+> **Added**: T-014 — Subdomain-Based Routing
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `subdomain_id` | uuid | PK, DEFAULT gen_random_uuid() | Unique ID |
+| `slug` | varchar(120) | UNIQUE, NOT NULL | Kebab-case company slug (e.g. "acme-corp") |
+| `company_id` | uuid | FK -> companies (ON DELETE CASCADE) | Tenant association |
+| `is_active` | boolean | NOT NULL, DEFAULT true | When false, subdomain is blocked |
+| `created_on` | timestamptz | DEFAULT now() | |
+| `updated_on` | timestamptz | DEFAULT now() | Auto-updated via trigger |
+
+> **Notes**:
+> - The `admin` subdomain is **reserved** and NOT stored in this table — it is hardcoded in `middleware.ts`.
+> - Reserved slugs blocked at company creation: `admin`, `api`, `www`, `kibiai`, `app`, `mail`, `ftp`, `support`, `help`, `static`, `assets`.
+> - RLS: Public `SELECT` on `is_active = true` rows (for middleware validation). All writes via service role only.
+> - Migration file: `ai-workspace/sql/014_allowed_subdomains.sql`

@@ -33,8 +33,8 @@ function ReportPageContent() {
   const [isConfigOpen, setIsConfigOpen] = useState(true);
   const [conversationId, setConversationId] = useState<string | null>(null);
 
-  // Function to fetch live preview — also persists snapshot to DB when fmRecordId is available
-  const fetchLivePreview = useCallback(async (setupData: any, configData: any, fmRecordId?: string | null) => {
+  // Function to fetch live preview
+  const fetchLivePreview = useCallback(async (setupData: any, configData: any) => {
     dispatch({ type: "SET_LOADING", payload: true });
     try {
       const res = await fetch("/api/generate-report", {
@@ -46,18 +46,6 @@ function ReportPageContent() {
       
       if(result.status === "ok" && result.report_structure_json) {
          dispatch({ type: "SET_REPORT_PREVIEW", payload: result.report_structure_json });
-
-         // Persist snapshot to DB so next load doesn't show stale data
-         if (fmRecordId) {
-           fetch("/api/report-config", {
-             method: "POST",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify({
-               fmRecordId,
-               reportStructuredData: result.report_structure_json
-             })
-           }).catch(e => console.error("Failed to persist report snapshot:", e));
-         }
       }
     } catch (e) {
       console.error("Preview Generation Failed", e);
@@ -79,7 +67,12 @@ function ReportPageContent() {
         if (!res.ok) throw new Error(data.error);
 
         // Load Config into Builder
-        dispatch({ type: "LOAD_FULL_REPORT", payload: data });
+        dispatch({ type: "LOAD_FULL_REPORT", payload: {
+          config: data.config,
+          setup: data.setup,
+          templateId: data.templateId || data.fmRecordId || reportId,
+          conversationId: data.threadId || null,
+        }});
         if (data.threadId) setConversationId(data.threadId);
 
         // 2. Initial Preview Logic
@@ -134,38 +127,19 @@ function ReportPageContent() {
           custom_calculated_fields: parsedJson.custom_calculated_fields || state.config.custom_calculated_fields || []
         };
 
-        // Save config to DB first (fire & forget)
-        if (state.fmRecordId) {
-          fetch("/api/report-config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fmRecordId: state.fmRecordId, config: parsedJson })
-          }).catch(e => console.error("Failed to save AI config:", e));
-        }
-
         dispatch({ type: "LOAD_INITIAL_CONFIG", payload: safeConfig });
-        // Pass fmRecordId so fetchLivePreview can persist the generated snapshot too
-        await fetchLivePreview(state.setup, safeConfig, state.fmRecordId);
+        await fetchLivePreview(state.setup, safeConfig);
       }
     } catch(e) {}
-  }, [state.fmRecordId, state.setup, state.config, dispatch, fetchLivePreview]);
+  }, [state.setup, state.config, dispatch, fetchLivePreview]);
 
   const handleConversationIdChange = useCallback(async (id: string | null) => {
     setConversationId(id);
-    if (id && state.fmRecordId) {
-      try {
-        await fetch("/api/report-config", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fmRecordId: state.fmRecordId, threadId: id }),
-        });
-      } catch (e) {
-         console.error("Failed to sync thread ID", e);
-      }
-    }
-  }, [state.fmRecordId]);
+  }, []);
 
-  const formatPrompt = useCallback((userText: string) => {
+  // predefinedPrompt — carries DB schema + date context (per REPORTS_SYSTEM_INSTRUCTION TYPE 1/3/4)
+  // Sending this via predefined_prompt keeps the user message bubble clean
+  const predefinedPrompt = useMemo(() => {
     const today = new Date().toLocaleDateString('en-US');
     let setupData = "{}";
     try {
@@ -173,20 +147,25 @@ function ReportPageContent() {
     } catch (e) {}
 
     const hasConfig = state.config && (
-      Object.keys(state.config.group_by_fields || {}).length > 0 || 
+      Object.keys(state.config.group_by_fields || {}).length > 0 ||
       (state.config.db_defination && state.config.db_defination.length > 0)
     );
 
     if (hasConfig) {
-      let configData = "";
+      let configData = "{}";
       try {
         configData = JSON.stringify(state.config || {}).replace(/"/g, "'");
       } catch (e) {}
-      return `${userText}. Today's date (which serves as a reference point for setting the correct date range)-${today}. Here is my DB Schema - ${setupData}. Here is my Previous Report Config - ${configData}. json`;
-    } else {
-      return `${userText}. Today's date (which serves as a reference point for setting the correct date range)-${today}. Here is my DB Schema - ${setupData}. json`;
+      return `Today's date (reference for date ranges): ${today}. Here is my DB Schema - ${setupData}. Here is my Previous Report Config - ${configData}.`;
     }
+    return `Today's date (reference for date ranges): ${today}. Here is my DB Schema - ${setupData}.`;
   }, [state.setup, state.config]);
+
+  // formatPrompt — only adds .json suffix (TYPE 2: user_prompt = clean user intent)
+  const formatPrompt = useCallback((userText: string) => {
+    const trimmed = userText.trim();
+    return trimmed.endsWith('.json') ? trimmed : `${trimmed}.json`;
+  }, []);
 
   const reportPromptOptions = useMemo(() => ([
     {
@@ -304,7 +283,7 @@ function ReportPageContent() {
             <ModularChatbot
               botName="Kibiai Report Assistant"
               instructionSet={REPORTS_SYSTEM_INSTRUCTION}
-              predefinedPrompt=""
+              predefinedPrompt={predefinedPrompt}
               formatPrompt={formatPrompt}
               suggestedPrompts={reportPromptOptions}
               initialConversationId={conversationId}

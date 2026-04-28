@@ -25,6 +25,20 @@
 - Use Next.js `Link` for internal routing.
 - Prefer programmatic navigation via `useRouter` when necessary.
 
+### Subdomain-Based Routing (Production)
+In production, the application utilizes subdomains to isolate the **Admin Panel** and **Company Workspaces**.
+
+- **Reserved Subdomains**:
+  - `admin`: Redirects internally to `/admin`.
+- **Company Subdomains**:
+  - `<company-slug>`: Redirects internally to `/[company_slug]`.
+- **Implementation**:
+  - Managed by `middleware.ts` using `NextResponse.rewrite()`.
+  - **Localhost Rule**: Subdomain logic is bypassed on `localhost`; use path-based routing (`/admin` or `/[slug]`).
+- **Linking**:
+  - When displaying links to other workspaces (e.g., in the Admin Panel), use the `NEXT_PUBLIC_BASE_DOMAIN` environment variable to construct the full subdomain URL.
+  - See `CompanyDetails.tsx` for a reference implementation of environment-aware link construction.
+
 ## Branding & Logo Usage
 - **KiBiAI Logo**: Always use the official KiBiAI logo for consistent branding. Source: `@/assets/kibiai.png`.
 - **Company Branding**:

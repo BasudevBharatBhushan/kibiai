@@ -4,10 +4,11 @@ import { useCompany } from "@/components/providers/CompanyProvider";
 import { useParams } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
 import { CreateTemplateModal } from "@/components/templates/CreateTemplateModal";
-import { Plus, FileText, Settings, Calendar, Database, ArrowRight, Filter, Search, MoreVertical, LayoutGrid } from "lucide-react";
+import { Plus, FileText, Settings, Calendar, ArrowRight, Filter, Search, MoreVertical, Zap, SlidersHorizontal } from "lucide-react";
 import { useHeader } from "@/context/HeaderContext";
 import { SubHeader } from "@/components/layout/SubHeader";
 import Link from "next/link";
+import { apiClient } from "@/utils/apiClient";
 
 export default function TemplatesPage() {
   const { company, isLoading: companyLoading, error } = useCompany();
@@ -36,8 +37,9 @@ export default function TemplatesPage() {
     if (!company?.id) return;
     try {
       setIsLoading(true);
-      const res = await fetch(`/api/company/templates?company_id=${company.id}`);
-      const data = await res.json();
+      const data = await apiClient.get<{ success: boolean; templates: any[] }>(
+        `/api/company/templates?company_id=${company.id}`
+      );
       if (data.success) {
         setTemplates(data.templates);
       }
@@ -213,19 +215,58 @@ export default function TemplatesPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Link 
+                          {/* Smart Primary CTA */}
+                          {!template.has_setup && (
+                            <Link
+                              href={`/${slug}/templates/${template.report_template_id}/setup`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90"
+                              style={{ background: "#f59e0b" }}
+                              title="Complete setup to get started"
+                            >
+                              <Settings size={13} />
+                              Setup
+                            </Link>
+                          )}
+                          {template.has_setup && !template.has_config && (
+                            <Link
+                              href={`/${slug}/templates/${template.report_template_id}/configurator`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90"
+                              style={{ background: "#2563eb" }}
+                              title="Configure report structure with AI"
+                            >
+                              <SlidersHorizontal size={13} />
+                              Configure
+                            </Link>
+                          )}
+                          {template.has_setup && template.has_config && (
+                            <Link
+                              href={`/${slug}/templates/${template.report_template_id}/generate`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90"
+                              style={{ background: "#059669" }}
+                              title="Generate report"
+                            >
+                              <Zap size={13} />
+                              Generate
+                            </Link>
+                          )}
+                          {/* Secondary: always show Settings gear */}
+                          <Link
                             href={`/${slug}/templates/${template.report_template_id}/setup`}
                             className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                            title="Setup"
+                            title="Edit Setup"
                           >
-                            <Settings size={18} />
+                            <Settings size={16} />
                           </Link>
-                          <button 
-                            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
-                            title="Options"
-                          >
-                            <MoreVertical size={18} />
-                          </button>
+                          {/* Configure icon if setup done */}
+                          {template.has_setup && (
+                            <Link
+                              href={`/${slug}/templates/${template.report_template_id}/configurator`}
+                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              title="Open Configurator"
+                            >
+                              <SlidersHorizontal size={16} />
+                            </Link>
+                          )}
                         </div>
                       </td>
                     </tr>

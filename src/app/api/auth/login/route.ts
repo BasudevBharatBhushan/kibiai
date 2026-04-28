@@ -29,16 +29,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid credentials" }, { status: 401 });
     }
 
-    // 3. Get specific user details based on type
-    let companyId: string | undefined;
-    if (account.account_type === 'company_user') {
-      const { data: userData } = await supabase
-        .from("users")
-        .select("company_id")
-        .eq("account_id", account.account_id)
-        .single();
-      companyId = userData?.company_id;
-    }
+    // 3. Always resolve company affiliation from the users table.
+    //    This handles accounts that exist as platform_admin in auth_accounts
+    //    but also have a company association in the users table (e.g., company portal logins).
+    const { data: userData } = await supabase
+      .from("users")
+      .select("company_id")
+      .eq("account_id", account.account_id)
+      .maybeSingle();
+
+    const companyId: string | undefined = userData?.company_id ?? undefined;
+
 
     // 4. Create session
     await createSession({

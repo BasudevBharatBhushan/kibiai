@@ -13,20 +13,17 @@ export function SubmitToolbar() {
   const [isSaving, setIsSaving] = useState(false);
 
   const handleUpdate = async () => {
-    if (!state.fmRecordId) return;
+    if (!state.templateId) return;
     setIsSaving(true);
 
     try {
-      // Call OUR internal API
-
-
-      // 1. Save Config to DB
-      const res = await fetch("/api/report-config", {
+      // 1. Save Config (Legacy - component is not actively used)
+      const res = await fetch("/api/generate-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fmRecordId: state.fmRecordId,
-          config: state.config
+          report_setup: state.setup,
+          report_config: state.config
         })
       });
 
@@ -73,7 +70,7 @@ export function SubmitToolbar() {
         
         <button 
           onClick={() => setShowJson(true)}
-          className="px-4 py-2 border border-indigo-600 text-indigo-600 rounded hover:bg-indigo-50 transition-colors text-sm font-medium"
+          className="px-3 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors text-xs font-medium whitespace-nowrap"
         >
           View JSON
         </button>
@@ -81,9 +78,9 @@ export function SubmitToolbar() {
         <button 
           onClick={handleUpdate}
           disabled={isSaving}
-          className="bg-indigo-600 text-white px-6 py-2 rounded text-sm hover:bg-indigo-700 shadow-sm transition-colors font-bold"
+          className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-xs hover:bg-indigo-700 shadow-sm transition-colors font-bold whitespace-nowrap disabled:opacity-50"
         >
-          {isSaving ? "Updating..." : "Update Configuration"}
+          {isSaving ? "Updating…" : "Update Configuration"}
         </button>
       </div>
 

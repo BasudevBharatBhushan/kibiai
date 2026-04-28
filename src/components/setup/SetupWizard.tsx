@@ -2,7 +2,8 @@
 
 import { useEffect, useReducer, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
-import { Save, Loader2, CheckCircle, AlertCircle, Database, Network, FileJson, Plus } from "lucide-react";
+import { Save, Loader2, CheckCircle, AlertCircle, Database, Network, FileJson, Plus, ArrowRight } from "lucide-react";
+import Link from "next/link";
 import { HostConfigSection } from "@/components/setup/HostConfigSection";
 import { AddDatabaseSection } from "@/components/setup/AddDatabaseSection";
 import { TableCard } from "@/components/setup/TableCard";
@@ -167,11 +168,12 @@ const EMPTY_CONFIG: SetupConfig = {
 
 interface SetupWizardProps {
   templateId: string;
+  companySlug?: string;
 }
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
-export function SetupWizard({ templateId }: SetupWizardProps) {
+export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
   const [config, dispatch] = useReducer(setupReducer, EMPTY_CONFIG);
   const [showJsonPreview, setShowJsonPreview] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -262,6 +264,9 @@ export function SetupWizard({ templateId }: SetupWizardProps) {
   };
 
   const tableNames = Object.keys(config.tables);
+
+  // Show a "Continue to Configure" CTA after a successful save
+  const showContinueCTA = saveStatus === "saved" && companySlug && tableNames.length > 0;
 
   return (
     <div className="setup-wizard">
@@ -423,6 +428,51 @@ export function SetupWizard({ templateId }: SetupWizardProps) {
         onToggle={() => setShowJsonPreview((v) => !v)}
         onSave={(newConfig) => dispatch({ type: "SET_CONFIG", payload: newConfig })}
       />
+
+      {/* ── Continue to Configure CTA ───────────────────────────────────── */}
+      {showContinueCTA && (
+        <div style={{
+          position: "fixed",
+          bottom: "24px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 50,
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          background: "#2563eb",
+          color: "#fff",
+          borderRadius: "16px",
+          padding: "14px 24px",
+          boxShadow: "0 8px 32px rgba(37,99,235,0.35)",
+          fontWeight: 700,
+          fontSize: "14px",
+          animation: "fadeInUp 0.3s ease",
+        }}>
+          <CheckCircle size={18} style={{ color: "#86efac" }} />
+          <span>Setup saved! Ready to configure your report.</span>
+          <Link
+            href={`/${companySlug}/templates/${templateId}/configurator`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "#fff",
+              color: "#2563eb",
+              padding: "6px 16px",
+              borderRadius: "10px",
+              fontWeight: 700,
+              fontSize: "13px",
+              textDecoration: "none",
+              marginLeft: "8px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Continue to Configure
+            <ArrowRight size={15} />
+          </Link>
+        </div>
+      )}
 
       {/* --- Subheader Save Button (Portal) --- */}
       {mounted && typeof document !== "undefined" && document.getElementById("setup-wizard-save-container")

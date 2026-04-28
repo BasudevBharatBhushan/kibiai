@@ -9,37 +9,15 @@ export function ReportPreview() {
 
   if (!rawData) {
     return (
-      <div className="w-full flex flex-col gap-6 p-10 bg-white border border-slate-200 rounded-xl shadow-sm min-h-[600px]">
-        {/* Header Skeleton */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="h-8 bg-slate-100 rounded-lg w-1/3 animate-pulse"></div>
-          <div className="flex gap-2">
-            <div className="h-10 w-24 bg-slate-50 rounded-lg animate-pulse"></div>
-            <div className="h-10 w-24 bg-slate-50 rounded-lg animate-pulse"></div>
-          </div>
+      <div className="w-full flex flex-col items-center justify-center bg-white border border-slate-200 rounded-xl shadow-sm min-h-[600px] gap-4 p-10">
+        <div className="w-14 h-14 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+          <svg className="w-7 h-7 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0H3" />
+          </svg>
         </div>
-        
-        {/* Table Mockup Skeleton */}
-        <div className="space-y-4">
-          <div className="h-12 bg-slate-50 rounded-md w-full animate-pulse border-b border-slate-100"></div>
-          <div className="space-y-3">
-             {[...Array(8)].map((_, i) => (
-                <div key={i} className="flex gap-4">
-                   <div className="h-4 bg-slate-50 rounded w-1/4 animate-pulse"></div>
-                   <div className="h-4 bg-slate-50 rounded w-1/4 animate-pulse"></div>
-                   <div className="h-4 bg-slate-100 rounded w-1/4 animate-pulse"></div>
-                   <div className="h-4 bg-slate-50 rounded w-1/4 animate-pulse"></div>
-                </div>
-             ))}
-          </div>
-        </div>
-
-        {/* Status indicator */}
-        <div className="mt-auto pt-10 flex flex-col items-center">
-            <div className="flex items-center gap-3 text-slate-400">
-               <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-               <span className="text-sm font-medium">Stitching report data...</span>
-            </div>
+        <div className="text-center">
+          <p className="text-slate-700 font-semibold text-base">No report preview yet</p>
+          <p className="text-slate-400 text-sm mt-1 max-w-xs">Ask the AI Copilot to generate a report, or use the configurator panel to set up your report structure manually.</p>
         </div>
       </div>
     );

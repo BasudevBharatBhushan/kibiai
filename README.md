@@ -204,6 +204,29 @@ TEST-001-add-user-role.md
 
 ---
 
+## MULTI-TENANT ROUTING (T-014)
+
+KiBiAI uses a **subdomain-based routing** strategy in production to provide isolated experiences for platform admins and client companies.
+
+### Production Routing Table
+
+| Subdomain | Internal Route | Target Audience |
+| :--- | :--- | :--- |
+| `admin.kibiai.itsb3.xyz` | `/admin` | Platform Administrators |
+| `<slug>.kibiai.itsb3.xyz` | `/[company_slug]` | Company Employees & Managers |
+| `kibiai.itsb3.xyz` (apex) | `/` | Marketing & Landing |
+| `<unknown>.kibiai.itsb3.xyz`| `/invalid-subdomain` | Error handling |
+
+### Local Development
+In `localhost`, the application uses **path-based routing** to simplify development:
+- Admin: `http://localhost:3000/admin`
+- Company: `http://localhost:3000/[company_slug]`
+
+### Middleware Logic
+The `middleware.ts` handles the rewrite logic by extracting the subdomain from the `Host` header. It validates dynamic company slugs against the `allowed_subdomains` registry via an internal API call (`/api/subdomains/validate`).
+
+---
+
 ## NEXT.JS APPLICATION STRUCTURE
 
 ```bash

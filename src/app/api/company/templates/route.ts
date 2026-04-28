@@ -106,6 +106,7 @@ export async function GET(req: Request) {
       .select(
         `report_template_id, report_template_name, report_template_status,
          version_number, created_on, updated_on, module_id,
+         report_template_setup_json, report_template_config_json,
          modules(module_name, module_code)`
       )
       .eq("company_id", company_id)
@@ -119,7 +120,17 @@ export async function GET(req: Request) {
       );
     }
 
-    return NextResponse.json({ success: true, templates: templates || [] });
+    // Compute has_setup / has_config flags — strip raw JSON blobs before returning
+    const templatesWithFlags = (templates || []).map((t: any) => {
+      const { report_template_setup_json, report_template_config_json, ...rest } = t;
+      return {
+        ...rest,
+        has_setup: report_template_setup_json !== null && Object.keys(report_template_setup_json || {}).length > 0,
+        has_config: report_template_config_json !== null && Object.keys(report_template_config_json || {}).length > 0,
+      };
+    });
+
+    return NextResponse.json({ success: true, templates: templatesWithFlags });
   } catch (err: any) {
     console.error("GET /api/company/templates error:", err);
     return NextResponse.json(

@@ -81,6 +81,27 @@ export function ModularChatbot({
 
   const inputRef = useRef<HTMLTextAreaElement>(null); 
   const scrollRef = useAutoScroll<HTMLDivElement>([messages, loading]);
+  // Always holds the latest predefinedPrompt so async sends never use stale closures
+  const predefinedPromptRef = useRef(predefinedPrompt);
+  useEffect(() => { predefinedPromptRef.current = predefinedPrompt; }, [predefinedPrompt]);
+
+  /**
+   * Returns true when the API error means the stored conversation_id is no
+   * longer valid and we should retry with a fresh null id.
+   * Catches:
+   *  - "Invalid 'conversation_id'"  (format mismatch)
+   *  - "Conversation with id '...' not found."  (404 from OpenAI / API)
+   *  - HTTP 404 status on the conversation endpoint
+   */
+  function isStaleConvError(err: any): boolean {
+    const msg: string = err?.message ?? "";
+    return (
+      msg.includes("Invalid 'conversation_id'") ||
+      msg.includes("not found") ||
+      msg.includes("Conversation with id") ||
+      err?.status === 404
+    );
+  }
 
   useEffect(() => {
     if (initialConversationId !== undefined && initialConversationId !== conversationId) {
@@ -112,7 +133,7 @@ export function ModularChatbot({
           const payload = {
             conversation_id: conversationId,
             instruction_set: instructionSet,
-            predefined_prompt: predefinedPrompt,
+            predefined_prompt: predefinedPromptRef.current,
             metadata: conversationMetadata || {},
             user_prompt: finalPrompt,
           };
@@ -138,9 +159,9 @@ export function ModularChatbot({
         } catch (error: any) {
           console.error("Failed to send pending message", error);
           
-          // Check for invalid conversation ID error (e.g., legacy thread_ vs new conv_ IDs)
-          if (error.message && error.message.includes("Invalid 'conversation_id'")) {
-            console.warn("[Chatbot] Invalid conversation ID detected. Clearing and retrying with new thread...");
+          // Stale / invalid conversation ID → clear and retry fresh
+          if (isStaleConvError(error)) {
+            console.warn("[Chatbot] Stale conversation ID detected. Clearing and retrying...");
             setConversationId(null);
             if (onConversationIdChange) onConversationIdChange(null);
             
@@ -151,7 +172,7 @@ export function ModularChatbot({
                const retryPayload = {
                 conversation_id: null,
                 instruction_set: instructionSet,
-                predefined_prompt: predefinedPrompt,
+                predefined_prompt: predefinedPromptRef.current,
                 metadata: conversationMetadata || {},
                 user_prompt: formatPrompt ? formatPrompt(textToSend) : formatUserPrompt(textToSend),
               };
@@ -198,27 +219,55 @@ export function ModularChatbot({
           .filter((c: any) => c.type === "output_text" || c.type === "input_text")
           .map((c: any) => {
             let text = c.text || "";
-            
+
             if (item.role === "assistant") {
               text = parseAssistantResponse(text);
             } else if (item.role === "user") {
-              // Clean technical context if it exists in restored messages
-              // Look for the "Today's date" or "Here is my DB Schema" markers
-              const contextIndex = text.indexOf("Today's date");
-              if (contextIndex !== -1) {
-                 text = text.substring(0, contextIndex).trim();
+              /**
+               * OpenAI stores the full composed message:
+               *   "{predefined_context}\n{user_text}.json"
+               *
+               * predefined_context = "Today's date ... Here is my DB Schema - {...}. Here is my Previous Report Config - {...}."
+               * user_text           = whatever the user actually typed
+               *
+               * Strategy: if the message contains the predefined context markers,
+               * split on the last "\n" — the user text is the segment after it.
+               * Then strip the trailing ".json" added by formatUserPrompt.
+               */
+              const hasPredefined =
+                text.includes("Today's date") ||
+                text.includes("Here is my DB Schema") ||
+                text.includes("Here is my Previous Report Config");
+
+              if (hasPredefined) {
+                // The predefined block ends with ".\n" — user input follows
+                const lastNewline = text.lastIndexOf("\n");
+                if (lastNewline !== -1) {
+                  text = text.substring(lastNewline + 1).trim();
+                } else {
+                  // Fallback: no newline found — take the segment after the last ". "
+                  // that isn't part of the schema JSON
+                  text = "";
+                }
+              }
+
+              // Strip trailing ".json" suffix added by formatUserPrompt
+              if (text.endsWith(".json")) {
+                text = text.slice(0, -5).trim();
               }
             }
-            
+
             return {
               role: item.role,
               text: text
             };
-          });
+          })
+          .filter((m: any) => m.text.length > 0); // drop empty user messages (pure-context turns)
       });
       setMessages(restored.reverse());
     });
   }, [conversationId]);
+
 
   const handleNewChat = useCallback(() => {
     setConversationId(null); 
@@ -244,7 +293,7 @@ export function ModularChatbot({
       const payload = {
         conversation_id: conversationId,
         instruction_set: instructionSet,
-        predefined_prompt: predefinedPrompt,
+        predefined_prompt: predefinedPromptRef.current,
         metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
       };
@@ -287,9 +336,9 @@ export function ModularChatbot({
     } catch (error: any) {
       console.error("Failed to send message", error);
 
-      // Check for invalid conversation ID error (e.g., legacy thread_ vs new conv_ IDs)
-      if (error.message && error.message.includes("Invalid 'conversation_id'")) {
-        console.warn("[Chatbot] Invalid conversation ID detected. Retrying with new thread...");
+      // Stale / invalid conversation ID → clear and retry fresh
+      if (isStaleConvError(error)) {
+        console.warn("[Chatbot] Stale conversation ID detected. Retrying with new thread...");
         setConversationId(null);
         if (onConversationIdChange) onConversationIdChange(null);
 
@@ -297,7 +346,7 @@ export function ModularChatbot({
           const retryPayload = {
             conversation_id: null,
             instruction_set: instructionSet,
-            predefined_prompt: predefinedPrompt,
+            predefined_prompt: predefinedPromptRef.current,
             metadata: conversationMetadata || {},
             user_prompt: finalPrompt,
           };

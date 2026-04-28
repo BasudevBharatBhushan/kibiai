@@ -65,7 +65,7 @@ function PlanBadge({ plan }: { plan: string }) {
 // ── Header Component ─────────────────────────────────────────────────────────
 export default function Header() {
   const { company, isLoading: companyLoading } = useCompany();
-  const { breadcrumbs, backHref } = useHeader();
+  const { breadcrumbs, backHref, headerActions } = useHeader();
   const params  = useParams();
   const router  = useRouter();
   const pathname = usePathname();
@@ -297,8 +297,9 @@ export default function Header() {
             </div>
           </nav>
 
-          {/* Right: Actions + User */}
+          {/* Right: Nav + Page Actions (injected by page) + User */}
           <div className="flex items-center gap-2">
+
             <div className="hidden sm:flex items-center gap-1">
 
               <Link href={`/${slug}/templates`} className={clsx("wh-nav-item", pathname?.includes("/templates") && "active")}>
@@ -311,6 +312,14 @@ export default function Header() {
                 <span className="hidden lg:inline">Admin Dashboard</span>
               </Link>
             </div>
+
+            {/* Page-specific action buttons (e.g. panel toggles from configurator) */}
+            {headerActions && (
+              <>
+                <div className="h-6 w-[1px] bg-slate-200 mx-1 hidden sm:block" />
+                <div className="hidden sm:flex items-center">{headerActions}</div>
+              </>
+            )}
 
             <div className="h-6 w-[1px] bg-slate-200 mx-2 hidden sm:block" />
 

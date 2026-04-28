@@ -61,14 +61,34 @@ export default function CompanyDetails({
   const slugify = (text: string) => {
     return text
       .toLowerCase()
-      .replace(/[^\w ]+/g, "")
-      .replace(/ +/g, "-");
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")  // remove special chars (matches server-side toSlug)
+      .replace(/\s+/g, "-")           // spaces → hyphens
+      .replace(/-+/g, "-")            // collapse multiple hyphens
+      .replace(/^-|-$/g, "");         // trim leading/trailing hyphens
   };
 
   const companySlug = slugify(company.company_name);
-  const workspaceUrl = typeof window !== "undefined" 
-    ? `${window.location.origin}/${companySlug}/login`
-    : `/${companySlug}/login`;
+
+  /**
+   * In production: use subdomain URL → https://slug.kibiai.itsb3.xyz/login
+   * In dev/localhost: use path URL   → http://localhost:3000/slug/login
+   */
+  const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || "kibiai.itsb3.xyz";
+  const isLocalhost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname.startsWith("192.168."));
+
+  const workspaceUrl = isLocalhost
+    ? `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/${companySlug}/login`
+    : `https://${companySlug}.${baseDomain}/login`;
+
+  // Also provide the raw subdomain URL for display (without /login path)
+  const subdomainUrl = isLocalhost
+    ? null
+    : `https://${companySlug}.${baseDomain}`;
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(workspaceUrl);
@@ -217,28 +237,45 @@ export default function CompanyDetails({
           </div>
 
           {/* Workspace Login Section */}
-          <div className="w-full md:w-auto p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+          <div className="w-full md:w-auto p-4 bg-indigo-50 border border-indigo-100 rounded-xl min-w-[260px]">
             <div className="flex items-center gap-2 mb-3">
               <Link className="w-4 h-4 text-indigo-600" />
               <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider">
-                Workspace Login
+                Workspace URL
               </h4>
+              {!isLocalhost && (
+                <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">
+                  Production
+                </span>
+              )}
             </div>
-            
+
+            {/* Subdomain URL display (production only) */}
+            {subdomainUrl && (
+              <div className="flex items-center gap-1.5 bg-indigo-100/60 px-2.5 py-1.5 rounded-md mb-2">
+                <span className="text-[10px] text-indigo-400 font-mono shrink-0">https://</span>
+                <code className="text-xs text-indigo-700 font-bold font-mono truncate">
+                  {companySlug}.{baseDomain}
+                </code>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-100 mb-3">
-              <code className="text-xs text-indigo-600 font-mono flex-1 truncate max-w-[200px]">
+              <code className="text-xs text-indigo-600 font-mono flex-1 truncate max-w-[220px]">
                 {workspaceUrl}
               </code>
-              <button 
+              <button
+                id="btn-copy-workspace-url"
                 onClick={handleCopyUrl}
                 className="p-1.5 hover:bg-indigo-50 text-indigo-600 rounded-md transition-colors"
-                title="Copy URL"
+                title="Copy workspace URL"
               >
-                {copySuccess ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copySuccess ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
 
-            <button 
+            <button
+              id="btn-open-workspace"
               onClick={handleOpenWorkspace}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all"
             >
