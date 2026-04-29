@@ -108,8 +108,8 @@ function ConfiguratorPageContent({
   const toggleConfig = useCallback(() => setIsConfigOpen((p) => !p), []);
 
   // ── Inject panel toggles into the global header ───────────────────────────
-  // useLayoutEffect ensures the header is updated synchronously before paint,
-  // and cleanup removes them when navigating away.
+  // Update header actions whenever toggle state changes (so button appearance stays in sync)
+  // but ONLY call resetHeader on true unmount — not on every re-render.
   useLayoutEffect(() => {
     setHeaderActions(
       <PanelToggles
@@ -119,10 +119,14 @@ function ConfiguratorPageContent({
         onToggleConfig={toggleConfig}
       />
     );
-    return () => resetHeader();
-    // Re-run whenever toggle state changes so button appearance stays in sync
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChatOpen, isConfigOpen]);
+
+  // Separate unmount-only cleanup so breadcrumbs are NOT wiped on every toggle
+  useLayoutEffect(() => {
+    return () => resetHeader();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Load config from Supabase ────────────────────────────────────────────────
   useEffect(() => {
@@ -310,13 +314,47 @@ function ConfiguratorPageContent({
     []
   );
 
-  // ── Skeleton ─────────────────────────────────────────────────────────────────
+  // ── Skeleton ───────────────────────────────────────────────────────────────────────
   if (isPageLoading) {
     return (
       <div className="flex flex-1 overflow-hidden animate-pulse">
-        <div className="w-[400px] bg-white border-r border-slate-100" />
-        <div className="flex-1 bg-gray-100" />
-        <div className="w-[400px] bg-white border-l border-slate-100" />
+        {/* Left: Chat skeleton */}
+        <div className="w-[400px] shrink-0 bg-white border-r border-slate-100 flex flex-col p-4 space-y-4">
+          <div className="h-10 bg-slate-100 rounded-xl" />
+          <div className="flex-1 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className={`h-12 rounded-xl ${i % 2 === 0 ? "bg-slate-100 ml-8" : "bg-blue-50 mr-8"}`} />
+            ))}
+          </div>
+          <div className="h-10 bg-slate-100 rounded-xl" />
+        </div>
+        {/* Middle: Preview skeleton */}
+        <div className="flex-1 bg-gray-100 flex items-start justify-center pt-8">
+          <div className="bg-white shadow-xl rounded w-[210mm] min-h-[297mm] p-8 space-y-4">
+            <div className="flex justify-between mb-6">
+              <div className="h-3 w-24 bg-slate-100 rounded" />
+              <div className="h-7 w-48 bg-slate-100 rounded" />
+            </div>
+            <div className="h-px bg-slate-100" />
+            {[...Array(14)].map((_, i) => (
+              <div key={i} className="h-3 bg-slate-50 rounded" style={{ width: `${95 - (i % 3) * 10}%` }} />
+            ))}
+          </div>
+        </div>
+        {/* Right: Config skeleton */}
+        <div className="w-[400px] shrink-0 bg-white border-l border-slate-100 p-4 space-y-4">
+          <div className="h-px bg-slate-100" />
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="border border-slate-100 rounded-xl overflow-hidden">
+              <div className="h-10 bg-slate-50" />
+              <div className="p-3 space-y-2">
+                <div className="h-8 bg-slate-100 rounded-lg" />
+                <div className="h-8 bg-slate-100 rounded-lg" />
+              </div>
+            </div>
+          ))}
+          <div className="h-10 bg-blue-100 rounded-xl" />
+        </div>
       </div>
     );
   }
@@ -400,19 +438,20 @@ function ConfiguratorPageContent({
   );
 }
 
-// ── Page Route Component ───────────────────────────────────────────────────────
+// ── Page Route Component ──────────────────────────────────────────────────────────────────
 export default function ConfiguratorPage() {
   const params = useParams();
   const slug = params?.company_slug as string;
   const templateId = params?.template_id as string;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50 font-sans">
+    // -mx escape lets the full-bleed flex layout break out of PageContainer horizontal padding
+    <div className="-mx-4 sm:-mx-6 lg:-mx-8 flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50 font-sans">
       <Suspense fallback={
         <div className="flex flex-1 overflow-hidden animate-pulse">
-          <div className="w-[400px] bg-white border-r border-slate-100" />
+          <div className="w-[400px] shrink-0 bg-white border-r border-slate-100" />
           <div className="flex-1 bg-gray-100" />
-          <div className="w-[400px] bg-white border-l border-slate-100" />
+          <div className="w-[400px] shrink-0 bg-white border-l border-slate-100" />
         </div>
       }>
         <ReportProvider>

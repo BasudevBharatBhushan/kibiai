@@ -20,18 +20,20 @@ import {
 } from "lucide-react";
 import React from "react";
 
+import { FILTER_OPERATORS } from "@/constants/reportOptions";
+
 // ── Ad-hoc filter row ──────────────────────────────────────────────────────────
-interface AdHocFilter { id: string; table: string; field: string; value: string; }
+interface AdHocFilter { id: string; table: string; field: string; operator: string; value: string; }
 
 function AdHocFilterBuilder({
   filters, onChange, options
 }: { filters: AdHocFilter[]; onChange: (f: AdHocFilter[]) => void; options: any[] }) {
-  const add = () => onChange([...filters, { id: Date.now().toString(), table: "", field: "", value: "" }]);
+  const add = () => onChange([...filters, { id: Date.now().toString(), table: "", field: "", operator: "==", value: "" }]);
   const remove = (id: string) => onChange(filters.filter(f => f.id !== id));
   const update = (id: string, key: string, val: string) => {
     if (key === "field") {
       const opt = options.find(o => `${o.table}.${o.field}` === val);
-      onChange(filters.map(f => f.id === id ? { ...f, table: opt?.table || "", field: opt?.field || "" } : f));
+      onChange(filters.map(f => f.id === id ? { ...f, table: opt?.table || "", field: opt?.field || "", operator: f.operator || "==" } : f));
     } else {
       onChange(filters.map(f => f.id === id ? { ...f, [key]: val } : f));
     }
@@ -40,28 +42,44 @@ function AdHocFilterBuilder({
   return (
     <div className="space-y-2">
       {filters.map(f => (
-        <div key={f.id} className="flex gap-2 items-center animate-in fade-in slide-in-from-top-1 duration-200">
-          <select
-            value={f.table && f.field ? `${f.table}.${f.field}` : ""}
-            onChange={e => update(f.id, "field", e.target.value)}
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-          >
-            <option value="">Select Field...</option>
-            {options.map(opt => (
-              <option key={`${opt.table}.${opt.field}`} value={`${opt.table}.${opt.field}`}>
-                {opt.label} ({opt.table})
-              </option>
-            ))}
-          </select>
-          <input
-            placeholder="Value"
-            value={f.value}
-            onChange={e => update(f.id, "value", e.target.value)}
-            className="w-24 px-3 py-2 border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium"
-          />
-          <button onClick={() => remove(f.id)} className="p-1.5 text-slate-300 hover:text-red-400 transition-colors rounded-lg hover:bg-red-50 shrink-0">
-            <Trash2 size={13} />
-          </button>
+        <div key={f.id} className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+          {/* Row 1: Field selector + delete */}
+          <div className="flex gap-2 items-center">
+            <select
+              value={f.table && f.field ? `${f.table}.${f.field}` : ""}
+              onChange={e => update(f.id, "field", e.target.value)}
+              className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-0"
+            >
+              <option value="">Select Field...</option>
+              {options.map(opt => (
+                <option key={`${opt.table}.${opt.field}`} value={`${opt.table}.${opt.field}`}>
+                  {opt.label} ({opt.table})
+                </option>
+              ))}
+            </select>
+            <button onClick={() => remove(f.id)} className="p-1.5 text-slate-300 hover:text-red-400 transition-colors rounded-lg hover:bg-red-50 shrink-0">
+              <Trash2 size={13} />
+            </button>
+          </div>
+          {/* Row 2: Operator + Value */}
+          <div className="flex gap-2 items-center">
+            <select
+              value={f.operator || "=="}
+              onChange={e => update(f.id, "operator", e.target.value)}
+              className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+            >
+              {FILTER_OPERATORS.map(op => (
+                <option key={op.value} value={op.value}>{op.label}</option>
+              ))}
+            </select>
+            <input
+              placeholder="Value..."
+              value={f.value}
+              onChange={e => update(f.id, "value", e.target.value)}
+              disabled={["*", "="].includes(f.operator)}
+              className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium disabled:opacity-40 disabled:bg-slate-50 min-w-0"
+            />
+          </div>
         </div>
       ))}
       <button onClick={add}
@@ -78,6 +96,9 @@ interface AdHocDateRange { id: string; table: string; field: string; from: strin
 function AdHocDateRangeBuilder({
   ranges, onChange, options
 }: { ranges: AdHocDateRange[]; onChange: (r: AdHocDateRange[]) => void; options: any[] }) {
+  // Fields already selected by another row
+  const usedKeys = new Set(ranges.map(r => r.table && r.field ? `${r.table}.${r.field}` : null).filter(Boolean));
+
   const add = () => onChange([...ranges, { id: Date.now().toString(), table: "", field: "", from: "", to: "" }]);
   const remove = (id: string) => onChange(ranges.filter(r => r.id !== id));
   const update = (id: string, key: string, val: any) => {
@@ -91,31 +112,39 @@ function AdHocDateRangeBuilder({
 
   return (
     <div className="space-y-3">
-      {ranges.map(r => (
-        <div key={r.id} className="p-3 border border-slate-100 rounded-xl bg-slate-50/50 relative group animate-in fade-in zoom-in-95 duration-200">
-          <button onClick={() => remove(r.id)} className="absolute -top-2 -right-2 p-1.5 bg-white border border-slate-200 text-slate-300 hover:text-red-500 transition-all rounded-full shadow-sm z-10 hover:scale-110 active:scale-95">
-            <X size={12} />
-          </button>
-          <div className="space-y-2">
-            <select
-              value={r.table && r.field ? `${r.table}.${r.field}` : ""}
-              onChange={e => update(r.id, "field", e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white font-bold text-slate-700"
-            >
-              <option value="">Select Date Field...</option>
-              {options.filter(o => o.type === "date").map(opt => (
-                <option key={`${opt.table}.${opt.field}`} value={`${opt.table}.${opt.field}`}>
-                  {opt.label} ({opt.table})
-                </option>
-              ))}
-            </select>
-            <DateRangePicker
-              value={{ from: r.from, to: r.to }}
-              onChange={v => update(r.id, "range", v)}
-            />
+      {ranges.map(r => {
+        const currentKey = r.table && r.field ? `${r.table}.${r.field}` : null;
+        // Available options: date fields not already used by OTHER rows
+        const available = options.filter(o => {
+          const k = `${o.table}.${o.field}`;
+          return o.type === "date" && (!usedKeys.has(k) || k === currentKey);
+        });
+        return (
+          <div key={r.id} className="p-3 border border-slate-100 rounded-xl bg-slate-50/50 relative group animate-in fade-in zoom-in-95 duration-200">
+            <button onClick={() => remove(r.id)} className="absolute -top-2 -right-2 p-1.5 bg-white border border-slate-200 text-slate-300 hover:text-red-500 transition-all rounded-full shadow-sm z-10 hover:scale-110 active:scale-95">
+              <X size={12} />
+            </button>
+            <div className="space-y-2">
+              <select
+                value={r.table && r.field ? `${r.table}.${r.field}` : ""}
+                onChange={e => update(r.id, "field", e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white font-bold text-slate-700"
+              >
+                <option value="">Select Date Field...</option>
+                {available.map(opt => (
+                  <option key={`${opt.table}.${opt.field}`} value={`${opt.table}.${opt.field}`}>
+                    {opt.label} ({opt.table})
+                  </option>
+                ))}
+              </select>
+              <DateRangePicker
+                value={{ from: r.from, to: r.to }}
+                onChange={v => update(r.id, "range", v)}
+              />
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       <button onClick={add}
         className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors mt-1">
         <Plus size={12} /> Add Date Range
@@ -412,11 +441,16 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
       });
     });
 
-    // Ad-hoc filters
+    // Ad-hoc filters — prepend operator to value (mirrors ReportFiltersSection logic)
     adHocFilters.forEach(f => {
-      if (f.table && f.field && f.value) {
-        if (!cfPayload[f.table]) cfPayload[f.table] = {};
-        cfPayload[f.table][f.field] = f.value;
+      if (f.table && f.field) {
+        const finalVal = ["*", "="].includes(f.operator)
+          ? f.operator
+          : `${f.operator}${f.value}`;
+        if (finalVal && finalVal !== "==") {
+          if (!cfPayload[f.table]) cfPayload[f.table] = {};
+          cfPayload[f.table][f.field] = finalVal;
+        }
       }
     });
 
@@ -494,19 +528,53 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
   // Page loading skeleton
   if (isPageLoading) {
     return (
-      <div className="flex h-[calc(100vh-64px)] animate-pulse">
-        <div className="w-[380px] shrink-0 bg-white border-r border-slate-200" />
-        <div className="flex-1 bg-gray-100" />
+      <div className="-mx-4 sm:-mx-6 lg:-mx-8 flex h-[calc(100vh-64px)] overflow-hidden animate-pulse">
+        {/* Left panel skeleton */}
+        <div className="w-[380px] shrink-0 bg-white border-r border-slate-200 p-4 space-y-4">
+          <div className="h-px bg-slate-100" />
+          {/* Report heading input */}
+          <div className="space-y-1.5">
+            <div className="h-2.5 w-28 bg-slate-100 rounded" />
+            <div className="h-9 bg-slate-100 rounded-xl" />
+          </div>
+          {/* Section blocks */}
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="border border-slate-100 rounded-xl overflow-hidden">
+              <div className="h-10 bg-slate-50" />
+              <div className="p-4 space-y-2">
+                <div className="h-8 bg-slate-100 rounded-lg" />
+                <div className="h-8 bg-slate-100 rounded-lg" />
+              </div>
+            </div>
+          ))}
+          {/* Generate button */}
+          <div className="h-10 bg-blue-100 rounded-xl" />
+        </div>
+        {/* Right preview skeleton */}
+        <div className="flex-1 bg-gray-100 flex items-start justify-center pt-10">
+          <div className="bg-white shadow-xl rounded w-[210mm] min-h-[297mm] p-8 space-y-4">
+            <div className="flex justify-between mb-6">
+              <div className="h-3 w-24 bg-slate-100 rounded" />
+              <div className="h-7 w-48 bg-slate-100 rounded" />
+            </div>
+            <div className="h-px bg-slate-100" />
+            {[...Array(14)].map((_, i) => (
+              <div key={i} className="h-3 bg-slate-50 rounded" style={{ width: `${95 - (i % 3) * 10}%` }} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
 
   const dateRangeFields: Record<string, Record<string, string>> = configJson?.date_range_fields || {};
+
+
   const filterFields: Record<string, Record<string, any>> = configJson?.filters || {};
 
   return (
     <>
-      <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50">
+      <div className="-mx-4 sm:-mx-6 lg:-mx-8 flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50">
 
         {/* ── LEFT: Configuration Panel ─────────────────────────────── */}
         <div className={`bg-white border-r border-slate-200 flex flex-col shrink-0 transition-[width] duration-300 ${configOpen ? "w-[380px]" : "w-12"}`}>
