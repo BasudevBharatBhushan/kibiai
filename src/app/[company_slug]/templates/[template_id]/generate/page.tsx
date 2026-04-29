@@ -305,6 +305,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
 
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationLogs, setGenerationLogs] = useState<string[]>([]);
   const [templateName, setTemplateName] = useState("");
   const [configJson, setConfigJson] = useState<any>(null);
   const [reportData, setReportData] = useState<any[] | null>(null);
@@ -314,6 +315,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
   const [configOpen, setConfigOpen] = useState(true);
   const historyRefreshKey = useRef(0);
   const [historyKey, setHistoryKey] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Chart modal state
   const [chartsModalOpen, setChartsModalOpen] = useState(false);
@@ -478,44 +480,84 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
     }
   }, [templateId, chartSchemasFetched]);
 
-  // Generate report
+  // Generate report via SSE stream
   const handleGenerate = useCallback(async () => {
+    // Cancel any previous in-flight request
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsGenerating(true);
+    setGenerationLogs([]);
+    setReportData(null);
+
     try {
-      const res = await apiClient.post<{ success: boolean; data: any }>(
-        `/api/templates/${templateId}/generate`,
-        { 
+      const response = await fetch(`/api/templates/${templateId}/generate/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           runtime_filters: buildRuntimeFilters(),
-          report_header: savedReportName || undefined
+          report_header: savedReportName || undefined,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        const errJson = await response.json().catch(() => null);
+        throw new Error(errJson?.error || `Server error ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE frames are delimited by double newlines
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+
+        for (const frame of frames) {
+          const line = frame.replace(/^data: /, "").trim();
+          if (!line) continue;
+          let event: any;
+          try { event = JSON.parse(line); } catch { continue; }
+
+          if (event.type === "log") {
+            setGenerationLogs(prev => [...prev, event.message as string]);
+          } else if (event.type === "done") {
+            const structured = event.report_structure_json;
+            const heading = event.report_name ?? templateName ?? "Report";
+
+            setReportData(structured);
+            setSavedReportName(heading);
+            dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+
+            historyRefreshKey.current++;
+            setHistoryKey(historyRefreshKey.current);
+
+            const rows = extractBodyRows(structured);
+            setChartRows(rows);
+            fetchChartSchemas();
+
+            addToast("success", "Report Generated", `"${heading}" saved to history.`);
+          } else if (event.type === "error") {
+            throw new Error(event.message || "Report generation failed.");
+          }
         }
-      );
-      if (!res.success) throw new Error("Generation failed");
-
-      const structured = res.data?.report_structure_json;
-      const heading = res.data?.report_name ?? templateName ?? "Report";
-
-      setReportData(structured);
-      setSavedReportName(heading);
-      dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
-
-      // Refresh history list
-      historyRefreshKey.current++;
-      setHistoryKey(historyRefreshKey.current);
-
-      // Extract flat rows for chart modal
-      const rows = extractBodyRows(structured);
-      setChartRows(rows);
-
-      // Pre-fetch chart schemas in background
-      fetchChartSchemas();
-
-      addToast("success", "Report Generated", `"${heading}" saved to history.`);
+      }
     } catch (err: any) {
-      addToast("error", "Error", err.message || "Report generation failed.");
+      if (err.name !== "AbortError") {
+        addToast("error", "Error", err.message || "Report generation failed.");
+      }
     } finally {
       setIsGenerating(false);
     }
-  }, [templateId, buildRuntimeFilters, fetchChartSchemas, dispatch, addToast, templateName]);
+  }, [templateId, buildRuntimeFilters, savedReportName, fetchChartSchemas, dispatch, addToast, templateName]);
 
   // Open chart modal (ensure schemas loaded first)
   const handleViewCharts = useCallback(async () => {
@@ -729,7 +771,175 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
 
           {/* Preview area */}
           <div className="flex-1 overflow-auto bg-gray-100 relative">
-            {!reportData ? (
+            {isGenerating ? (
+              /* ── White skeleton + floating log overlay ── */
+              <div className="flex items-start justify-center min-h-full pt-8 pb-8 relative">
+                {/* A4 paper skeleton — mirrors the actual report layout */}
+                <div
+                  className="bg-white shadow-xl relative overflow-hidden"
+                  style={{ width: "210mm", minHeight: "297mm", padding: "10mm 14mm", boxSizing: "border-box" }}
+                >
+                  {/* Shimmer overlay */}
+                  <div className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)",
+                      backgroundSize: "200% 100%",
+                      animation: "shimmer 1.8s infinite",
+                    }}
+                  />
+
+                  {/* Header skeleton */}
+                  <div className="flex justify-between items-start mb-6 pb-4 border-b border-slate-100">
+                    <div className="space-y-1.5">
+                      <div className="h-2.5 w-20 bg-slate-100 rounded animate-pulse" />
+                      <div className="h-2 w-28 bg-slate-50 rounded animate-pulse" />
+                    </div>
+                    <div className="space-y-1.5 text-right">
+                      <div className="h-5 w-56 bg-slate-100 rounded animate-pulse ml-auto" />
+                      <div className="h-2.5 w-36 bg-slate-50 rounded animate-pulse ml-auto" />
+                    </div>
+                  </div>
+
+                  {/* Body skeleton rows */}
+                  <div className="space-y-3">
+                    {/* Group header */}
+                    <div className="h-3.5 w-48 bg-slate-200 rounded animate-pulse" />
+                    <div className="h-px bg-slate-100 w-full" />
+                    {/* Column headers */}
+                    <div className="flex gap-4 py-1">
+                      {[60, 80, 50, 70, 45, 55].map((w, i) => (
+                        <div key={i} className="h-2 bg-slate-200 rounded animate-pulse" style={{ width: `${w}px` }} />
+                      ))}
+                    </div>
+                    {/* Data rows */}
+                    {[...Array(8)].map((_, i) => (
+                      <div key={i} className="flex gap-4">
+                        {[80, 60, 50, 70, 40, 55].map((w, j) => (
+                          <div
+                            key={j}
+                            className="h-2 bg-slate-50 rounded animate-pulse"
+                            style={{ width: `${w - (i % 3) * 8}px`, animationDelay: `${i * 60}ms` }}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                    {/* Subtotal line */}
+                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 mt-3">
+                      <div className="h-2 w-20 bg-slate-100 rounded animate-pulse" />
+                      <div className="h-2 w-14 bg-slate-200 rounded animate-pulse" />
+                    </div>
+
+                    {/* Second group */}
+                    <div className="h-3.5 w-40 bg-slate-200 rounded animate-pulse mt-4" />
+                    <div className="h-px bg-slate-100 w-full" />
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex gap-4">
+                        {[70, 55, 48, 65, 38, 50].map((w, j) => (
+                          <div
+                            key={j}
+                            className="h-2 bg-slate-50 rounded animate-pulse"
+                            style={{ width: `${w - (i % 2) * 6}px`, animationDelay: `${i * 80 + 200}ms` }}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                      <div className="h-2 w-20 bg-slate-100 rounded animate-pulse" />
+                      <div className="h-2 w-14 bg-slate-200 rounded animate-pulse" />
+                    </div>
+
+                    {/* More rows */}
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="flex gap-4">
+                        {[75, 60, 52, 68, 42, 52].map((w, j) => (
+                          <div
+                            key={j}
+                            className="h-2 bg-slate-50 rounded animate-pulse"
+                            style={{ width: `${w - (i % 4) * 5}px`, animationDelay: `${i * 50 + 400}ms` }}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Floating log card — overlaid on top-right of the paper ── */}
+                <div
+                  className="absolute top-10 right-6 w-80 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-2xl overflow-hidden"
+                  style={{ maxHeight: "calc(100% - 5rem)" }}
+                >
+                  {/* Card header */}
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                    <div className="relative flex h-5 w-5 items-center justify-center shrink-0">
+                      <Loader2 size={13} className="animate-spin text-blue-500" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-700 flex-1">Generating Report</p>
+                    <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-slate-100 px-1.5 py-0.5 rounded-full">
+                      {generationLogs.length}
+                    </span>
+                  </div>
+
+                  {/* Log stream */}
+                  <div
+                    className="overflow-y-auto p-3 space-y-1.5"
+                    style={{ maxHeight: "380px" }}
+                    ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+                  >
+                    {generationLogs.length === 0 ? (
+                      <div className="flex items-center gap-2 py-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                        <p className="text-[11px] text-slate-400 italic">Initialising engine…</p>
+                      </div>
+                    ) : (
+                      generationLogs.map((line, i) => {
+                        const isSuccess = line.startsWith("✅");
+                        const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
+                        const isError = line.startsWith("❌");
+                        const isLast = i === generationLogs.length - 1;
+                        return (
+                          <div
+                            key={i}
+                            className="flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-200"
+                          >
+                            {/* Status dot */}
+                            <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
+                              isSuccess ? "bg-emerald-500" :
+                              isWarning ? "bg-amber-400" :
+                              isError ? "bg-red-500" :
+                              isLast ? "bg-blue-500 animate-pulse" :
+                              "bg-slate-300"
+                            }`} />
+                            <span className={`text-[10.5px] leading-relaxed ${
+                              isSuccess ? "text-emerald-600 font-medium" :
+                              isWarning ? "text-amber-600" :
+                              isError ? "text-red-600 font-medium" :
+                              isLast ? "text-slate-700 font-medium" :
+                              "text-slate-500"
+                            }`}>
+                              {/* Strip emoji prefix for cleaner look */}
+                              {line.replace(/^[✅❌⚠️]\s*/, "")}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Progress bar at bottom */}
+                  <div className="h-0.5 bg-slate-100">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
+                      style={{
+                        width: generationLogs.length === 0 ? "5%" :
+                          `${Math.min(95, (generationLogs.length / 15) * 100)}%`,
+                        animation: generationLogs.length === 0 ? "pulse 1.5s infinite" : undefined,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : !reportData ? (
               <div className="flex flex-col items-center justify-center h-full text-center px-6">
                 <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 border border-slate-100">
                   <Zap size={32} className="text-blue-200" />
