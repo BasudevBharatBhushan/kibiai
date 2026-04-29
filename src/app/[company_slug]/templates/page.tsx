@@ -15,6 +15,8 @@ import {
   LayoutTemplate,
   Users,
   Zap,
+  ArrowRight,
+  Settings,
 } from "lucide-react";
 import { useHeader } from "@/context/HeaderContext";
 import { useAccessControl } from "@/context/AccessControlContext";
@@ -284,7 +286,7 @@ export default function TemplatesPage() {
                     <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-widest hidden sm:table-cell w-32">Module</th>
                     <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-widest hidden md:table-cell w-24">Status</th>
                     <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-widest hidden lg:table-cell w-32">Updated</th>
-                    <th className="w-12" />
+                    <th className="w-28" />
                   </tr>
                 </thead>
               </table>
@@ -390,28 +392,42 @@ export default function TemplatesPage() {
                             </div>
                           </td>
 
-                          {/* Navigate */}
-                          <td className="px-3 py-3.5 text-right w-12">
-                            <a
-                              href={destination}
-                              onClick={(e) => e.stopPropagation()}
-                              title={
-                                activeView === "user"
-                                  ? "Generate Report"
-                                  : template.has_setup
-                                  ? "Open Configurator"
-                                  : "Complete Setup"
-                              }
-                              className={clsx(
-                                "inline-flex items-center justify-center w-7 h-7 rounded-md transition-all",
-                                isSuperAdmin || hasAccess
-                                  ? "text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 group-hover:text-slate-500"
-                                  : "text-slate-200 cursor-not-allowed pointer-events-none"
-                              )}
-                              aria-disabled={!(isSuperAdmin || hasAccess)}
-                            >
-                              <ChevronRight size={16} />
-                            </a>
+                          {/* Navigate — pill CTA */}
+                          <td className="px-2 py-3.5 text-right w-28 overflow-hidden">
+                            {isSuperAdmin || hasAccess ? (
+                              <a
+                                href={destination}
+                                onClick={(e) => e.stopPropagation()}
+                                className={clsx(
+                                  "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors duration-200 whitespace-nowrap select-none shadow-sm",
+                                  activeView === "user"
+                                    ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                                    : template.has_setup
+                                    ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                                    : "bg-amber-500 text-white hover:bg-amber-600"
+                                )}
+                                title={
+                                  activeView === "user"
+                                    ? "Generate Report"
+                                    : template.has_setup
+                                    ? "Open Configurator"
+                                    : "Complete Setup"
+                                }
+                              >
+                                {activeView === "user" ? (
+                                  <><Zap size={10} />Generate</>
+                                ) : template.has_setup ? (
+                                  <><Settings size={10} />Open</>
+                                ) : (
+                                  <><ArrowRight size={10} />Setup</>
+                                )}
+                                <ArrowRight size={10} className="opacity-70" />
+                              </a>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-300 cursor-not-allowed select-none">
+                                No access
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );
