@@ -17,6 +17,7 @@ import DOMPurify from "dompurify";
 
 interface DynamicReportProps {
   jsonData: any[];
+  previewMode?: boolean;
 }
 
 // --- CONFIGURATION ---
@@ -172,7 +173,7 @@ const ExpandedReportView = ({ htmlContent, onClose }: { htmlContent: string, onC
 
 
 // --- MAIN COMPONENT ---
-const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
+const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = false }) => {
   const [reportHtml, setReportHtml] = useState<string>("");
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -277,7 +278,8 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
     const headers = Array.from(reportNode.querySelectorAll('.title-header, .current-date'));
     headers.forEach(el => {
         el.setAttribute('data-page', '1');
-        if(el.classList.contains('title-header')) currentHeight += (el as HTMLElement).offsetHeight;
+        // Count BOTH title-header and current-date heights so page breaks are accurate
+        currentHeight += (el as HTMLElement).offsetHeight;
     });
 
     const topSubsummaries = Array.from(reportNode.querySelectorAll('.subsummary.level-0'));
@@ -363,12 +365,21 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
     if (!containerRef.current) return;
 
     const clone = containerRef.current.cloneNode(true) as HTMLElement;
-    const hidden = clone.querySelectorAll('[style*="display: none"]');
-    hidden.forEach(el => (el as HTMLElement).style.display = '');
-    const allTables = clone.querySelectorAll('table');
-    allTables.forEach(t => t.style.display = 'table');
-    const allRows = clone.querySelectorAll('tr');
-    allRows.forEach(r => r.style.display = 'table-row');
+
+    // Strip ALL inline display:none styles — covers both "display: none" and "display:none"
+    clone.querySelectorAll('[style]').forEach(el => {
+      const style = (el as HTMLElement).style;
+      if (style.display === 'none' || style.display === '') {
+        style.removeProperty('display');
+      }
+    });
+    // Force all tables and rows visible
+    clone.querySelectorAll('table').forEach(t => (t as HTMLElement).style.removeProperty('display'));
+    clone.querySelectorAll('tr').forEach(r => (r as HTMLElement).style.removeProperty('display'));
+    // Remove data-page attributes — browser CSS handles page breaks natively
+    clone.querySelectorAll('[data-page]').forEach(el => el.removeAttribute('data-page'));
+    // Remove current-date entirely — it was causing a blank first page in some configurations
+    clone.querySelector('.current-date')?.remove();
 
     const printWindow = window.open('', '', 'width=900,height=1200');
     if (!printWindow) {
@@ -433,9 +444,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
           </style>
         </head>
         <body>
-          <div class="dynamic-report">
-            ${clone.innerHTML}
-          </div>
+          ${clone.innerHTML}
         </body>
       </html>
     `);
@@ -501,8 +510,8 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
   return (
     <div className="flex flex-col h-full relative bg-gray-100">
       
-      {/* --- Controls  Toolbar --- */}
-      {portalTarget ? createPortal(
+      {/* --- Controls Toolbar — hidden in previewMode --- */}
+      {!previewMode && portalTarget ? createPortal(
         <div className="flex shrink-0 items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm transform transition-all translate-y-0.5">
           <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded p-1 mr-4">
               {/* Pagination Controls */}
@@ -559,7 +568,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
           </div>
         </div>,
         portalTarget
-      ) : (
+      ) : (!previewMode && (
         <div className="flex shrink-0 items-center justify-between bg-white border-b border-slate-200 px-4 py-2 shadow-sm z-10 w-full mb-2">
           <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded p-1">
               {/* Pagination Controls */}
@@ -613,31 +622,43 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData }) => {
               </button>
           </div>
         </div>
-      )}
+      ))}
 
       {/* --- Normal Viewport --- */}
       <div 
         id="main-div" 
         className="flex-1 overflow-auto flex justify-center items-start"
       >
-        <div 
-            className="bg-white shadow-xl transition-all duration-300 relative"
-            style={{ 
-                width: '210mm', 
-                minHeight: '297mm', 
-                padding: '5mm 10mm', 
-                boxSizing: 'border-box',
-                opacity: isCalculating ? 0.5 : 1
-            }}
-        >
-           <div 
-             id="dynamic-report-container"
-             ref={containerRef} 
-             className="h-full"
-           >
-              {/* HTML Injected Here */}
-           </div>
-        </div>
+        {previewMode ? (
+          // Preview mode: natural-flow layout, fills panel width, no A4 constraints
+          <div className="w-full bg-white">
+            <div
+              id="dynamic-report-container"
+              ref={containerRef}
+              className="w-full px-4 py-3"
+            />
+          </div>
+        ) : (
+          // Full report mode: A4 paper rendering
+          <div 
+              className="bg-white shadow-xl transition-all duration-300 relative"
+              style={{ 
+                  width: '210mm', 
+                  minHeight: '297mm', 
+                  padding: '5mm 10mm', 
+                  boxSizing: 'border-box',
+                  opacity: isCalculating ? 0.5 : 1
+              }}
+          >
+             <div 
+               id="dynamic-report-container"
+               ref={containerRef} 
+               className="h-full"
+             >
+                {/* HTML Injected Here */}
+             </div>
+          </div>
+        )}
       </div>
 
       {/* --- EXPANDED MODAL (Iframe) --- */}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, BarChart3, Calendar, Loader2, RefreshCw } from "lucide-react";
+import { BarChart3, Loader2, RefreshCw } from "lucide-react";
 import { apiClient } from "@/utils/apiClient";
 import DynamicReport from "@/components/DynamicReportPreview";
 
@@ -18,11 +18,15 @@ interface TemplatePreviewPanelProps {
 }
 
 /**
- * TemplatePreviewPanel (persistent)
+ * TemplatePreviewPanel
+ * Clean preview panel — no toolbar, no pagination controls, no header strip.
+ * Uses DynamicReport in previewMode to show report content directly.
  *
- * Always-visible right panel on the template list.
- * When a template is selected it fetches preview_data_json and renders the
- * real DynamicReportPreview — same quality as the configurator.
+ * Preloading behaviour:
+ *   - First load (no prior data): shows full animated skeleton.
+ *   - Template switch (prior data exists): keeps old preview visible behind
+ *     a translucent skeleton overlay while the new data loads.
+ *   - No data (after load): shows a static skeleton layout + "no preview" message.
  */
 export function TemplatePreviewPanel({ template }: TemplatePreviewPanelProps) {
   const [previewData, setPreviewData] = useState<any[] | null>(null);
@@ -38,7 +42,7 @@ export function TemplatePreviewPanel({ template }: TemplatePreviewPanelProps) {
 
     const load = async () => {
       setIsLoading(true);
-      setPreviewData(null);
+      // Do NOT clear previewData here — keep old data visible while loading
       try {
         const res = await apiClient.get<{ success: boolean; data: any }>(
           `/api/templates/${template.report_template_id}/config`
@@ -59,97 +63,107 @@ export function TemplatePreviewPanel({ template }: TemplatePreviewPanelProps) {
     load();
   }, [template?.report_template_id]);
 
-  return (
-    <div className="flex flex-col h-full bg-white border-l border-slate-200 overflow-hidden">
-
-      {/* ── Header ── */}
-      <div className="flex items-start gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/60 shrink-0">
-        <div className="w-9 h-9 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 shrink-0">
-          <FileText size={18} />
+  /* ── Shared skeleton structure (animated) ── */
+  const SkeletonBlock = () => (
+    <div className="p-5 space-y-3 animate-pulse w-full">
+      <div className="bg-white shadow rounded-lg p-5">
+        <div className="flex justify-between mb-5">
+          <div className="h-3 w-20 bg-slate-100 rounded" />
+          <div className="h-7 w-40 bg-slate-100 rounded" />
         </div>
-        <div className="min-w-0 flex-1">
-          {template ? (
-            <>
-              <h3 className="text-sm font-bold text-slate-900 truncate" title={template.report_template_name}>
-                {template.report_template_name}
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                {template.modules?.module_name || "General"} · v{template.version_number}
-              </p>
-            </>
-          ) : (
-            <>
-              <h3 className="text-sm font-bold text-slate-400">Report Preview</h3>
-              <p className="text-[11px] text-slate-300 mt-0.5">Select a template to preview</p>
-            </>
-          )}
+        <div className="h-px bg-slate-100 mb-4" />
+        {[...Array(10)].map((_, i) => (
+          <div key={i} className="h-3 w-full bg-slate-50 rounded mb-2.5" />
+        ))}
+        <div className="h-px bg-slate-100 my-4" />
+        {[...Array(5)].map((_, i) => (
+          <div
+            key={`b${i}`}
+            className="h-3 bg-slate-50 rounded mb-2"
+            style={{ width: `${85 - i * 10}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-2">
+        <Loader2 size={13} className="animate-spin" />
+        Loading preview…
+      </div>
+    </div>
+  );
+
+  /* ── No template selected ── */
+  if (!template) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12 bg-slate-50/40">
+        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
+          <BarChart3 size={28} className="text-slate-300" />
+        </div>
+        <p className="text-sm font-semibold text-slate-400">Select a template</p>
+        <p className="text-xs text-slate-300 mt-1 max-w-[180px]">
+          Click any row to preview its latest report output
+        </p>
+      </div>
+    );
+  }
+
+  /* ── First load (no prior data) → full skeleton ── */
+  if (isLoading && !previewData) {
+    return (
+      <div className="h-full overflow-auto bg-gray-100">
+        <SkeletonBlock />
+      </div>
+    );
+  }
+
+  /* ── No data returned → static skeleton + message ── */
+  if (!previewData || previewData.length === 0) {
+    return (
+      <div className="h-full overflow-auto bg-gray-100">
+        {/* Static skeleton layout so the panel shows structure */}
+        <div className="p-5 space-y-3">
+          <div className="bg-white shadow rounded-lg p-5 opacity-40">
+            <div className="flex justify-between mb-5">
+              <div className="h-3 w-20 bg-slate-200 rounded" />
+              <div className="h-7 w-40 bg-slate-200 rounded" />
+            </div>
+            <div className="h-px bg-slate-200 mb-4" />
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-3 w-full bg-slate-100 rounded mb-2.5" />
+            ))}
+            <div className="h-px bg-slate-200 my-4" />
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={`b${i}`}
+                className="h-3 bg-slate-100 rounded mb-2"
+                style={{ width: `${75 - i * 12}%` }}
+              />
+            ))}
+          </div>
+        </div>
+        {/* Informational message below skeleton */}
+        <div className="flex flex-col items-center justify-center py-4 text-center">
+          <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center mb-3">
+            <RefreshCw size={18} className="text-slate-300" />
+          </div>
+          <p className="text-xs font-semibold text-slate-500">No preview available</p>
+          <p className="text-[11px] text-slate-400 mt-1 max-w-[180px]">
+            Open this template in the configurator to generate a preview.
+          </p>
         </div>
       </div>
+    );
+  }
 
-      {/* ── Meta strip (only when template selected) ── */}
-      {template && (
-        <div className="px-5 py-2.5 border-b border-slate-100 flex items-center gap-4 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full ${template.report_template_status === "Active" ? "bg-emerald-500" : "bg-amber-500"}`} />
-            <span className={`text-[11px] font-bold ${template.report_template_status === "Active" ? "text-emerald-600" : "text-amber-600"}`}>
-              {template.report_template_status}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Calendar size={11} />
-            {new Date(template.updated_on || template.created_on).toLocaleDateString()}
-          </div>
+  /* ── Report preview (previewMode = no toolbar, no pagination controls) ── */
+  return (
+    <div className="h-full overflow-auto bg-gray-100 relative">
+      {/* Skeleton overlay while switching templates — old report stays visible */}
+      {isLoading && (
+        <div className="absolute inset-0 z-10 bg-gray-100/80 backdrop-blur-[1px] flex items-start">
+          <SkeletonBlock />
         </div>
       )}
-
-      {/* ── Body ── */}
-      <div className="flex-1 overflow-auto bg-gray-100">
-        {!template ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
-            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
-              <BarChart3 size={28} className="text-slate-300" />
-            </div>
-            <p className="text-sm font-semibold text-slate-400">Select a template</p>
-            <p className="text-xs text-slate-300 mt-1 max-w-[180px]">
-              Click any row to preview its latest report output
-            </p>
-          </div>
-        ) : isLoading ? (
-          /* Skeleton */
-          <div className="p-4 space-y-3 animate-pulse">
-            <div className="bg-white shadow rounded mx-auto" style={{ width: "210mm", minHeight: "60px", maxWidth: "100%", padding: "12px" }}>
-              <div className="flex justify-between mb-4">
-                <div className="h-3 w-24 bg-slate-100 rounded" />
-                <div className="h-6 w-36 bg-slate-100 rounded" />
-              </div>
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-3 w-full bg-slate-50 rounded mb-2" />
-              ))}
-            </div>
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
-              <Loader2 size={13} className="animate-spin" />
-              Loading preview…
-            </div>
-          </div>
-        ) : previewData && previewData.length > 0 ? (
-          /* Real report preview */
-          <div className="h-full overflow-auto">
-            <DynamicReport jsonData={previewData} />
-          </div>
-        ) : (
-          /* No preview data */
-          <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
-            <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mb-4">
-              <RefreshCw size={22} className="text-slate-300" />
-            </div>
-            <p className="text-sm font-semibold text-slate-500">No preview available</p>
-            <p className="text-xs text-slate-400 mt-1 max-w-[200px]">
-              Open this template in the configurator to generate a preview.
-            </p>
-          </div>
-        )}
-      </div>
+      <DynamicReport jsonData={previewData} previewMode={true} />
     </div>
   );
 }
