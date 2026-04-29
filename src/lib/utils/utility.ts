@@ -109,6 +109,48 @@ export function parseODataBatchResponse(response: string): {
   return result.json;
 }
 
+export function isValidDate(dateStr: string): boolean {
+  if (!dateStr) return false;
+  // Handle MM/DD/YYYY format
+  const parts = dateStr.split("/");
+  if (parts.length !== 3) return false;
+  const m = parseInt(parts[0], 10);
+  const d = parseInt(parts[1], 10);
+  const y = parseInt(parts[2], 10);
+  if (isNaN(m) || isNaN(d) || isNaN(y)) return false;
+  if (y < 1000 || y > 9999) return false;
+  const date = new Date(y, m - 1, d);
+  return (
+    date.getFullYear() === y &&
+    date.getMonth() === m - 1 &&
+    date.getDate() === d
+  );
+}
+
+export function validateFmDateFilter(value: string): {
+  isValid: boolean;
+  error?: string;
+} {
+  if (!value) return { isValid: true };
+
+  if (value.includes("...")) {
+    const [start, end] = value.split("...").map((v) => v.trim());
+    if (start && !isValidDate(start))
+      return { isValid: false, error: `Invalid start date: ${start}` };
+    if (end && !isValidDate(end))
+      return { isValid: false, error: `Invalid end date: ${end}` };
+    return { isValid: true };
+  }
+
+  // Handle other operators like >, <, >=, <=, =
+  const dateOnly = value.replace(/^[><=]+/, "").trim();
+  if (dateOnly && dateOnly !== "*" && !isValidDate(dateOnly)) {
+    return { isValid: false, error: `Invalid date: ${dateOnly}` };
+  }
+
+  return { isValid: true };
+}
+
 function convertOperator(value: string, key: string) {
   if (value.includes("...")) {
     const [d1, d2] = value.split("...").map((v) => v.trim());
@@ -302,8 +344,16 @@ export async function fetchFmRecord(
     ...(body ? { body } : {}),
   });
 
-  if (!dataRes.ok)
+  if (!dataRes.ok) {
+    if (dataRes.status === 401) {
+      return {
+        token,
+        data: [],
+        recordCount: 0,
+      };
+    }
     throw new Error(`Failed to fetch data from FileMaker: ${dataRes.status}`);
+  }
 
   // console.log(body);
 
@@ -584,6 +634,15 @@ export async function processFetchOrder(
         dataManager.addLog(
           `Using ${pKeysToUse.length} pkeys from previous dataset field: ${source}`
         );
+
+        // Optimization: If no pkeys are found for a join, return early
+        if (pKeysToUse.length === 0) {
+          dataManager.addLog(
+            `Skipping fetch for ${mainTable}: No pkeys available from source table.`
+          );
+          dataManager.storeDataset(fetch_order, []);
+          return { data: [], nextPkeys: [] };
+        }
       } else {
         pKeysToUse = [];
       }

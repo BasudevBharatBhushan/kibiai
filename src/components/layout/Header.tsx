@@ -4,11 +4,11 @@ import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCompany } from "@/components/providers/CompanyProvider";
+import { useAccessControl } from "@/context/AccessControlContext";
 import kibiaiLogo from "@/assets/kibiai.png";
 import {
   Building2,
   ChevronRight,
-  LayoutTemplate,
   Home,
   LogOut,
   User,
@@ -16,7 +16,6 @@ import {
   Menu,
   X,
   ChevronDown,
-  ArrowLeft,
 } from "lucide-react";
 import { useHeader } from "@/context/HeaderContext";
 import { useParams, useRouter, usePathname } from "next/navigation";
@@ -65,7 +64,8 @@ function PlanBadge({ plan }: { plan: string }) {
 // ── Header Component ─────────────────────────────────────────────────────────
 export default function Header() {
   const { company, isLoading: companyLoading } = useCompany();
-  const { breadcrumbs, backHref, headerActions } = useHeader();
+  const { breadcrumbs, headerActions } = useHeader();
+  const { isSuperAdmin } = useAccessControl();
   const params  = useParams();
   const router  = useRouter();
   const pathname = usePathname();
@@ -277,7 +277,7 @@ export default function Header() {
             <div className="h-4 w-[1px] bg-slate-200 mr-4" />
             
             <div className="flex items-center overflow-hidden">
-              {breadcrumbs.map((crumb, idx) => (
+              {!pathname?.includes("/generate") && breadcrumbs.map((crumb, idx) => (
                 <React.Fragment key={idx}>
                   {idx > 0 && <ChevronRight className="mx-2 h-3 w-3 text-slate-300 shrink-0" />}
                   {crumb.href ? (
@@ -288,7 +288,7 @@ export default function Header() {
                       {crumb.label}
                     </Link>
                   ) : (
-                    <span className="text-[13px] font-semibold text-slate-600 whitespace-nowrap truncate max-w-[200px]">
+                    <span className="text-[13px] font-semibold text-blue-600 whitespace-nowrap truncate max-w-[200px]">
                       {crumb.label}
                     </span>
                   )}
@@ -307,10 +307,13 @@ export default function Header() {
                 <span className="hidden lg:inline">Templates</span>
               </Link>
 
-              <Link href={`/${slug}/admin`} className={clsx("wh-nav-item", pathname?.includes("/admin") && "active")}>
-                <Settings className="h-4 w-4" />
-                <span className="hidden lg:inline">Admin Dashboard</span>
-              </Link>
+              {/* Admin Dashboard — Superadmin only (T-016) */}
+              {isSuperAdmin && (
+                <Link href={`/${slug}/admin`} className={clsx("wh-nav-item", pathname?.includes("/admin") && "active")}>
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden lg:inline">Admin Dashboard</span>
+                </Link>
+              )}
             </div>
 
             {/* Page-specific action buttons (e.g. panel toggles from configurator) */}
@@ -412,13 +415,16 @@ export default function Header() {
           >
             <Home className="h-4 w-4" /> Templates
           </Link>
-          <Link 
-            href={`/${slug}/admin`} 
-            onClick={() => setMobileDrawerOpen(false)}
-            className={clsx("flex items-center gap-3 px-3 py-2.5 text-[14px] font-medium rounded-lg transition-colors", pathname?.includes("/admin") ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:bg-slate-50")}
-          >
-            <Settings className="h-4 w-4" /> Admin Dashboard
-          </Link>
+          {/* Admin Dashboard — Superadmin only (T-016) */}
+          {isSuperAdmin && (
+            <Link 
+              href={`/${slug}/admin`} 
+              onClick={() => setMobileDrawerOpen(false)}
+              className={clsx("flex items-center gap-3 px-3 py-2.5 text-[14px] font-medium rounded-lg transition-colors", pathname?.includes("/admin") ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:bg-slate-50")}
+            >
+              <Settings className="h-4 w-4" /> Admin Dashboard
+            </Link>
+          )}
         </nav>
 
         <div className="p-4 border-t bg-slate-50/30">

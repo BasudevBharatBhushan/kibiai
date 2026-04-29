@@ -284,9 +284,12 @@ Tracks granular permissions for a user on a specific report template.
 | `can_modify_template` | boolean | DEFAULT false | |
 | `can_create_template` | boolean | DEFAULT false | |
 | `can_delete_template` | boolean | DEFAULT false | |
-| `can_create_charts` | boolean | DEFAULT false | |
+| `can_generate_charts` | boolean | DEFAULT false | **Renamed** from `can_create_charts` (T-016) — user-level: run chart templates on saved reports |
+| `can_analyze_charts` | boolean | DEFAULT false | **New** (T-016) — admin-level: AI-powered chart template creation/analysis |
 | `created_at` | timestamptz | DEFAULT now() | |
 | `updated_at` | timestamptz | DEFAULT now() | |
+
+> **Migration**: `ai-workspace/sql/016_access_control_permissions.sql`
 
 ### 18. allowed_subdomains
 Registry of valid company subdomains for subdomain-based routing.

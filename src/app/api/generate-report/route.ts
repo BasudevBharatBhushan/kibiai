@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { fetchFmRecord } from "@/lib/utils/utility";
+import { fetchFmRecord, validateFmDateFilter } from "@/lib/utils/utility";
 
 // Types
 interface ReportSetupJson {
@@ -369,6 +369,15 @@ async function processFetchOrder(
         dataManager.addLog(
           `Using ${pKeysToUse.length} pkeys from previous dataset field: ${source}`
         );
+
+        // Optimization: If no pkeys are found for a join, return early
+        if (pKeysToUse.length === 0) {
+          dataManager.addLog(
+            `Skipping fetch for ${mainTable}: No pkeys available from source table.`
+          );
+          dataManager.storeDataset(fetch_order, []);
+          return { data: [], nextPkeys: [] };
+        }
       } else {
         pKeysToUse = [];
       }
@@ -1739,6 +1748,31 @@ export async function POST(req: NextRequest) {
           },
         }
       );
+    }
+
+    // Validate date ranges
+    if (configJson.date_range_fields) {
+      for (const table in configJson.date_range_fields) {
+        for (const field in configJson.date_range_fields[table]) {
+          const value = configJson.date_range_fields[table][field];
+          const validation = validateFmDateFilter(value);
+          if (!validation.isValid) {
+            return NextResponse.json(
+              {
+                status: "error",
+                detail: `Validation Error: ${validation.error} in table '${table}', field '${field}'.`,
+              },
+              {
+                status: 400,
+                headers: {
+                  "Content-Type": "application/json",
+                  "Access-Control-Allow-Origin": "*",
+                },
+              }
+            );
+          }
+        }
+      }
     }
 
     // Initialize data manager

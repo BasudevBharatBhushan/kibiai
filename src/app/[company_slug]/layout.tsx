@@ -1,6 +1,7 @@
 import { CompanyProvider } from "@/components/providers/CompanyProvider";
 import { Metadata } from "next";
 import { HeaderProvider } from "@/context/HeaderContext";
+import { AccessControlProvider } from "@/context/AccessControlContext";
 import AppShell from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
@@ -15,11 +16,13 @@ export default function CompanyLayout({
 }) {
   return (
     <CompanyProvider>
-      <HeaderProvider>
-        <AppShell>
-          {children}
-        </AppShell>
-      </HeaderProvider>
+      <AccessControlProvider>
+        <HeaderProvider>
+          <AppShell>
+            {children}
+          </AppShell>
+        </HeaderProvider>
+      </AccessControlProvider>
     </CompanyProvider>
   );
 }

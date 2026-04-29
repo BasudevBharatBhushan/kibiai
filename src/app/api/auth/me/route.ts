@@ -13,36 +13,68 @@ export async function GET() {
 
   const adminClient = createAdminClient();
   
-  let userData = {
+  let userData: Record<string, any> = {
     name: session.accountType === 'platform_admin' ? "Platform Admin" : "User",
-    role: session.accountType === 'platform_admin' ? "Superadmin" : "Staff"
+    role: session.accountType === 'platform_admin' ? "Superadmin" : "Staff",
+    // Extended fields (T-016)
+    user_id: null,
+    role_id: null,
+    is_super_admin: session.accountType === 'platform_admin',
+    company_id: session.companyId ?? null,
   };
 
-  // Try to find a user record for this account to get a real name
-  const { data: user, error: userError } = await adminClient
-    .from("users")
-    .select(`
-      full_name,
-      roles:role_id (
-        role_name
-      )
-    `)
-    .eq("account_id", session.accountId)
-    .maybeSingle();
-  
-  if (userError) {
-    console.error("Error fetching user details in /api/auth/me:", userError);
+  // Try to find a user record: first by account_id, then by email
+  // (invited staff may have account_id = null until they first log in)
+  let user: any = null;
+
+  if (session.accountId) {
+    const { data } = await adminClient
+      .from("users")
+      .select(`
+        user_id,
+        full_name,
+        role_id,
+        roles:role_id (
+          role_name,
+          is_super_admin
+        )
+      `)
+      .eq("account_id", session.accountId)
+      .maybeSingle();
+    if (data) user = data;
+  }
+
+  // Email fallback
+  if (!user && session.email) {
+    const { data } = await adminClient
+      .from("users")
+      .select(`
+        user_id,
+        full_name,
+        role_id,
+        roles:role_id (
+          role_name,
+          is_super_admin
+        )
+      `)
+      .eq("user_email", session.email)
+      .maybeSingle();
+    if (data) user = data;
   }
 
   if (user) {
     const roleData = Array.isArray(user.roles) ? user.roles[0] : user.roles;
     userData = {
       name: user.full_name || userData.name,
-      role: (roleData as any)?.role_name || userData.role
+      role: (roleData as any)?.role_name || userData.role,
+      // Extended fields (T-016)
+      user_id: user.user_id,
+      role_id: user.role_id,
+      is_super_admin: (roleData as any)?.is_super_admin === true,
+      company_id: session.companyId ?? null,
     };
   } else if (session.accountType === 'platform_admin') {
-    // If no user record found for platform admin, we might want to check platform_admins table
-    // but it has no name column yet, so we stick with the default or email part
+    // Platform admins: derive name from email
     const nameFromEmail = session.email.split('@')[0];
     userData.name = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
   }

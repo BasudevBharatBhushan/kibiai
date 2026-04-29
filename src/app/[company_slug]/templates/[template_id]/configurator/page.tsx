@@ -168,9 +168,10 @@ function ConfiguratorPageContent({
         });
 
         setBreadcrumbs([
-          { label: "Templates", href: `/${slug}/templates` },
-          { label: data.template_name || templateId, href: `/${slug}/templates/${templateId}/setup` },
-          { label: "Configurator" },
+          { label: "Report Templates", href: `/${slug}/templates` },
+          { label: "Setup", href: `/${slug}/templates/${templateId}/setup` },
+          { label: "Report Builder" },
+          { label: "Chart Builder", href: `/${slug}/templates/${templateId}/charts` },
         ]);
         setBackHref(`/${slug}/templates`);
 

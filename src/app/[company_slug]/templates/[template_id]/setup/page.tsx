@@ -39,9 +39,10 @@ export default function TemplateSetupPage() {
         
         // Update header
         setBreadcrumbs([
-          { label: "Templates", href: `/${slug}/templates` },
-          { label: data.template.report_template_name },
+          { label: "Report Templates", href: `/${slug}/templates` },
           { label: "Setup" },
+          { label: "Report Builder", href: `/${slug}/templates/${templateId}/configurator` },
+          { label: "Chart Builder", href: `/${slug}/templates/${templateId}/charts` },
         ]);
         setBackHref(`/${slug}/templates`);
       } catch (err: any) {

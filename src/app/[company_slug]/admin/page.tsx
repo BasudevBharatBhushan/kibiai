@@ -37,7 +37,8 @@ interface Permissions {
   can_modify_template: boolean;
   can_create_template: boolean;
   can_delete_template: boolean;
-  can_create_charts: boolean;
+  can_generate_charts: boolean;
+  can_analyze_charts: boolean;
 }
 
 interface Template {
@@ -438,7 +439,7 @@ export default function AdminDashboardPage() {
                     >
                       <div className="pr-2">
                         <div className="font-semibold text-gray-800 text-sm line-clamp-2">{template.report_template_name}</div>
-                        <div className="text-[11px] text-gray-400 mt-0.5 font-medium">{perms}/5 Active</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5 font-medium">{perms}/6 Active</div>
                       </div>
                       <button 
                         className={clsx(
@@ -448,8 +449,8 @@ export default function AdminDashboardPage() {
                         onClick={(e) => {
                           e.stopPropagation();
                           const newPerms = hasAny 
-                            ? { can_generate_report: false, can_modify_template: false, can_create_template: false, can_delete_template: false, can_create_charts: false }
-                            : { can_generate_report: true, can_modify_template: true, can_create_template: true, can_delete_template: true, can_create_charts: true };
+                            ? { can_generate_report: false, can_modify_template: false, can_create_template: false, can_delete_template: false, can_generate_charts: false, can_analyze_charts: false }
+                            : { can_generate_report: true, can_modify_template: true, can_create_template: true, can_delete_template: true, can_generate_charts: true, can_analyze_charts: true };
                           updateTemplatePermission(template.report_template_id, newPerms);
                         }}
                       >
@@ -480,42 +481,73 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <div className="flex flex-col h-full">
-                <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 px-2">
-                  <span>Capability</span>
-                  <span>Toggle</span>
-                </div>
-                
-                <div className="flex flex-col gap-1 flex-1">
-                  {[
-                    { key: 'can_generate_report', label: 'Generate Reports' },
-                    { key: 'can_modify_template', label: 'Modify Templates (AI)' },
-                    { key: 'can_create_template', label: 'Create Templates (AI)' },
-                    { key: 'can_delete_template', label: 'Delete Templates' },
-                    { key: 'can_create_charts', label: 'Analyze Charts (AI)' },
-                  ].map((action) => (
-                    <div key={action.key} className="flex justify-between items-center py-3.5 px-3 rounded-xl hover:bg-gray-50 transition-all border border-transparent hover:border-gray-100">
-                      <span className="text-sm font-medium text-gray-700">{action.label}</span>
-                      <button 
-                        className={clsx(
-                          "w-10 h-6 rounded-full relative transition-all duration-200",
-                          selectedTemplate.permissions[action.key as keyof Permissions] 
-                            ? "bg-indigo-500" 
-                            : "bg-gray-200"
-                        )}
-                        onClick={() => {
-                          const newPerms = { ...selectedTemplate.permissions, [action.key]: !selectedTemplate.permissions[action.key as keyof Permissions] };
-                          updateTemplatePermission(selectedTemplate.report_template_id, newPerms);
-                        }}
-                      >
-                        <div className={clsx(
-                          "absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-200 shadow-sm",
-                          selectedTemplate.permissions[action.key as keyof Permissions] 
-                            ? "left-5" 
-                            : "left-1"
-                        )} />
-                      </button>
+
+                <div className="flex flex-col gap-1 flex-1 space-y-4">
+
+                  {/* ── Admin / Superadmin Level ──────────────────── */}
+                  <div>
+                    <div className="flex items-center gap-2 px-2 py-2 mb-1">
+                      <div className="flex-1 h-px bg-indigo-100" />
+                      <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest whitespace-nowrap flex items-center gap-1">
+                        🔐 Admin / Superadmin
+                      </span>
+                      <div className="flex-1 h-px bg-indigo-100" />
                     </div>
-                  ))}
+                    {[
+                      { key: 'can_modify_template', label: 'Modify Templates (AI)' },
+                      { key: 'can_create_template', label: 'Create Templates (AI)' },
+                      { key: 'can_delete_template', label: 'Delete Templates' },
+                      { key: 'can_analyze_charts', label: 'Analyze Charts (AI)' },
+                    ].map((action) => (
+                      <div key={action.key} className="flex justify-between items-center py-3 px-3 rounded-xl hover:bg-indigo-50/40 transition-all border border-transparent hover:border-indigo-100">
+                        <span className="text-sm font-medium text-gray-700">{action.label}</span>
+                        <button
+                          className={clsx(
+                            "w-10 h-6 rounded-full relative transition-all duration-200",
+                            selectedTemplate.permissions[action.key as keyof Permissions] ? "bg-indigo-500" : "bg-gray-200"
+                          )}
+                          onClick={() => {
+                            const newPerms = { ...selectedTemplate.permissions, [action.key]: !selectedTemplate.permissions[action.key as keyof Permissions] };
+                            updateTemplatePermission(selectedTemplate.report_template_id, newPerms);
+                          }}
+                        >
+                          <div className={clsx("absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-200 shadow-sm", selectedTemplate.permissions[action.key as keyof Permissions] ? "left-5" : "left-1")} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── User Level ────────────────────────────────── */}
+                  <div>
+                    <div className="flex items-center gap-2 px-2 py-2 mb-1">
+                      <div className="flex-1 h-px bg-emerald-100" />
+                      <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest whitespace-nowrap flex items-center gap-1">
+                        👤 User Level
+                      </span>
+                      <div className="flex-1 h-px bg-emerald-100" />
+                    </div>
+                    {[
+                      { key: 'can_generate_report', label: 'Generate Reports' },
+                      { key: 'can_generate_charts', label: 'Generate Charts' },
+                    ].map((action) => (
+                      <div key={action.key} className="flex justify-between items-center py-3 px-3 rounded-xl hover:bg-emerald-50/40 transition-all border border-transparent hover:border-emerald-100">
+                        <span className="text-sm font-medium text-gray-700">{action.label}</span>
+                        <button
+                          className={clsx(
+                            "w-10 h-6 rounded-full relative transition-all duration-200",
+                            selectedTemplate.permissions[action.key as keyof Permissions] ? "bg-emerald-500" : "bg-gray-200"
+                          )}
+                          onClick={() => {
+                            const newPerms = { ...selectedTemplate.permissions, [action.key]: !selectedTemplate.permissions[action.key as keyof Permissions] };
+                            updateTemplatePermission(selectedTemplate.report_template_id, newPerms);
+                          }}
+                        >
+                          <div className={clsx("absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-200 shadow-sm", selectedTemplate.permissions[action.key as keyof Permissions] ? "left-5" : "left-1")} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
                 </div>
                 
                 {/* Full Access Toggle */}
@@ -523,8 +555,8 @@ export default function AdminDashboardPage() {
                   onClick={() => {
                     const isAll = Object.values(selectedTemplate.permissions).every(Boolean);
                     const newPerms = isAll 
-                            ? { can_generate_report: false, can_modify_template: false, can_create_template: false, can_delete_template: false, can_create_charts: false }
-                            : { can_generate_report: true, can_modify_template: true, can_create_template: true, can_delete_template: true, can_create_charts: true };
+                            ? { can_generate_report: false, can_modify_template: false, can_create_template: false, can_delete_template: false, can_generate_charts: false, can_analyze_charts: false }
+                            : { can_generate_report: true, can_modify_template: true, can_create_template: true, can_delete_template: true, can_generate_charts: true, can_analyze_charts: true };
                     updateTemplatePermission(selectedTemplate.report_template_id, newPerms);
                   }}
                 >

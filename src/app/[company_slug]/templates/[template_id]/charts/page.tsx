@@ -458,12 +458,10 @@ function ChartBuilderPageContent() {
 
         setPageData(res.data);
         setBreadcrumbs([
-          { label: "Templates", href: `/${slug}/templates` },
-          {
-            label: res.data.template_name || templateId,
-            href: `/${slug}/templates/${templateId}/configurator`,
-          },
-          { label: "Charts" },
+          { label: "Report Templates", href: `/${slug}/templates` },
+          { label: "Setup", href: `/${slug}/templates/${templateId}/setup` },
+          { label: "Report Builder", href: `/${slug}/templates/${templateId}/configurator` },
+          { label: "Chart Builder" },
         ]);
         setBackHref(`/${slug}/templates/${templateId}/configurator`);
 

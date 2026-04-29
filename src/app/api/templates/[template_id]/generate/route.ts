@@ -11,8 +11,8 @@ const generateBodySchema = z.object({
       filters: z.record(z.string(), z.record(z.string(), z.any())).optional(),
     })
     .optional(),
-  report_name: z.string().optional(),
-  save_to_history: z.boolean().optional(),
+  report_header: z.string().optional(),
+  report_name: z.string().optional(), // kept for backwards-compat
 });
 
 // ── POST /api/templates/[template_id]/generate ───────────────────────────────
@@ -39,7 +39,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: parsed.error.message }, { status: 400 });
     }
 
-    const { runtime_filters, report_name, save_to_history } = parsed.data;
+    const { runtime_filters, report_header } = parsed.data;
 
     // 3. Fetch template config from Supabase (company-scoped)
     const supabase = createAdminClient();
@@ -70,9 +70,10 @@ export async function POST(
 
     const setupJson = template.report_template_setup_json as any;
 
-    // 4. Merge runtime filters into config (do NOT persist — runtime-only)
+    // 4. Merge runtime filters into config (runtime-only — never persisted)
     const configJson = {
       ...(template.report_template_config_json as any),
+      ...(report_header ? { report_header } : {}),
       ...(runtime_filters?.date_range_fields !== undefined
         ? { date_range_fields: runtime_filters.date_range_fields }
         : {}),
@@ -81,8 +82,7 @@ export async function POST(
         : {}),
     };
 
-    // 5. Delegate to existing generate-report engine (body-driven — no FM record ID needed)
-    //    Using internal fetch to avoid duplicating engine logic.
+    // 5. Delegate to existing generate-report engine
     const baseUrl = req.nextUrl.origin;
     const engineRes = await fetch(`${baseUrl}/api/generate-report`, {
       method: "POST",
@@ -91,10 +91,11 @@ export async function POST(
     });
 
     if (!engineRes.ok) {
-      const errText = await engineRes.text();
+      const errJson = await engineRes.json().catch(() => null);
+      const errText = errJson?.detail || errJson?.error || await engineRes.text();
       console.error("[generate] engine error:", errText);
       return NextResponse.json(
-        { success: false, error: "Report engine failed to generate the report." },
+        { success: false, error: errText || "Report engine failed to generate the report." },
         { status: 500 }
       );
     }
@@ -102,75 +103,63 @@ export async function POST(
     const engineResult = await engineRes.json();
 
     if (engineResult.status !== "ok" || !engineResult.report_structure_json) {
+      console.error("[generate] engine result error:", engineResult.detail || engineResult.error);
       return NextResponse.json(
-        { success: false, error: engineResult.error || "Engine returned no report data." },
+        { success: false, error: engineResult.detail || engineResult.error || "Engine returned no report data." },
         { status: 500 }
       );
     }
 
     const reportStructureJson = engineResult.report_structure_json;
 
-    const { error: previewUpdateError } = await supabase
-      .from("report_templates")
-      .update({
-        report_template_data_json: reportStructureJson,
-        updated_on: new Date().toISOString(),
-      })
-      .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId);
+    // 6. Extract report heading from TitleHeader for use as report name
+    //    (report_template_data_json is intentionally NOT updated — that is admin-only territory)
+    const titleHeaderItem = Array.isArray(reportStructureJson)
+      ? reportStructureJson.find((i: any) => i && "TitleHeader" in i)
+      : null;
+    const reportHeading: string =
+      titleHeaderItem?.TitleHeader?.MainHeading ||
+      template.report_template_name ||
+      "Report";
 
-    if (previewUpdateError) {
-      console.error(
-        "[POST /api/templates/[id]/generate] preview update error:",
-        previewUpdateError.message,
-        previewUpdateError.details
-      );
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Generated report data could not be cached on the template.",
-        },
-        { status: 500 }
-      );
+    // 7. Look up the actual users.user_id (FK target) from the users table
+    //    session.accountId = auth_accounts.account_id, NOT users.user_id
+    let generatedByUserId: string | null = null;
+    if (session.accountId && session.companyId) {
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("user_id")
+        .eq("account_id", session.accountId)
+        .eq("company_id", session.companyId)
+        .maybeSingle();
+      generatedByUserId = userRow?.user_id ?? null;
     }
 
-    // 6. Optionally save to reports history
-    let reportId: string | null = null;
-    if (save_to_history) {
-      const finalReportName =
-        report_name ||
-        `${template.report_template_name} — ${new Date().toLocaleDateString("en-US")}`;
+    // 8. Always save to reports history (auto-save on every generation)
+    const { data: saved, error: saveError } = await supabase
+      .from("reports")
+      .insert({
+        company_id: session.companyId,
+        report_template_id: template_id,
+        report_name: reportHeading,
+        report_config_json: configJson,
+        report_data_json: reportStructureJson,
+        generated_by_user_id: generatedByUserId,
+      })
+      .select("report_id")
+      .single();
 
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        session.accountId ?? ""
-      );
-
-      const { data: saved, error: saveError } = await supabase
-        .from("reports")
-        .insert({
-          company_id: session.companyId,
-          report_template_id: template_id,
-          report_name: finalReportName,
-          report_config_json: configJson,
-          report_data_json: reportStructureJson,
-          generated_by_user_id: isUuid ? session.accountId : null,
-        })
-        .select("report_id")
-        .single();
-
-      if (saveError) {
-        // Non-fatal: log but still return the report
-        console.error("[POST /api/templates/[id]/generate] save error:", saveError.message, saveError.details);
-      } else {
-        reportId = saved?.report_id ?? null;
-      }
+    if (saveError) {
+      // Non-fatal — log but still return the report data so the user sees results
+      console.error("[POST /api/templates/[id]/generate] auto-save error:", saveError.message, saveError.details, saveError.hint);
     }
 
     return NextResponse.json({
       success: true,
       data: {
         report_structure_json: reportStructureJson,
-        report_id: reportId,
+        report_name: reportHeading,
+        report_id: saved?.report_id ?? null,
       },
     });
   } catch (err: any) {

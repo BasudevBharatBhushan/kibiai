@@ -53,11 +53,14 @@ export async function GET(req: Request) {
       return {
         ...t,
         permissions: {
-          can_generate_report: perm.can_generate_report || false,
-          can_modify_template: perm.can_modify_template || false,
-          can_create_template: perm.can_create_template || false,
-          can_delete_template: perm.can_delete_template || false,
-          can_create_charts: perm.can_create_charts || false,
+          can_generate_report: (perm as any).can_generate_report || false,
+          can_modify_template: (perm as any).can_modify_template || false,
+          can_create_template: (perm as any).can_create_template || false,
+          can_delete_template: (perm as any).can_delete_template || false,
+          // Renamed from can_create_charts (T-016)
+          can_generate_charts: (perm as any).can_generate_charts || false,
+          // New admin-level chart analysis permission (T-016)
+          can_analyze_charts: (perm as any).can_analyze_charts || false,
         }
       };
     }) || [];
@@ -96,7 +99,10 @@ export async function PUT(req: Request) {
         can_modify_template: permissions.can_modify_template || false,
         can_create_template: permissions.can_create_template || false,
         can_delete_template: permissions.can_delete_template || false,
-        can_create_charts: permissions.can_create_charts || false,
+        // Renamed from can_create_charts (T-016)
+        can_generate_charts: permissions.can_generate_charts || false,
+        // New admin-level chart analysis permission (T-016)
+        can_analyze_charts: permissions.can_analyze_charts || false,
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id, report_template_id' });
 
