@@ -98,7 +98,7 @@ function SuggestionChips({
 
 function LoadingSkeleton() {
   return (
-    <div className="flex flex-1 h-full w-full items-center justify-center bg-slate-50">
+    <div className="flex min-h-[calc(100vh-64px)] w-full items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center gap-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg animate-pulse">
           <BarChart3 className="h-6 w-6" />
@@ -354,7 +354,7 @@ function ChartBuilderWorkspace({
   );
 
   return (
-    <div className="-mx-4 sm:-mx-6 lg:-mx-8 relative flex h-full overflow-hidden bg-slate-50 font-sans">
+    <div className="-mx-4 sm:-mx-6 lg:-mx-8 relative flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50 font-sans">
       <div className="flex flex-1 overflow-hidden relative w-full">
         <div
           className={`bg-white border-r border-slate-200 h-full shadow-xl z-20 transition-[width] duration-300 ease-in-out flex flex-col shrink-0 ${

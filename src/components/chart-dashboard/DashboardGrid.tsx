@@ -41,8 +41,8 @@ function DashboardInner() {
 
   // Render
   return (
-    <div className="flex w-full h-full overflow-hidden relative bg-slate-50">
-      <div className="flex-1 overflow-auto scrollbar-minimal flex flex-col px-4 py-6 lg:px-6 pb-96 relative transition-all duration-300">
+    <div className="flex w-full h-full overflow-hidden relative">
+      <div className="flex-1 overflow-auto bg-slate-50 scrollbar-minimal flex flex-col px-4 py-6 lg:px-6 pb-96 relative transition-all duration-300">
         {/* Toolbar */}
         {!isViewerMode && (
         <div className="w-full flex items-center justify-between bg-white border border-slate-200 rounded-xl shadow-sm p-3 mb-6 sticky top-4 z-10">
@@ -83,7 +83,7 @@ function DashboardInner() {
 
         {/* Grid Canvas */}
         <div 
-          className="dashboard-area"
+          className="dashboard-area min-h-full"
         >
           {activeCharts.length === 0 && (
             <div className="flex h-96 items-center justify-center text-slate-400 italic">
