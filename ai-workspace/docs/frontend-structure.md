@@ -54,3 +54,4 @@ In production, the application utilizes subdomains to isolate the **Admin Panel*
   - **Logo**: 32x32px container (w-8 h-8), no background container, direct logo image usage.
   - **Typography**: "Powered by" (Small, uppercase, tracking-widest), "KiBiAI" (Bold, legacy blue).
 - **Alignment**: Every page body MUST use the `PageContainer` component to ensure X-axis alignment with the header content (max-width 1600px).
+- **Scrollbars**: All major scrollable containers (panels, dashboards, configurators) MUST use the `.scrollbar-minimal` utility class (defined in `globals.css`) to ensure a light, narrow, and nearly invisible aesthetic consistent across the application.

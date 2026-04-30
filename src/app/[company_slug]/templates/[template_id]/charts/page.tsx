@@ -98,7 +98,7 @@ function SuggestionChips({
 
 function LoadingSkeleton() {
   return (
-    <div className="flex min-h-[calc(100vh-64px)] w-full items-center justify-center bg-slate-50">
+    <div className="flex flex-1 h-full w-full items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center gap-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg animate-pulse">
           <BarChart3 className="h-6 w-6" />
@@ -213,16 +213,12 @@ function ChartBuilderWorkspace({
         onToggleConfig={toggleConfig}
       />
     );
+  }, [isChatOpen, isEditOpen, setHeaderActions, toggleChat, toggleConfig]);
 
-    return () => resetHeader();
-  }, [
-    isChatOpen,
-    isEditOpen,
-    resetHeader,
-    setHeaderActions,
-    toggleChat,
-    toggleConfig,
-  ]);
+  useLayoutEffect(() => {
+    return () => setHeaderActions(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!shouldBootstrapCharts || hasBootstrappedRef.current) return;
@@ -358,56 +354,47 @@ function ChartBuilderWorkspace({
   );
 
   return (
-    <div className="relative flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50 font-sans">
-      <div className="flex flex-1 overflow-hidden relative">
+    <div className="-mx-4 sm:-mx-6 lg:-mx-8 relative flex h-full overflow-hidden bg-slate-50 font-sans">
+      <div className="flex flex-1 overflow-hidden relative w-full">
         <div
-          className={`absolute left-4 top-4 bottom-4 z-20 w-[min(420px,calc(100vw-2rem))] max-w-full transform transition-transform duration-300 ease-in-out ${
-            isChatOpen ? "translate-x-0" : "-translate-x-full"
+          className={`bg-white border-r border-slate-200 h-full shadow-xl z-20 transition-[width] duration-300 ease-in-out flex flex-col shrink-0 ${
+            isChatOpen ? "w-[400px]" : "w-0 border-none overflow-hidden"
           }`}
         >
-          <div className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex h-full overflow-hidden flex-col">
-              {chartSuggestions.length > 0 && (
-                <SuggestionChips
-                  suggestions={chartSuggestions}
-                  onSelect={(text) => {
-                    setChartSuggestions([]);
-                    setPendingSuggestion(text);
-                  }}
-                />
-              )}
-
-              <ModularChatbot
-                botName="Chart Copilot"
-                instructionSet={CHARTS_SYSTEM_INSTRUCTION}
-                predefinedPrompt={predefinedPrompt}
-                formatPrompt={formatPrompt}
-                suggestedPrompts={CHART_PROMPT_OPTIONS}
-                initialConversationId={conversationId}
-                onAssistantResponse={handleAssistantResponse}
-                onConversationIdChange={handleConversationIdChange}
-                className="h-full w-full flex flex-col bg-white overflow-hidden relative"
-                welcomeMessage="Hello! I am the Chart Copilot. I can help you generate charts, business insights, and analysis from your report data. What would you like to visualize?"
-                pendingInput={pendingSuggestion}
-                onPendingInputConsumed={() => setPendingSuggestion("")}
-                onLoadingChange={(loading) => {
-                  if (!loading && isAutoGeneratingCharts) {
-                    setIsAutoGeneratingCharts(false);
-                  }
+          <div className="flex-1 overflow-hidden relative flex flex-col min-w-[400px]">
+            {chartSuggestions.length > 0 && (
+              <SuggestionChips
+                suggestions={chartSuggestions}
+                onSelect={(text) => {
+                  setChartSuggestions([]);
+                  setPendingSuggestion(text);
                 }}
               />
-            </div>
+            )}
+
+            <ModularChatbot
+              botName="Chart Copilot"
+              instructionSet={CHARTS_SYSTEM_INSTRUCTION}
+              predefinedPrompt={predefinedPrompt}
+              formatPrompt={formatPrompt}
+              suggestedPrompts={CHART_PROMPT_OPTIONS}
+              initialConversationId={conversationId}
+              onAssistantResponse={handleAssistantResponse}
+              onConversationIdChange={handleConversationIdChange}
+              className="h-full w-full flex flex-col bg-white overflow-hidden relative"
+              welcomeMessage="Hello! I am the Chart Copilot. I can help you generate charts, business insights, and analysis from your report data. What would you like to visualize?"
+              pendingInput={pendingSuggestion}
+              onPendingInputConsumed={() => setPendingSuggestion("")}
+              onLoadingChange={(loading) => {
+                if (!loading && isAutoGeneratingCharts) {
+                  setIsAutoGeneratingCharts(false);
+                }
+              }}
+            />
           </div>
         </div>
 
-        <div
-          className={`absolute inset-0 z-10 bg-slate-950/10 transition-opacity duration-300 ${
-            isChatOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          }`}
-          onClick={() => setIsChatOpen(false)}
-        />
-
-        <div className="relative z-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-50">
+        <div className="relative z-0 flex-1 flex overflow-hidden bg-slate-50">
           <DashboardGrid />
         </div>
       </div>
@@ -457,14 +444,6 @@ function ChartBuilderPageContent() {
         }
 
         setPageData(res.data);
-        setBreadcrumbs([
-          { label: "Report Templates", href: `/${slug}/templates` },
-          { label: "Setup", href: `/${slug}/templates/${templateId}/setup` },
-          { label: "Report Builder", href: `/${slug}/templates/${templateId}/configurator` },
-          { label: "Chart Builder" },
-        ]);
-        setBackHref(`/${slug}/templates/${templateId}/configurator`);
-
         if (res.data.rows.length === 0) {
           addToast(
             "warning",
@@ -486,7 +465,18 @@ function ChartBuilderPageContent() {
     };
 
     load();
-  }, [addToast, setBackHref, setBreadcrumbs, slug, templateId]);
+  }, [addToast, slug, templateId]);
+
+  useEffect(() => {
+    if (!slug || !templateId) return;
+    setBreadcrumbs([
+      { label: "Report Templates", href: `/${slug}/templates` },
+      { label: "Setup", href: `/${slug}/templates/${templateId}/setup` },
+      { label: "Report Builder", href: `/${slug}/templates/${templateId}/configurator` },
+      { label: "Chart Builder" },
+    ]);
+    setBackHref(`/${slug}/templates/${templateId}/configurator`);
+  }, [slug, templateId, setBreadcrumbs, setBackHref]);
 
   if (isLoading || !pageData) {
     return <LoadingSkeleton />;

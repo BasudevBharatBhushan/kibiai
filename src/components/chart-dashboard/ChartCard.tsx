@@ -88,7 +88,7 @@ export default function ChartCard({ config }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 p-2 w-full min-h-100">
+      <div className="flex-1 p-2 w-full min-h-0 overflow-y-auto scrollbar-minimal relative">
         <HighchartsReact 
           highcharts={Highcharts} 
           options={opts} 

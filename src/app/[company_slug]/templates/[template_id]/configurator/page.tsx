@@ -124,7 +124,7 @@ function ConfiguratorPageContent({
 
   // Separate unmount-only cleanup so breadcrumbs are NOT wiped on every toggle
   useLayoutEffect(() => {
-    return () => resetHeader();
+    return () => setHeaderActions(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -391,7 +391,7 @@ function ConfiguratorPageContent({
 
       {/* COLUMN 2: Live Preview (Middle) */}
       <div
-        className={`bg-gray-100 p-4 overflow-auto flex justify-center items-start transition-all duration-300 relative ${
+        className={`bg-gray-100 p-4 overflow-auto scrollbar-minimal flex justify-center items-start transition-all duration-300 relative ${
           !isChatOpen && !isConfigOpen ? "flex-1" : "flex-1 min-w-[600px]"
         }`}
       >

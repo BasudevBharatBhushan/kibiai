@@ -38,13 +38,15 @@ All workflow artifacts are stored inside:
 
 The AI agent must always follow:
 
+**CRITICAL RULE: Always review `/ai-workspace/docs/frontend-structure.md` and `/ai-workspace/docs/backend-structure.md` before implementing any new features or components to ensure architectural consistency.**
+
 1. `.agents/rules/rules.md`
 2. `.agents/workflow/workflow.md`
 3. `/ai-workspace/docs/coding-guidelines.md`
 4. `/ai-workspace/docs/frontend-structure.md`
 5. `/ai-workspace/docs/backend-structure.md`
 6. `/ai-workspace/docs/db-architecture.md` (when required)
-7. `/ai-workspace/docs/api-specification.md` (when required) 
+7. `/ai-workspace/docs/api-specification.md` (when required)
 
 ---
 

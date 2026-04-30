@@ -589,7 +589,7 @@ export function ModularChatbot({
                     minRows={1}
                     maxRows={8}
                     placeholder="Describe the report you want to build..."
-                    className="chat-textarea text-slate-700"
+                    className="chat-textarea text-slate-700 scrollbar-minimal"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => {

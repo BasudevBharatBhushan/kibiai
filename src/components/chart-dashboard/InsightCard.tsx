@@ -34,19 +34,20 @@ export default function InsightCard({ config }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 min-h-0 p-4 overflow-y-auto scrollbar-minimal">
         <div className="flex flex-col gap-3">
           {config.insights?.map((text, idx) => {
-            const [heading, ...rest] = text.split(INSIGHT_CONFIG.SEPARATOR);
-            const content = rest.join(INSIGHT_CONFIG.SEPARATOR);
+            const match = text.match(/^(.*?)\s*[-–—]\s*(.*)$/);
+            const heading = match ? match[1] : 'Insight';
+            const content = match ? match[2] : text;
             return (
               <div key={idx} className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
                 <h4 className="text-12 font-bold text-blue-600 mb-1 flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${INSIGHT_CONFIG.BULLET_COLOR}`}></span>
-                  {content ? heading : 'Insight'}
+                  {heading}
                 </h4>
                 <p className="text-12 text-slate-600 leading-relaxed">
-                  {content || heading}
+                  {content}
                 </p>
               </div>
             );

@@ -129,7 +129,7 @@ export function ReportConfigurator() {
       </div>
 
       {/* --- SCROLLABLE CONTENT --- */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-12">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-12 scrollbar-minimal">
          {/* 1. Header Section */}
          <HeaderSection  />
 
@@ -158,7 +158,7 @@ export function ReportConfigurator() {
         onClose={() => setShowJson(false)}
         title="Current Configuration (JSON)"
       >
-        <div className="h-[400px] overflow-auto bg-slate-900 p-4 rounded border border-slate-700 font-mono text-xs text-green-400">
+        <div className="h-[400px] overflow-auto scrollbar-minimal bg-slate-900 p-4 rounded border border-slate-700 font-mono text-xs text-green-400">
            <pre>{JSON.stringify(state.config, null, 2)}</pre>
         </div>
         <div className="mt-4 flex justify-end">

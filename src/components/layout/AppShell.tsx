@@ -4,6 +4,7 @@ import React from "react";
 import Header from "./Header";
 import PageContainer from "./PageContainer";
 import { usePathname } from "next/navigation";
+import clsx from "clsx";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -20,8 +21,8 @@ export default function AppShell({ children }: AppShellProps) {
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {!isLoginPage && <Header />}
-      <main className={!isLoginPage ? "pt-[64px]" : ""}>
-        <PageContainer>
+      <main className={clsx("flex-1 flex flex-col", !isLoginPage && "pt-[64px]")}>
+        <PageContainer className="flex-1 flex flex-col">
           {children}
         </PageContainer>
       </main>
