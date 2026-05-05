@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { FiTrash2, FiMove } from 'react-icons/fi';
+import { FiMinus, FiMove } from 'react-icons/fi';
 import * as Highcharts from 'highcharts';
 
 import { useDashboard } from '@/context/DashboardContext';
@@ -79,9 +79,9 @@ export default function ChartCard({ config }: Props) {
               <button 
                 onClick={() => removeChart(config.id)}
                 className="delete-btn"
-                title="Remove Chart"
+                title="Inactivate Chart"
               >
-                <FiTrash2 size={14} />
+                <FiMinus size={14} />
               </button>
             </>
           )}

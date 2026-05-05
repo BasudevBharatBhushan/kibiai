@@ -190,12 +190,19 @@ export function DashboardProvider({
         });
 
         const existingIds = new Set(finalCharts.map(c => c.id));
-        const savedIds = initialCanvasState.map((s: any) => s.id).filter(Boolean);
-        const nextVisible = new Set(savedIds.filter((id: string) => existingIds.has(id)));
+        const savedActiveIds = initialCanvasState
+          .filter((s: any) => s.isActive !== false)
+          .map((s: any) => s.id)
+          .filter(Boolean);
+          
+        initialVisibleIds = new Set(savedActiveIds.filter((id: string) => existingIds.has(id)));
 
-        if (nextVisible.size > 0) {
-          initialVisibleIds = nextVisible;
-        }
+        const stateChartIds = new Set(initialCanvasState.map((s: any) => s.id));
+        finalCharts.forEach(c => {
+          if (!stateChartIds.has(c.id) && c.isActive) {
+            initialVisibleIds.add(c.id);
+          }
+        });
 
         console.log("[Ctx] Visible IDs after canvas merge:", Array.from(initialVisibleIds));
       }

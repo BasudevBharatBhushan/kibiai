@@ -85,7 +85,7 @@ export function processData(
     const activeStatus = coerceIsActive(aiResponse.isActive);
 
     // 1. Handle Insight Cards
-    if (aiResponse.business_insights) {
+    if (aiResponse.business_insights || aiResponse.insight_results) {
       results.push({
         id: newId,
         kind: 'insight',
@@ -94,6 +94,8 @@ export function processData(
         categories: [],
         series: [],
         insights: aiResponse.business_insights,
+        insight_results: aiResponse.insight_results,
+        insight_date_range: aiResponse.insight_date_range,
         layout: { x: 0, y: 0, w: 6, h: 6, i: newId }
       });
       return; 

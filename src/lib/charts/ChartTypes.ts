@@ -19,6 +19,12 @@ export interface ChartConfig {
     categories: string[];
     series: ChartDataSeries[];
     insights?: string[];
+    insight_results?: any[];
+    insight_date_range?: {
+      field: string;
+      start: string;
+      end: string;
+    };
     layout?: {
     x: number;
     y: number;
@@ -40,7 +46,6 @@ export interface ReportChartSchema {
   chart_type: string;
   isActive?: string | number | boolean;   
   supabaseId?: string;        
-  
   numerical_field?: string;     
   group_field?: string;        
   subgroup_field?: string;      
@@ -48,6 +53,12 @@ export interface ReportChartSchema {
   filters?: string[];            
   
   business_insights?: string[]; 
+  insight_results?: any[];
+  insight_date_range?: {
+    field: string;
+    start: string;
+    end: string;
+  };
   response_to_user?: string;   
 }
 
@@ -59,7 +70,7 @@ export const COLOR_PALETTES = [
   ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#F7EC09', '#FF4D4D'],
   
   // Palette C: Corporate Dark (Navy & Gold)
-  ['#264653', '#2A9D8F', '#E9C46A', '#F4A261', '#E76F51', '#606C38'],
+  ['#264653', '#2A9D8F', '#E9C46A', '#F4A261', '#F76F51', '#606C38'],
   
   // Palette D: Pastel (Soft & Clean)
   ['#A18D6D', '#457B9D', '#1D3557', '#FBF3D5', '#E63946', '#B5838D'],

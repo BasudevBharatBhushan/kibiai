@@ -23,6 +23,12 @@ const chartSchema = z.object({
     .optional(),
   filters: z.array(z.string()).optional(),
   business_insights: z.array(z.string()).optional(),
+  insight_results: z.array(z.any()).optional(),
+  insight_date_range: z.object({
+    field: z.string(),
+    start: z.string(),
+    end: z.string(),
+  }).optional(),
   response_to_user: z.string().optional(),
 });
 
@@ -56,7 +62,7 @@ export async function GET(
     const { data: template, error: templateError } = await supabase
       .from("report_templates")
       .select(
-        "report_template_id, report_template_name, report_template_data_json, report_template_insight, chart_conversation_id"
+        "report_template_id, report_template_name, report_template_data_json, report_template_insight, report_template_config_json, report_template_setup_json, chart_conversation_id, insight_conversation_id, insight_results"
       )
       .eq("report_template_id", template_id)
       .eq("company_id", session.companyId)
@@ -97,12 +103,17 @@ export async function GET(
         template_id: template.report_template_id,
         template_name: template.report_template_name,
         chart_conversation_id: template.chart_conversation_id ?? null,
+        insight_conversation_id: template.insight_conversation_id ?? null,
+        insight_results: template.insight_results ?? null,
+        report_template_config_json: template.report_template_config_json ?? null,
+        report_template_setup_json: template.report_template_setup_json ?? null,
         report_insight: template.report_template_insight ?? null,
         fieldNames,
         rows,
         ...normalized,
       },
     });
+
   } catch (err: unknown) {
     console.error("[GET /api/report-templates/[template_id]/charts]", err);
     return NextResponse.json(

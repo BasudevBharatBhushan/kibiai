@@ -145,8 +145,11 @@ AI-generated report definitions.
 | `created_on` | timestamptz | DEFAULT now() | |
 | `updated_on` | timestamptz | DEFAULT now() | |
 | `chart_conversation_id` | varchar | | AI thread ID for Chart Builder session |
+| `insight_conversation_id` | varchar | | OpenAI conversation ID for Business Insight Assistant session |
+| `insight_results` | jsonb | | Persisted `InsightResult[]` — JS-computed from AI formulas, never raw data |
 
-> **Migration**: `ai-workspace/sql/015-add-chart-conv-id.sql`
+> **Migration**: `ai-workspace/sql/015-add-chart-conv-id.sql`  
+> **Migration**: `ai-workspace/sql/023_add_insight_fields.sql`
 
 ### 8. reports
 Snapshots of generated reports.

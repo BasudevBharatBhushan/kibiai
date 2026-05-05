@@ -108,6 +108,7 @@ export async function PATCH(
           .update({
             chart_template_canvas_state: mergedCanvasState,
             chart_template_type: nextType,
+            chart_template_status: mergedCanvasState.isActive === false ? "Inactive" : "Draft",
             updated_on: new Date().toISOString(),
           })
           .eq("chart_template_id", chart.chart_template_id)

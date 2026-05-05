@@ -5,9 +5,7 @@ import {
   ArrowUp,
   Bot,
   HelpCircle,
-  MessageSquareText,
   Plus,
-  Sparkles,
   User,
 } from "lucide-react";
 import {
@@ -59,6 +57,7 @@ export interface ModularChatbotProps {
   /** Called after pendingInput has been consumed (so parent can clear it) */
   onPendingInputConsumed?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
+  headerActions?: React.ReactNode;
 }
 
 export function ModularChatbot({
@@ -77,6 +76,7 @@ export function ModularChatbot({
   pendingInput,
   onPendingInputConsumed,
   onLoadingChange,
+  headerActions,
 }: ModularChatbotProps) {
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -96,10 +96,6 @@ export function ModularChatbot({
   /**
    * Returns true when the API error means the stored conversation_id is no
    * longer valid and we should retry with a fresh null id.
-   * Catches:
-   *  - "Invalid 'conversation_id'"  (format mismatch)
-   *  - "Conversation with id '...' not found."  (404 from OpenAI / API)
-   *  - HTTP 404 status on the conversation endpoint
    */
   function isStaleConvError(err: any): boolean {
     const msg: string = err?.message ?? "";
@@ -118,164 +114,9 @@ export function ModularChatbot({
     }
   }, [initialConversationId]);
 
-  // Auto-send when a suggestion chip is clicked from parent
-  const pendingInputRef = useRef<string>("");
-  useEffect(() => {
-    if (!pendingInput || loading) return;
-    pendingInputRef.current = pendingInput;
-    setInput(pendingInput);
-    if (onPendingInputConsumed) onPendingInputConsumed();
-    // Defer so React flushes the input state before the send fires
-    setTimeout(() => {
-      const textToSend = pendingInputRef.current;
-      if (!textToSend.trim()) return;
-      setMessages((prev) => [...prev, { role: "user", text: textToSend }]);
-      setInput("");
-      setLoading(true);
-      setShowPrompts(false);
-      pendingInputRef.current = "";
+  const sendMessageToAI = useCallback(async (userText: string) => {
+    if (!userText.trim()) return;
 
-      (async () => {
-        try {
-          const finalPrompt = formatPrompt ? formatPrompt(textToSend) : formatUserPrompt(textToSend);
-          const payload = {
-            conversation_id: conversationId,
-            instruction_set: instructionSet,
-            predefined_prompt: predefinedPromptRef.current,
-            conversation_metadata: conversationMetadata || {},
-            user_prompt: finalPrompt,
-          };
-          const res = await apiSendMessage(payload);
-          if (res.conversation_id !== conversationId) {
-            setConversationId(res.conversation_id);
-            if (onConversationIdChange) onConversationIdChange(res.conversation_id);
-          }
-          const rawResponseText = res.response ?? "";
-          const displayedText = extractAssistantDisplayText(rawResponseText);
-          if (displayedText) {
-            setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);
-            if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
-          }
-        } catch (error: any) {
-          console.error("Failed to send pending message", error);
-          
-          // Stale / invalid conversation ID → clear and retry fresh
-          if (isStaleConvError(error)) {
-            console.warn("[Chatbot] Stale conversation ID detected. Clearing and retrying...");
-            setConversationId(null);
-            if (onConversationIdChange) onConversationIdChange(null);
-            
-            // Re-trigger after state update (the pendingInput effect will run again because pendingInput is still set)
-            // But we need to make sure we don't loop forever.
-            // Actually, we can just call handleSend() with null conversation ID here.
-            try {
-               const retryPayload = {
-                conversation_id: null,
-                instruction_set: instructionSet,
-                predefined_prompt: predefinedPromptRef.current,
-                conversation_metadata: conversationMetadata || {},
-                user_prompt: formatPrompt ? formatPrompt(textToSend) : formatUserPrompt(textToSend),
-              };
-              const res = await apiSendMessage(retryPayload);
-              setConversationId(res.conversation_id);
-              if (onConversationIdChange) onConversationIdChange(res.conversation_id);
-              
-              const rawResponseText = res.response ?? "";
-              const displayedText = extractAssistantDisplayText(rawResponseText);
-              if (displayedText) {
-                setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);
-                if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
-              }
-              return; // Success on retry
-            } catch (retryError) {
-              console.error("Retry failed:", retryError);
-            }
-          }
-          
-          setMessages((prev) => [...prev, { role: "assistant", text: "Sorry, I encountered an error. Please try again." }]);
-        } finally {
-          setLoading(false);
-        }
-      })();
-    }, 50);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingInput]);
-
-  useEffect(() => {
-    if (!conversationId) return;
-    if (messages.length > 0) return;
-
-    getConversation(conversationId).then((items) => {
-      const restored = items.flatMap((item: any) => {
-        return item.content
-          .filter((c: any) => c.type === "output_text" || c.type === "input_text")
-          .map((c: any) => {
-            let text = c.text || "";
-
-            if (item.role === "assistant") {
-              text = parseAssistantResponse(text);
-            } else if (item.role === "user") {
-              /**
-               * OpenAI stores the full composed message:
-               *   "{predefined_context}\n{user_text}.json"
-               *
-               * predefined_context = "Today's date ... Here is my DB Schema - {...}. Here is my Previous Report Config - {...}."
-               * user_text           = whatever the user actually typed
-               *
-               * Strategy: if the message contains the predefined context markers,
-               * split on the last "\n" — the user text is the segment after it.
-               * Then strip the trailing ".json" added by formatUserPrompt.
-               */
-              const hasPredefined =
-                text.includes("Today's date") ||
-                text.includes("Here is my DB Schema") ||
-                text.includes("Here is my Previous Report Config") ||
-                text.includes("FieldName:") ||
-                text.includes("Report Insight:");
-
-              if (hasPredefined) {
-                // The predefined block ends with ".\n" — user input follows
-                const lastNewline = text.lastIndexOf("\n");
-                if (lastNewline !== -1) {
-                  text = text.substring(lastNewline + 1).trim();
-                } else {
-                  // Fallback: no newline found — take the segment after the last ". "
-                  // that isn't part of the schema JSON
-                  text = "";
-                }
-              }
-
-              // Strip trailing ".json" suffix added by formatUserPrompt
-              if (text.endsWith(".json")) {
-                text = text.slice(0, -5).trim();
-              }
-            }
-
-            return {
-              role: item.role,
-              text: text
-            };
-          })
-          .filter((m: any) => m.text.length > 0); // drop empty user messages (pure-context turns)
-      });
-      setMessages(restored.reverse());
-    });
-  }, [conversationId]);
-
-
-  const handleNewChat = useCallback(() => {
-    setConversationId(null); 
-    setMessages([]);         
-    setInput("");            
-    setShowPrompts(false);   
-    if (onConversationIdChange) onConversationIdChange(null);
-  }, [onConversationIdChange]);
-
-  const handleSend = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!input.trim()) return;
-
-    const userText = input.trim();
     setMessages((prev) => [...prev, { role: "user", text: userText }]);
     setInput("");
     setLoading(true);
@@ -316,9 +157,8 @@ export function ModularChatbot({
     } catch (error: any) {
       console.error("Failed to send message", error);
 
-      // Stale / invalid conversation ID → clear and retry fresh
       if (isStaleConvError(error)) {
-        console.warn("[Chatbot] Stale conversation ID detected. Retrying with new thread...");
+        console.warn("[Chatbot] Stale conversation ID detected. Retrying...");
         setConversationId(null);
         if (onConversationIdChange) onConversationIdChange(null);
 
@@ -341,7 +181,7 @@ export function ModularChatbot({
             setMessages((prev) => [...prev, { role: "assistant", text: displayedText }]);
             if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
           }
-          return; // Success on retry
+          return;
         } catch (retryError) {
           console.error("Retry failed:", retryError);
         }
@@ -357,14 +197,95 @@ export function ModularChatbot({
     } finally {
       setLoading(false);
     }
+  }, [conversationId, conversationMetadata, formatPrompt, instructionSet, onAssistantResponse, onConversationIdChange]);
+
+  // Auto-send when a suggestion chip is clicked from parent
+  useEffect(() => {
+    if (!pendingInput || loading) return;
+    sendMessageToAI(pendingInput);
+    if (onPendingInputConsumed) onPendingInputConsumed();
+  }, [pendingInput, loading, sendMessageToAI, onPendingInputConsumed]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    if (messages.length > 0) return;
+
+    getConversation(conversationId).then((items) => {
+      const restored = items.flatMap((item: any) => {
+        return item.content
+          .filter((c: any) => c.type === "output_text" || c.type === "input_text")
+          .map((c: any) => {
+            let text = c.text || "";
+
+            if (item.role === "assistant") {
+              text = parseAssistantResponse(text);
+            } else if (item.role === "user") {
+              const isInsightPredefined = text.includes('"module":') && text.includes('"fields":');
+              const hasPredefined =
+                text.includes("Today's date") ||
+                text.includes("Here is my DB Schema") ||
+                text.includes("Here is my Previous Report Config") ||
+                text.includes("FieldName:") ||
+                text.includes("Report Insight:") ||
+                isInsightPredefined;
+
+              if (hasPredefined) {
+                if (isInsightPredefined) {
+                  const splitIdx = text.lastIndexOf("}\n");
+                  if (splitIdx !== -1) {
+                    text = text.substring(splitIdx + 2).trim();
+                  } else {
+                    const userPromptStart = text.indexOf('"user_prompt": "');
+                    if (userPromptStart !== -1) {
+                      const endQuote = text.lastIndexOf('"');
+                      text = text.substring(userPromptStart + 16, endQuote).trim();
+                    } else {
+                      const lastNewline = text.lastIndexOf("\n");
+                      if (lastNewline !== -1) text = text.substring(lastNewline + 1).trim();
+                      else text = "";
+                    }
+                  }
+                } else {
+                  const lastNewline = text.lastIndexOf("\n");
+                  if (lastNewline !== -1) {
+                    text = text.substring(lastNewline + 1).trim();
+                  } else {
+                    text = "";
+                  }
+                }
+              }
+
+              if (text.endsWith(".json")) {
+                text = text.slice(0, -5).trim();
+              }
+            }
+
+            return {
+              role: item.role as "user" | "assistant",
+              text: text
+            };
+          })
+          .filter((m: any) => m.text.length > 0);
+      });
+      setMessages(restored.reverse());
+    });
+  }, [conversationId]);
+
+  const handleNewChat = useCallback(() => {
+    setConversationId(null); 
+    setMessages([]);         
+    setInput("");            
+    setShowPrompts(false);   
+    if (onConversationIdChange) onConversationIdChange(null);
+  }, [onConversationIdChange]);
+
+  const handleSend = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    sendMessageToAI(input);
   };
 
   const selectPrompt = (text: string) => {
-    setInput(text);
-    setShowPrompts(false);
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 0);
+    sendMessageToAI(text);
   };
 
   const hasMessages = messages.length > 0;
@@ -401,6 +322,8 @@ export function ModularChatbot({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {headerActions}
+            
             {suggestedPrompts.length > 0 && (
               <Button
                 type="button"
@@ -435,7 +358,6 @@ export function ModularChatbot({
         <CardContent className="flex-1 p-0 overflow-hidden relative bg-slate-50">
           <ScrollArea className="h-full">
             <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 px-5 pb-40 pt-6">
-              {/* Welcome Message (Only visible if no messages) */}
               {!hasMessages && (
                 <div className="flex w-full justify-start">
                   <div className="flex w-full max-w-[88%] items-start gap-3">
@@ -475,7 +397,6 @@ export function ModularChatbot({
                 </div>
               )}
 
-              {/* Dynamic Messages */}
               {messages.map((m, i) => (
                 <div
                   key={i}
@@ -488,7 +409,6 @@ export function ModularChatbot({
                       m.role === "user" ? "flex-row-reverse" : ""
                     }`}
                   >
-                    
                     {m.role === "assistant" ? (
                       <Avatar className="mt-1 h-10 w-10 border border-slate-200 bg-white shadow-sm shrink-0">
                         <AvatarImage src={botAvatar} className="object-contain p-1" />

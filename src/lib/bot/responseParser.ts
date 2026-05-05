@@ -15,6 +15,14 @@ function collectResponseToUser(value: unknown): string[] {
     return [...directResponses, ...collectResponseToUser(record.responses)];
   }
 
+  if (typeof record.response === "object" && record.response !== null) {
+    // If the top level has response_to_user, use it as a direct response
+    if (typeof (record.response as any).response_to_user === "string") {
+      directResponses.push((record.response as any).response_to_user.trim());
+    }
+    return [...directResponses, ...collectResponseToUser(record.response)];
+  }
+
   return directResponses;
 }
 
@@ -27,12 +35,18 @@ export function extractAssistantDisplayText(raw: string): string {
     const parsed = JSON.parse(cleanText);
 
     if (typeof parsed === "object" && parsed !== null) {
+      // 1. Try to find the conversational response string first
       const responseLines = collectResponseToUser(parsed);
       if (responseLines.length > 0) {
-        return responseLines.join("\n\n");
+        return Array.from(new Set(responseLines)).join("\n\n");
       }
 
+      // 2. If it's a raw insight plan, summarize it
       const record = parsed as Record<string, unknown>;
+      if (Array.isArray(record.insights)) {
+        return (record.response_to_user as string) || `I have generated ${record.insights.length} insight(s) based on your report data. You can find them on the dashboard.`;
+      }
+
       if (typeof record.response === "string") return record.response;
       if (typeof record.answer === "string") return record.answer;
 
