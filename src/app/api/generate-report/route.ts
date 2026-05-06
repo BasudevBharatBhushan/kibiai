@@ -1822,9 +1822,19 @@ export async function POST(req: NextRequest) {
 
       if (i < sortedFetchDefs.length - 1) {
         const nextFetchDef = sortedFetchDefs[i + 1];
-        if (nextFetchDef.source && currentDataset.length > 0) {
+        
+        // Find correct source dataset for next fetch def logging
+        const nextSourceFetchDef = sortedFetchDefs.find((def) => {
+          const tableName = def.fetch_order === 1 ? def.primary_table : def.joined_table;
+          return tableName?.toLowerCase() === nextFetchDef.primary_table?.toLowerCase();
+        });
+        const nextSourceDataset = nextSourceFetchDef
+          ? dataManager.getDataset(nextSourceFetchDef.fetch_order) || currentDataset
+          : currentDataset;
+
+        if (nextFetchDef.source && nextSourceDataset.length > 0) {
           const nextPkeys = extractPkeysFromData(
-            currentDataset,
+            nextSourceDataset,
             nextFetchDef.source
           );
           dataManager.storePkeys(nextFetchDef.fetch_order, nextPkeys);
@@ -1833,7 +1843,7 @@ export async function POST(req: NextRequest) {
           );
 
           if (nextPkeys.length === 0) {
-            dataManager.addLog(`Warning: No pkeys found for next fetch order`);
+            dataManager.addLog(`Warning: No pkeys found for next fetch order (Field: ${nextFetchDef.source})`);
           }
         }
       }
