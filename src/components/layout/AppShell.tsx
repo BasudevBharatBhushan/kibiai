@@ -16,12 +16,12 @@ interface AppShellProps {
  */
 export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
-  const isLoginPage = pathname?.endsWith("/login");
+  const isAuthPage = pathname?.endsWith("/login") || pathname?.endsWith("/signup");
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      {!isLoginPage && <Header />}
-      <main className={clsx("flex-1 flex flex-col", !isLoginPage && "pt-[64px]")}>
+      {!isAuthPage && <Header />}
+      <main className={clsx("flex-1 flex flex-col", !isAuthPage && "pt-[64px]")}>
         <PageContainer className="flex-1 flex flex-col">
           {children}
         </PageContainer>

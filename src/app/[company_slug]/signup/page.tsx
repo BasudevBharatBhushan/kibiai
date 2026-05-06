@@ -12,6 +12,7 @@ export default function CompanySignupPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
@@ -20,6 +21,12 @@ export default function CompanySignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    
+    if (password !== confirmPassword) {
+      setAuthError("Passwords do not match.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -105,6 +112,18 @@ export default function CompanySignupPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              required
+              minLength={6}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               required
               minLength={6}

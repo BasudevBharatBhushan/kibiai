@@ -58,11 +58,19 @@ class ApiClient {
 
     if (response.status === 401) {
       // Token likely expired or invalid
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-        // Clear session and redirect to login
-        // We can't clear the httpOnly cookie from JS, but we can redirect 
-        // to a logout route or just the login page.
-        window.location.href = '/login?reason=expired';
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        const isLocalhost = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+        if (isLocalhost) {
+          const parts = window.location.pathname.split('/');
+          const slug = parts[1];
+          if (slug && slug !== 'admin' && slug !== 'api') {
+            window.location.href = `/${slug}/login?reason=expired`;
+          } else {
+            window.location.href = '/login?reason=expired';
+          }
+        } else {
+          window.location.href = '/login?reason=expired';
+        }
       }
     }
 

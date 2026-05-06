@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function InvalidSubdomainPage() {
   const homeUrl = process.env.NEXT_PUBLIC_BASE_DOMAIN
     ? `https://${process.env.NEXT_PUBLIC_BASE_DOMAIN}`
-    : "https://kibiai.itsb3.xyz";
+    : "/";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-6">

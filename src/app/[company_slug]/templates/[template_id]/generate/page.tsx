@@ -861,25 +861,16 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                       </div>
                     ))}
                   </div>
-                  {/* ── Log overlay — glass panel floating on top of skeleton ── */}
+                  {/* ── Log overlay — floating on top of skeleton ── */}
                   <div className="absolute inset-0 z-10 flex flex-col items-center justify-start pt-10 px-8 pointer-events-none">
-                    <div
-                      className="w-full pointer-events-auto rounded-2xl overflow-hidden"
-                      style={{
-                        background: "rgba(255,255,255,0.82)",
-                        backdropFilter: "blur(12px)",
-                        WebkitBackdropFilter: "blur(12px)",
-                        boxShadow: "0 4px 32px 0 rgba(30,41,59,0.10)",
-                        border: "1px solid rgba(203,213,225,0.7)",
-                      }}
-                    >
-                      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100/80">
+                    <div className="w-full pointer-events-auto bg-transparent">
+                      <div className="flex items-center gap-2.5 px-4 py-3 pb-2">
                         <div className="relative flex h-5 w-5 items-center justify-center shrink-0">
                           <Loader2 size={13} className="animate-spin text-blue-500" />
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
                         </div>
                         <p className="text-xs font-bold text-slate-700 flex-1">Generating Report…</p>
-                        <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-white/80 px-1.5 py-0.5 rounded-full">
+                        <span className="text-[10px] text-slate-400 tabular-nums font-medium px-1.5 py-0.5 rounded-full">
                           {generationLogs.length} steps
                         </span>
                       </div>

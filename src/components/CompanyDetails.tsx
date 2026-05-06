@@ -71,10 +71,10 @@ export default function CompanyDetails({
   const companySlug = slugify(company.company_name);
 
   /**
-   * In production: use subdomain URL → https://slug.kibiai.itsb3.xyz/login
+   * In production: use subdomain URL → https://slug.domain.com/login
    * In dev/localhost: use path URL   → http://localhost:3000/slug/login
    */
-  const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || "kibiai.itsb3.xyz";
+  const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || "";
   const isLocalhost =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" ||

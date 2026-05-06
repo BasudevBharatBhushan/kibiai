@@ -9,7 +9,11 @@ const COOKIE_NAME = 'kibiai_session';
 // ---------------------------------------------------------------------------
 
 /** The root domain without protocol or subdomain. Set via env var in production. */
-const BASE_DOMAIN = process.env.NEXT_PUBLIC_BASE_DOMAIN || "kibiai.itsb3.xyz";
+const BASE_DOMAIN = process.env.NEXT_PUBLIC_BASE_DOMAIN || "";
+
+if (process.env.NODE_ENV === "production" && !BASE_DOMAIN) {
+  console.warn("[middleware] WARNING: NEXT_PUBLIC_BASE_DOMAIN is not set in production!");
+}
 
 /**
  * Reserved subdomains that map to known platform routes.
@@ -114,6 +118,7 @@ export async function middleware(request: NextRequest) {
   // Define public routes that don't need auth
   const isPublicRoute = 
     pathname.startsWith('/login') || 
+    pathname.match(/^\/[^/]+\/login/) || // Allow /[company_slug]/login for localhost
     pathname.startsWith('/api/auth') ||
     pathname === '/invalid-subdomain';
 
@@ -123,8 +128,10 @@ export async function middleware(request: NextRequest) {
     hostname.includes("127.0.0.1") ||
     hostname.startsWith("192.168.")
   ) {
+    console.log(`[middleware] Localhost accessed: ${pathname}, isPublic: ${!!isPublicRoute}, user: ${!!user}`);
     // Still perform auth checks on localhost
     if (!user && !isPublicRoute) {
+      console.log(`[middleware] Redirecting to /login because not public and not authenticated`);
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
@@ -133,12 +140,13 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/admin', request.url));
     }
 
+    console.log(`[middleware] Proceeding to next() for ${pathname}`);
     return NextResponse.next();
   }
 
   // ── 2. Extract subdomain ──────────────────────────────────────────────────
-  // e.g. "acme-corp.kibiai.itsb3.xyz" → subdomain = "acme-corp"
-  //      "kibiai.itsb3.xyz"           → subdomain = null (apex domain)
+  // e.g. "acme-corp.domain.com" → subdomain = "acme-corp"
+  //      "domain.com"           → subdomain = null (apex domain)
   let subdomain: string | null = null;
 
   if (hostname.endsWith(`.${BASE_DOMAIN}`)) {
@@ -190,6 +198,11 @@ export async function middleware(request: NextRequest) {
 
   // ── 3. Handle reserved platform subdomains (e.g. "admin") ─────────────────
   if (RESERVED_SUBDOMAIN_ROUTES[subdomain]) {
+    // If they hit /login on admin subdomain, just redirect to / (which rewrites to /admin)
+    if (pathname === '/login') {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+
     const rewritePath = RESERVED_SUBDOMAIN_ROUTES[subdomain];
     // Avoid doubling (e.g. admin.domain.com/admin -> /admin/admin)
     const normalizedPath = pathname.startsWith(rewritePath) ? pathname : `${rewritePath}${pathname}`;
@@ -209,8 +222,8 @@ export async function middleware(request: NextRequest) {
   const valid = await isValidCompanySlug(subdomain, requestUrl);
 
   if (valid) {
-    // Rewrite: acme-corp.kibiai.itsb3.xyz/templates → /acme-corp/templates
-    // Avoid doubling: acme-corp.kibiai.itsb3.xyz/acme-corp/templates → /acme-corp/templates
+    // Rewrite: acme-corp.domain.com/templates → /acme-corp/templates
+    // Avoid doubling: acme-corp.domain.com/acme-corp/templates → /acme-corp/templates
     const normalizedPath = pathname.startsWith(`/${subdomain}`) ? pathname : `/${subdomain}${pathname}`;
     const rewriteUrl = new URL(normalizedPath, request.url);
     rewriteUrl.search = request.nextUrl.search;
