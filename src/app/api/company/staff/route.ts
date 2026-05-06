@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const { full_name, user_email, designation, role_id, companyId: providedCompanyId } = await req.json();
+    const { full_name, user_email, designation, role_id, password, companyId: providedCompanyId } = await req.json();
     
     const targetCompanyId = session.accountType === 'platform_admin' ? providedCompanyId : session.companyId;
 
@@ -84,10 +84,56 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "User with this email already exists in the company" }, { status: 400 });
     }
 
+    // Handle Auth Account (create if password provided)
+    let accountId = null;
+
+    if (password) {
+      const { hashPassword } = await import("@/utils/auth");
+      const hashedPassword = await hashPassword(password);
+      
+      const { data: existingAccount } = await adminClient
+        .from("auth_accounts")
+        .select("account_id")
+        .eq("email", user_email)
+        .maybeSingle();
+
+      if (existingAccount) {
+        accountId = existingAccount.account_id;
+        // Optionally update password if requested, but generally we just link
+      } else {
+        const { data: newAccount, error: authError } = await adminClient
+          .from("auth_accounts")
+          .insert({
+            email: user_email,
+            password_hash: hashedPassword,
+            account_type: 'company_user'
+          })
+          .select("account_id")
+          .single();
+
+        if (authError || !newAccount) {
+          return NextResponse.json({ success: false, error: "Failed to create authentication account" }, { status: 500 });
+        }
+        accountId = newAccount.account_id;
+      }
+    } else {
+       // Check if account already exists even without password to link it
+       const { data: existingAccount } = await adminClient
+        .from("auth_accounts")
+        .select("account_id")
+        .eq("email", user_email)
+        .maybeSingle();
+       
+       if (existingAccount) {
+         accountId = existingAccount.account_id;
+       }
+    }
+
     const { data: user, error } = await adminClient
       .from("users")
       .insert({
         company_id: targetCompanyId,
+        account_id: accountId, // Link if resolved
         full_name,
         user_email,
         designation,

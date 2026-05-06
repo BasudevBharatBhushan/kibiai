@@ -157,10 +157,37 @@ export async function POST(req: Request) {
     // Find the Superadmin role ID to link the first user
     const superadminRole = roles.find(r => r.role_name === "Superadmin");
 
-    // 7. Create User record (linked to auth account and Superadmin role)
-    const { error: userError } = await adminClient
-      .from("users")
-      .insert({
+    // 7. Attach Platform Admins and Custom Superadmin
+    
+    // Get all platform admins
+    const { data: platformAdmins, error: platformAdminsError } = await adminClient
+      .from("platform_admins")
+      .select("account_id, email")
+      .eq("is_active", true);
+
+    if (platformAdminsError) {
+      return NextResponse.json({ success: false, error: "Failed to fetch platform admins" }, { status: 500 });
+    }
+
+    const superadminUsersToInsert = [];
+    const addedEmails = new Set<string>();
+
+    // Add all platform admins as superadmins for this company
+    for (const pa of platformAdmins || []) {
+      superadminUsersToInsert.push({
+        account_id: pa.account_id,
+        company_id: companyId,
+        role_id: superadminRole?.role_id,
+        user_email: pa.email,
+        full_name: "Platform Admin",
+        user_status: "Active"
+      });
+      addedEmails.add(pa.email.toLowerCase());
+    }
+
+    // If the provided companyAuthId is NOT a platform admin, add them too
+    if (!addedEmails.has(companyAuthId.toLowerCase())) {
+      superadminUsersToInsert.push({
         account_id: accountId,
         company_id: companyId,
         role_id: superadminRole?.role_id,
@@ -168,9 +195,14 @@ export async function POST(req: Request) {
         full_name: "Company Superadmin",
         user_status: "Active"
       });
+    }
+
+    const { error: userError } = await adminClient
+      .from("users")
+      .insert(superadminUsersToInsert);
 
     if (userError) {
-      return NextResponse.json({ success: false, error: "Failed to create user record: " + userError.message }, { status: 500 });
+      return NextResponse.json({ success: false, error: "Failed to create user records: " + userError.message }, { status: 500 });
     }
 
     // 8. Register company subdomain in allowed_subdomains

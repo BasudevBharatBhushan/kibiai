@@ -29,49 +29,63 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid credentials" }, { status: 401 });
     }
 
-    // 3. Resolve identity and company context (Company-First)
-    let sessionAccountType: "platform_admin" | "company_user" = account.account_type as any;
-    let sessionCompanyId: string | undefined = requestedCompanyId;
+    // 3. Resolve company context
+    let sessionCompanyId: string | undefined = undefined;
 
-    // Check if they have a specific user record for this company
-    const { data: companyUser } = await supabase
-      .from("users")
-      .select("company_id")
-      .eq("account_id", account.account_id)
-      .eq("company_id", requestedCompanyId || "")
-      .maybeSingle();
+    if (requestedCompanyId) {
+      // If logging into a specific company workspace
+      const { data: userData } = await supabase
+        .from("users")
+        .select("company_id")
+        .eq("account_id", account.account_id)
+        .eq("company_id", requestedCompanyId)
+        .maybeSingle();
 
-    if (companyUser) {
-      // They are a legitimate company user for this workspace
-      sessionAccountType = "company_user";
-      sessionCompanyId = companyUser.company_id;
-    } else if (account.account_type === "platform_admin") {
-      // They are a platform admin acting as a superadmin for this company
-      sessionAccountType = "platform_admin";
-      sessionCompanyId = requestedCompanyId;
-
-      // If no company requested, try to find their default association
-      if (!sessionCompanyId) {
-        const { data: defaultUser } = await supabase
+      if (userData) {
+        sessionCompanyId = userData.company_id;
+      } else if (account.account_type === 'platform_admin') {
+         // Auto-add platform admin to this company
+         const { data: roles } = await supabase
+           .from("roles")
+           .select("role_id")
+           .eq("company_id", requestedCompanyId)
+           .eq("role_name", "Superadmin")
+           .maybeSingle();
+         
+         if (roles) {
+           await supabase.from("users").insert({
+             account_id: account.account_id,
+             company_id: requestedCompanyId,
+             role_id: roles.role_id,
+             user_email: email,
+             full_name: "Platform Admin",
+             user_status: "Active"
+           });
+           sessionCompanyId = requestedCompanyId;
+         } else {
+           return NextResponse.json({ success: false, error: "Superadmin role missing in company" }, { status: 500 });
+         }
+      } else {
+        return NextResponse.json({ success: false, error: "Unauthorized for this company" }, { status: 403 });
+      }
+    } else {
+      // Admin portal login or root login
+      if (account.account_type !== 'platform_admin') {
+        const { data: userData } = await supabase
           .from("users")
           .select("company_id")
           .eq("account_id", account.account_id)
+          .limit(1)
           .maybeSingle();
-        sessionCompanyId = defaultUser?.company_id;
+        sessionCompanyId = userData?.company_id ?? undefined;
       }
-    } else if (requestedCompanyId) {
-      // Not a platform admin and not a member of the requested company
-      return NextResponse.json({ 
-        success: false, 
-        error: "You do not have access to this workspace." 
-      }, { status: 403 });
     }
 
     // 4. Create session
     await createSession({
       accountId: account.account_id,
       email: account.email,
-      accountType: sessionAccountType,
+      accountType: account.account_type as any,
       companyId: sessionCompanyId
     });
 
@@ -79,8 +93,7 @@ export async function POST(req: Request) {
       success: true, 
       user: { 
         email: account.email, 
-        accountType: sessionAccountType,
-        companyId: sessionCompanyId
+        accountType: account.account_type 
       } 
     });
 

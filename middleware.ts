@@ -128,8 +128,8 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    // Platform admin redirect on localhost: Only redirect from root
-    if (user?.accountType === 'platform_admin' && pathname === '/') {
+    // Platform admin redirect on localhost (only if not acting as a company user)
+    if (user?.accountType === 'platform_admin' && !user.companyId && !pathname.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/admin', request.url));
     }
 
@@ -152,8 +152,8 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
     
-    // Platform admin redirect on apex: Always go to admin portal
-    if (user?.accountType === 'platform_admin') {
+    // Platform admin redirect on apex (only if not acting as a company user)
+    if (user?.accountType === 'platform_admin' && !user.companyId) {
       const adminUrl = new URL(pathname, `https://admin.${BASE_DOMAIN}`);
       adminUrl.search = request.nextUrl.search;
       return NextResponse.redirect(adminUrl);
@@ -164,9 +164,13 @@ export async function middleware(request: NextRequest) {
 
   // ── 2.5 Role-Based Redirection ──────────────────────────────────────────
   
-  // Note: We REMOVED the aggressive redirect that forced platform admins to the admin subdomain
-  // even when on a valid company workspace. Platform admins should be able to access 
-  // company workspaces directly (e.g. for support or multi-role usage).
+  // If platform admin is on a company subdomain but didn't log in through a company portal,
+  // redirect them to the admin subdomain.
+  if (user?.accountType === 'platform_admin' && !user.companyId && subdomain !== 'admin') {
+    const adminUrl = new URL(pathname, `https://admin.${BASE_DOMAIN}`);
+    adminUrl.search = request.nextUrl.search;
+    return NextResponse.redirect(adminUrl);
+  }
 
   // If company user is on the admin subdomain, redirect them to their company subdomain
   if (user?.accountType === 'company_user' && subdomain === 'admin' && user.companyId) {

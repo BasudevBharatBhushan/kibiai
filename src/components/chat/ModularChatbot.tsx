@@ -123,18 +123,44 @@ export function ModularChatbot({
   }, [initialConversationId]);
 
   // ── Automatic Initialization ──────────────────────────────────────────────
-  // If we have a predefinedPrompt but no conversationId and no messages,
-  // we auto-send the predefined prompt to get the initial state/suggestions.
-  useEffect(() => {
-    if (!autoInitialize || loading || conversationId || messages.length > 0 || !predefinedPrompt || pendingInput) return;
+  // Trigger when:
+  //  - autoInitialize is enabled
+  //  - there is no existing conversation (conversationId is null)
+  //  - there are no messages loaded yet
+  //  - a predefinedPrompt is available (schema context)
+  //  - no pendingInput is queued (avoid collision)
+  //  - not currently loading
+  // This naturally re-triggers on "New Chat" since conversationId resets to null.
+  const initFiredRef = useRef(false);
 
-    // We send a small delay to ensure everything is mounted
+  useEffect(() => {
+    // Reset the guard when conversationId becomes null (new chat or first load)
+    if (conversationId === null) {
+      initFiredRef.current = false;
+    }
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (
+      !autoInitialize ||
+      loading ||
+      conversationId ||
+      messages.length > 0 ||
+      !predefinedPrompt ||
+      pendingInput ||
+      initFiredRef.current
+    ) return;
+
+    initFiredRef.current = true;
+
     const timer = setTimeout(() => {
-      // Internal call to start the conversation with the schema
-      // We don't use sendMessageToAI directly because we don't want to add "(Initialization)" to the UI
       setLoading(true);
-      const finalPrompt = formatPrompt ? formatPrompt("(Initializing schema)") : formatUserPrompt("(Initializing schema)");
-      
+      const finalPrompt = formatPrompt
+        ? formatPrompt("(Initializing schema)")
+        : formatUserPrompt("(Initializing schema)");
+
+      // Always send the current predefinedPrompt (schema + existing config if any)
+      // so that a new thread correctly receives full context.
       apiSendMessage({
         conversation_id: null,
         instruction_set: instructionSet,
@@ -146,35 +172,37 @@ export function ModularChatbot({
           setConversationId(res.conversation_id);
           if (onConversationIdChange) onConversationIdChange(res.conversation_id);
         }
-        
+
         const rawResponseText = res.response ?? "";
         const displayedText = extractAssistantDisplayText(rawResponseText);
         if (displayedText) {
           setMessages([{ role: "assistant", text: displayedText }]);
-          
-            if (showAiSuggestions) {
-              try {
-                const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
-                const parsed = JSON.parse(cleanText);
-                const suggestions = parsed.report_suggestions || [];
-                if (Array.isArray(suggestions) && suggestions.length > 0) {
-                  setAiSuggestions(suggestions);
-                  setShowPrompts(true);
-                }
-              } catch (e) {}
-            }
+
+          if (showAiSuggestions) {
+            try {
+              const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
+              const parsed = JSON.parse(cleanText);
+              const suggestions = parsed.report_suggestions || [];
+              if (Array.isArray(suggestions) && suggestions.length > 0) {
+                setAiSuggestions(suggestions);
+                setShowPrompts(true);
+              }
+            } catch (e) {}
+          }
 
           if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
         }
       }).catch(err => {
         console.error("Auto-init failed", err);
+        initFiredRef.current = false; // allow retry on next mount
       }).finally(() => {
         setLoading(false);
       });
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [conversationId, messages.length, predefinedPrompt, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, messages.length, predefinedPrompt, loading, pendingInput]);
 
   const refreshSuggestions = useCallback(async () => {
     if (loading) return;

@@ -14,6 +14,7 @@ const streamBodySchema = z.object({
     })
     .optional(),
   report_header: z.string().optional(),
+  persist_to_template: z.boolean().optional(),
 });
 
 // ── Helper: encode a single SSE frame ─────────────────────────────────────────
@@ -28,7 +29,7 @@ const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 // Strategy: call the existing /api/generate-report engine normally (it already
 // returns processing_logs in its response), then replay those log lines back to
 // the browser progressively over an SSE stream so the user sees live progress.
-// This avoids any cross-route import issues while delivering the same UX.
+// Supports both user-generate (no persist) and admin-update (persist_to_template: true).
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ template_id: string }> }
@@ -52,18 +53,18 @@ export async function POST(
     return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400 });
   }
 
-  const parsed = streamBodySchema.safeParse(body);
-  if (!parsed.success) {
-    return new Response(JSON.stringify({ error: parsed.error.message }), { status: 400 });
+  const parsedBody = streamBodySchema.safeParse(body);
+  if (!parsedBody.success) {
+    return new Response(JSON.stringify({ error: parsedBody.error.message }), { status: 400 });
   }
 
-  const { runtime_filters, report_header } = parsed.data;
+  const { runtime_filters, report_header, persist_to_template } = parsedBody.data;
 
   // 3. Fetch template from Supabase (company-scoped)
   const supabase = createAdminClient();
   const { data: template, error: fetchError } = await supabase
     .from("report_templates")
-    .select("report_template_setup_json, report_template_config_json, report_template_name, company_id")
+    .select("report_template_setup_json, setup_id, report_template_config_json, report_template_name, company_id")
     .eq("report_template_id", template_id)
     .eq("company_id", session.companyId)
     .single();
@@ -72,9 +73,28 @@ export async function POST(
     return new Response(JSON.stringify({ error: "Template not found" }), { status: 404 });
   }
 
-  if (!template.report_template_setup_json) {
+  // ── Setup JSON with reusable setup_id fallback (mirrors /generate route) ─────
+  let setupJson = template.report_template_setup_json as any;
+  const isLocalEmpty =
+    !setupJson ||
+    (typeof setupJson === "object" && Object.keys(setupJson).length === 0) ||
+    (setupJson.tables && Object.keys(setupJson.tables).length === 0);
+
+  if (isLocalEmpty && template.setup_id) {
+    const { data: reusableSetup, error: setupError } = await supabase
+      .from("report_template_setups")
+      .select("setup_json")
+      .eq("setup_id", template.setup_id)
+      .maybeSingle();
+
+    if (!setupError && reusableSetup) {
+      setupJson = reusableSetup.setup_json;
+    }
+  }
+
+  if (!setupJson || (typeof setupJson === "object" && Object.keys(setupJson).length === 0)) {
     return new Response(
-      JSON.stringify({ error: "Template setup is not complete." }),
+      JSON.stringify({ error: "Template setup is not complete. Please run the Setup Wizard first." }),
       { status: 400 }
     );
   }
@@ -86,7 +106,6 @@ export async function POST(
     );
   }
 
-  const setupJson = template.report_template_setup_json as any;
   const configJson = {
     ...(template.report_template_config_json as any),
     ...(report_header ? { report_header } : {}),
@@ -111,10 +130,6 @@ export async function POST(
   }
 
   // 5. Build the SSE ReadableStream
-  // The engine runs synchronously inside the stream start callback.
-  // We call /api/generate-report internally (same as the regular generate route),
-  // which returns { status, report_structure_json, processing_logs }.
-  // Then we replay the logs progressively before sending the done event.
   const stream = new ReadableStream({
     async start(controller) {
       const enqueue = (chunk: Uint8Array) => {
@@ -122,10 +137,8 @@ export async function POST(
       };
 
       try {
-        // Send an initial "starting" log immediately so the UI shows activity
         enqueue(sseEvent("log", { message: "Connecting to report engine…" }));
 
-        // Call the engine — same internal route the regular generate route uses
         const baseUrl = req.nextUrl.origin;
         const engineRes = await fetch(`${baseUrl}/api/generate-report`, {
           method: "POST",
@@ -147,9 +160,7 @@ export async function POST(
 
         const { report_structure_json, processing_logs = [] } = engineResult;
 
-        // Replay the processing_logs progressively.
-        // Use a short, uniform delay between each log line so the user sees them
-        // stream in naturally (max 200ms per line, faster if there are many).
+        // Replay the processing_logs progressively
         const logDelay = Math.max(60, Math.min(200, 1500 / Math.max(processing_logs.length, 1)));
         for (const msg of processing_logs as string[]) {
           enqueue(sseEvent("log", { message: msg }));
@@ -164,6 +175,22 @@ export async function POST(
           titleHeaderItem?.TitleHeader?.MainHeading ||
           template.report_template_name ||
           "Report";
+
+        // Persist preview to template if requested (admin configurator "Update" flow)
+        if (persist_to_template) {
+          const { error: persistError } = await supabase
+            .from("report_templates")
+            .update({
+              report_template_data_json: report_structure_json,
+              updated_on: new Date().toISOString(),
+            })
+            .eq("report_template_id", template_id)
+            .eq("company_id", session.companyId);
+
+          if (persistError) {
+            console.error("[stream] persist error:", persistError);
+          }
+        }
 
         // Auto-save to reports history
         const { data: saved, error: saveError } = await supabase
@@ -203,7 +230,7 @@ export async function POST(
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       "Connection": "keep-alive",
-      "X-Accel-Buffering": "no", // disable nginx buffering
+      "X-Accel-Buffering": "no",
     },
   });
 }

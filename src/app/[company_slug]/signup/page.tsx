@@ -7,34 +7,40 @@ import Link from "next/link";
 import Image from "next/image";
 import kibiaiLogo from "@/assets/kibiai.png";
 
-export default function CompanyLoginPage() {
+export default function CompanySignupPage() {
   const { company, isLoading, error } = useCompany();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const { company_slug } = useParams();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, companyId: company?.id }),
+        body: JSON.stringify({ fullName, email, password, companyId: company?.id }),
       });
 
       const data = await res.json();
 
       if (data.success) {
-        router.push(`/${company_slug}`);
+        // Automatically login or redirect to login
+        router.push(`/${company_slug}/login?registered=true`);
       } else {
-        setAuthError(data.error || "Login failed");
+        setAuthError(data.error || "Signup failed");
       }
     } catch (err) {
       setAuthError("An error occurred. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -67,10 +73,21 @@ export default function CompanyLoginPage() {
             </div>
           )}
           <h1 className="text-2xl font-bold text-gray-900 mb-1">{company.name}</h1>
-          <p className="text-sm text-gray-500 font-medium uppercase tracking-wider">Workspace Login</p>
+          <p className="text-sm text-gray-500 font-medium uppercase tracking-wider">Request Access</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form onSubmit={handleSignup} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Full Name</label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              required
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700">Email Address</label>
             <input
@@ -90,6 +107,7 @@ export default function CompanyLoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               required
+              minLength={6}
             />
           </div>
 
@@ -101,16 +119,17 @@ export default function CompanyLoginPage() {
 
           <button
             type="submit"
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all active:scale-[0.98]"
+            disabled={isSubmitting}
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all active:scale-[0.98] disabled:opacity-50"
           >
-            Sign In
+            {isSubmitting ? "Processing..." : "Sign Up"}
           </button>
         </form>
 
         <div className="mt-6 text-center text-sm">
-          <span className="text-gray-500">Don't have an account? </span>
-          <Link href={`/${company_slug}/signup`} className="font-bold text-indigo-600 hover:text-indigo-500 transition-colors">
-            Request Access
+          <span className="text-gray-500">Already have an account? </span>
+          <Link href={`/${company_slug}/login`} className="font-bold text-indigo-600 hover:text-indigo-500 transition-colors">
+            Sign In
           </Link>
         </div>
 

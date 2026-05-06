@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import "../styles/reportConfig.css"; 
 import { useReport } from "@/context/ReportContext";
 import { useToast } from "@/context/ToastContext";
@@ -8,11 +8,7 @@ import { validateConfig } from "@/lib/utils/reportValidation";
 import { apiClient } from "@/utils/apiClient";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-
-// Icons
-import { 
-  BarChart3, Info, Zap 
-} from "lucide-react";
+import { Loader2, BarChart3, Info, Zap, CheckCircle2 } from "lucide-react";
 
 // Components
 import { HeaderSection } from "@/components/report-builder/HeaderSection";
@@ -30,59 +26,99 @@ export function ReportConfigurator() {
   const { state, dispatch } = useReport();
   const [showJson, setShowJson] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [generationLogs, setGenerationLogs] = useState<string[]>([]);
+  const [showLogPanel, setShowLogPanel] = useState(false);
   const { addToast } = useToast();
   const params = useParams();
   const slug = params?.company_slug as string | undefined;
   const templateId = params?.template_id as string | undefined;
+  const abortRef = useRef<AbortController | null>(null);
 
-
- // Submit Handler
-  const handleUpdate = async () => {
-
+  const handleUpdate = useCallback(async () => {
     // Validate Config Before Saving
     const validation = validateConfig(state.config);
-
     if (!validation.isValid) {
       addToast("error", "Validation Error", validation.error || "Invalid Config");
       return;
     }
 
     if (!state.templateId) return;
+
+    // Cancel any previous in-flight stream
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setIsSaving(true);
+    setGenerationLogs([]);
+    setShowLogPanel(true);
     dispatch({ type: "SET_LOADING", payload: true });
 
     try {
+      // Step 1: Save Config to DB
       await apiClient.post(`/api/templates/${state.templateId}/config`, {
         config_json: state.config,
         bump_version: true,
       });
 
-      const result = await apiClient.post<{
-        success: boolean;
-        data?: { report_structure_json?: any };
-      }>(`/api/templates/${state.templateId}/generate`, {
-        persist_to_template: true,
-      });
+      // Step 2: Run SSE stream to generate preview + persist + show live logs
+      const response = await fetch(
+        `/api/templates/${state.templateId}/generate/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ persist_to_template: true }),
+          signal: controller.signal,
+        }
+      );
 
-      if (result.success && result.data?.report_structure_json) {
-        dispatch({
-          type: "SET_REPORT_PREVIEW",
-          payload: result.data.report_structure_json,
-        });
-        addToast("success", "Success", "Configuration saved and preview updated.");
-      } else {
-        console.warn("Generation Warning:", result);
-        addToast("warning", "Warning", "Configuration saved but preview generation had issues.");
+      if (!response.ok || !response.body) {
+        const errJson = await response.json().catch(() => null);
+        throw new Error(errJson?.error || `Server error ${response.status}`);
       }
 
-    } catch (error) {
-      console.error(error);
-      addToast("error", "Error", "Failed to update configuration.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+
+        for (const frame of frames) {
+          const line = frame.replace(/^data: /, "").trim();
+          if (!line) continue;
+          let event: any;
+          try { event = JSON.parse(line); } catch { continue; }
+
+          if (event.type === "log") {
+            setGenerationLogs(prev => [...prev, event.message as string]);
+          } else if (event.type === "done") {
+            const structured = event.report_structure_json;
+            if (structured) {
+              dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+            }
+            addToast("success", "Updated", "Configuration saved and preview updated.");
+          } else if (event.type === "error") {
+            throw new Error(event.message || "Report generation failed.");
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        console.error("[ReportConfigurator] handleUpdate error:", err);
+        addToast("error", "Error", err.message || "Failed to update configuration.");
+      }
     } finally {
       setIsSaving(false);
       dispatch({ type: "SET_LOADING", payload: false });
     }
-  };
+  }, [state.templateId, state.config, dispatch, addToast]);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200 shadow-xl">
@@ -95,7 +131,9 @@ export function ReportConfigurator() {
             disabled={isSaving}
             className="bg-[#2563eb] hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
           >
-            {isSaving ? "Saving…" : "Update"}
+            {isSaving
+              ? <><Loader2 size={11} className="animate-spin" />Saving…</>
+              : "Update"}
           </button>
 
           {slug && templateId && (
@@ -129,6 +167,88 @@ export function ReportConfigurator() {
            <Info size={14} /> JSON
          </button>
       </div>
+
+      {/* --- LIVE LOG PANEL (shown during generation) --- */}
+      {showLogPanel && (
+        <div className="mx-4 mt-3 rounded-xl border border-slate-200 bg-white shadow-md overflow-hidden shrink-0">
+          {/* Panel header */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="relative flex h-4 w-4 items-center justify-center shrink-0">
+              {isSaving
+                ? <Loader2 size={12} className="animate-spin text-blue-500" />
+                : <CheckCircle2 size={12} className="text-emerald-500" />
+              }
+            </div>
+            <p className="text-[11px] font-bold text-slate-700 flex-1">
+              {isSaving ? "Generating Preview…" : "Preview Updated"}
+            </p>
+            <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-slate-100 px-1.5 py-0.5 rounded-full">
+              {generationLogs.length} steps
+            </span>
+            {!isSaving && (
+              <button
+                onClick={() => { setShowLogPanel(false); setGenerationLogs([]); }}
+                className="text-[10px] text-slate-400 hover:text-slate-600 transition-colors ml-1"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Log stream */}
+          <div
+            className="overflow-y-auto p-2.5 space-y-1"
+            style={{ maxHeight: "160px" }}
+            ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+          >
+            {generationLogs.length === 0 ? (
+              <div className="flex items-center gap-1.5 py-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+                <p className="text-[10px] text-slate-400 italic">Saving configuration…</p>
+              </div>
+            ) : (
+              generationLogs.map((line, i) => {
+                const isSuccess = line.startsWith("✅");
+                const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
+                const isError = line.startsWith("❌");
+                const isLast = i === generationLogs.length - 1 && isSaving;
+                return (
+                  <div key={i} className="flex items-start gap-1.5 animate-in fade-in duration-150">
+                    <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
+                      isSuccess ? "bg-emerald-500" :
+                      isWarning ? "bg-amber-400" :
+                      isError ? "bg-red-500" :
+                      isLast ? "bg-blue-500 animate-pulse" :
+                      "bg-slate-300"
+                    }`} />
+                    <span className={`text-[10px] leading-relaxed ${
+                      isSuccess ? "text-emerald-600 font-medium" :
+                      isWarning ? "text-amber-600" :
+                      isError ? "text-red-600 font-medium" :
+                      isLast ? "text-slate-700 font-medium" :
+                      "text-slate-500"
+                    }`}>
+                      {line.replace(/^[✅❌⚠️]\s*/, "")}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="h-0.5 bg-slate-100">
+            <div
+              className={`h-full transition-all duration-500 ${isSaving ? "bg-gradient-to-r from-blue-500 to-indigo-500" : "bg-emerald-400"}`}
+              style={{
+                width: isSaving
+                  ? generationLogs.length === 0 ? "5%" : `${Math.min(90, (generationLogs.length / 15) * 100)}%`
+                  : "100%",
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* --- SCROLLABLE CONTENT --- */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-12 scrollbar-minimal">

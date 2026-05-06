@@ -18,6 +18,7 @@ import { useHeader } from "@/context/HeaderContext";
 import { ModularChatbot } from "@/components/chat/ModularChatbot";
 import { REPORTS_SYSTEM_INSTRUCTION } from "@/constants/reportsSystemInstruction";
 import { apiClient } from "@/utils/apiClient";
+import { sanitizeReportConfig } from "@/lib/utils/sanitizeReportConfig";
 
 // ── Build predefinedPrompt (DB schema context) ─────────────────────────────────
 // Per REPORTS_SYSTEM_INSTRUCTION TYPE 1/3/4:
@@ -103,6 +104,7 @@ function ConfiguratorPageContent({
   const [isConfigOpen, setIsConfigOpen] = useState(true);
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [templateName, setTemplateName] = useState("");
+  const [hasPreviewData, setHasPreviewData] = useState(false);
 
   const toggleChat = useCallback(() => setIsChatOpen((p) => !p), []);
   const toggleConfig = useCallback(() => setIsConfigOpen((p) => !p), []);
@@ -150,21 +152,25 @@ function ConfiguratorPageContent({
           return;
         }
 
+        // Sanitize config before loading into context (removes field overlaps etc.)
+        const rawConfig = data.config_json || {
+          report_header: "",
+          response_to_user: "",
+          db_defination: [],
+          report_columns: [],
+          group_by_fields: {},
+          filters: {},
+          date_range_fields: {},
+          body_sort_order: [],
+          summary_fields: [],
+          custom_calculated_fields: [],
+        };
+        const cleanConfig = sanitizeReportConfig(rawConfig);
+
         dispatch({
           type: "LOAD_FULL_REPORT",
           payload: {
-            config: data.config_json || {
-              report_header: "",
-              response_to_user: "",
-              db_defination: [],
-              report_columns: [],
-              group_by_fields: {},
-              filters: {},
-              date_range_fields: {},
-              body_sort_order: [],
-              summary_fields: [],
-              custom_calculated_fields: [],
-            },
+            config: cleanConfig,
             setup: data.setup_json,
             templateId: data.template_id,
             conversationId: data.conversation_id ?? null,
@@ -179,9 +185,12 @@ function ConfiguratorPageContent({
         ]);
         setBackHref(`/${slug}/templates`);
 
+        // Load existing preview if available — otherwise generate a fresh one
         if (data.config_json && data.preview_data_json) {
+          setHasPreviewData(true);
           dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
         } else if (data.config_json && data.setup_json) {
+          setHasPreviewData(false);
           fetchLivePreview();
         }
       } catch (err: any) {
@@ -237,7 +246,8 @@ function ConfiguratorPageContent({
       try {
         const parsedJson = JSON.parse(jsonString);
         if (parsedJson.db_defination || parsedJson.report_columns) {
-          const safeConfig = {
+          // Build a safe merged config from the AI response
+          const rawConfig = {
             ...state.config,
             report_header: parsedJson.report_header || state.config.report_header || "",
             response_to_user: parsedJson.response_to_user || state.config.response_to_user || "",
@@ -252,9 +262,13 @@ function ConfiguratorPageContent({
               parsedJson.custom_calculated_fields || state.config.custom_calculated_fields || [],
           };
 
+          // Sanitize: remove field overlaps, deduplicate sections
+          const safeConfig = sanitizeReportConfig(rawConfig);
+
           if (state.templateId) {
+            // Save sanitized config (not raw AI output) to DB
             apiClient
-              .post(`/api/templates/${state.templateId}/config`, { config_json: parsedJson })
+              .post(`/api/templates/${state.templateId}/config`, { config_json: safeConfig })
               .catch((e) => console.error("Failed to save AI config:", e));
           }
 
@@ -376,7 +390,7 @@ function ConfiguratorPageContent({
         <div className="flex-1 overflow-hidden flex flex-col min-w-[400px]">
           <ModularChatbot
             botName="Reports"
-            autoInitialize={true}
+            autoInitialize={!hasPreviewData}
             showAiSuggestions={true}
             instructionSet={REPORTS_SYSTEM_INSTRUCTION}
             predefinedPrompt={predefinedPrompt}

@@ -36,7 +36,7 @@ export async function createSession(payload: UserPayload) {
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 30, // 30 days
-    ...(domain && !domain.includes('localhost') ? { domain: domain } : {})
+    ...(domain && !domain.includes('localhost') ? { domain: `.${domain}` } : {})
   });
 
   return jwt;

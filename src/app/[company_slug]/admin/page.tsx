@@ -66,7 +66,7 @@ export default function AdminDashboardPage() {
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isModuleModalOpen, setIsModuleModalOpen] = useState(false);
   
-  const [newStaff, setNewStaff] = useState({ full_name: "", user_email: "", designation: "", role_id: "" });
+  const [newStaff, setNewStaff] = useState({ full_name: "", user_email: "", designation: "", role_id: "", password: "" });
   const [newModule, setNewModule] = useState({ module_name: "", module_code: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -116,7 +116,7 @@ export default function AdminDashboardPage() {
       });
       if (data.success) {
         setIsStaffModalOpen(false);
-        setNewStaff({ full_name: "", user_email: "", designation: "", role_id: "" });
+        setNewStaff({ full_name: "", user_email: "", designation: "", role_id: "", password: "" });
         fetchStaff();
       }
     } catch (err: any) {
@@ -605,6 +605,16 @@ export default function AdminDashboardPage() {
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 value={newStaff.user_email}
                 onChange={e => setNewStaff({...newStaff, user_email: e.target.value})}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Default Password (Optional)</label>
+              <input 
+                type="text" 
+                placeholder="SecurePassword123"
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                value={newStaff.password}
+                onChange={e => setNewStaff({...newStaff, password: e.target.value})}
               />
             </div>
             <div>
