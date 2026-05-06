@@ -35,7 +35,21 @@ export async function POST(req: Request) {
 
     const adminClient = createAdminClient();
 
-    // Look up the user_id via account_id from users table
+    // 1. Fetch snapshot if setup_id is provided
+    let snapshotJson = {};
+    if (setup_id) {
+      const { data: reusableSetup } = await adminClient
+        .from("report_template_setups")
+        .select("setup_json")
+        .eq("setup_id", setup_id)
+        .maybeSingle();
+      
+      if (reusableSetup?.setup_json) {
+        snapshotJson = reusableSetup.setup_json;
+      }
+    }
+
+    // 2. Look up the user_id via account_id from users table
     const { data: userRecord } = await adminClient
       .from("users")
       .select("user_id")
@@ -53,7 +67,7 @@ export async function POST(req: Request) {
         report_template_name,
         created_by_user_id,
         report_template_status: "Draft",
-        report_template_setup_json: {},
+        report_template_setup_json: snapshotJson,
         setup_id: setup_id || null,
         version_number: 1,
       })
@@ -106,7 +120,7 @@ export async function GET(req: Request) {
       .from("report_templates")
       .select(
         `report_template_id, report_template_name, report_template_status,
-         version_number, created_on, updated_on, module_id,
+         version_number, created_on, updated_on, module_id, setup_id,
          report_template_setup_json, report_template_config_json,
          modules(module_name, module_code)`
       )
@@ -126,7 +140,7 @@ export async function GET(req: Request) {
       const { report_template_setup_json, report_template_config_json, ...rest } = t;
       return {
         ...rest,
-        has_setup: report_template_setup_json !== null && Object.keys(report_template_setup_json || {}).length > 0,
+        has_setup: (t.setup_id !== null) || (report_template_setup_json !== null && Object.keys(report_template_setup_json || {}).length > 0),
         has_config: report_template_config_json !== null && Object.keys(report_template_config_json || {}).length > 0,
       };
     });

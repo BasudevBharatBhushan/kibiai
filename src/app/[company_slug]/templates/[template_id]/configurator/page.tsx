@@ -207,7 +207,7 @@ function ConfiguratorPageContent({
           data?: { report_structure_json?: any };
         }>(
           `/api/templates/${templateId}/generate`,
-          {}
+          { persist_to_template: true }
         );
         if (result.success && result.data?.report_structure_json) {
           dispatch({
@@ -376,6 +376,8 @@ function ConfiguratorPageContent({
         <div className="flex-1 overflow-hidden flex flex-col min-w-[400px]">
           <ModularChatbot
             botName="Reports"
+            autoInitialize={true}
+            showAiSuggestions={true}
             instructionSet={REPORTS_SYSTEM_INSTRUCTION}
             predefinedPrompt={predefinedPrompt}
             formatPrompt={formatPrompt}

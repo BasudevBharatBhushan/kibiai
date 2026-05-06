@@ -225,8 +225,8 @@ function ChartBuilderWorkspace({
 
   const formatPrompt = useCallback((userText: string) => formatChartPrompt(userText), []);
   const predefinedPrompt = useMemo(
-    () => buildChartPredefinedPrompt(fieldNames),
-    [fieldNames]
+    () => buildChartPredefinedPrompt(fieldNames, setupJson, configJson),
+    [fieldNames, setupJson, configJson]
   );
 
   const fieldSchemas = useMemo(

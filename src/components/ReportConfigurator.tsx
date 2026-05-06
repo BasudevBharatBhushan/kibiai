@@ -60,7 +60,9 @@ export function ReportConfigurator() {
       const result = await apiClient.post<{
         success: boolean;
         data?: { report_structure_json?: any };
-      }>(`/api/templates/${state.templateId}/generate`, {});
+      }>(`/api/templates/${state.templateId}/generate`, {
+        persist_to_template: true,
+      });
 
       if (result.success && result.data?.report_structure_json) {
         dispatch({

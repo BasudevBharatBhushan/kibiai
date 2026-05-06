@@ -6,6 +6,7 @@ import {
   Bot,
   HelpCircle,
   Plus,
+  RotateCw,
   User,
 } from "lucide-react";
 import {
@@ -58,6 +59,10 @@ export interface ModularChatbotProps {
   onPendingInputConsumed?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
   headerActions?: React.ReactNode;
+  /** Whether to automatically send an initialization message if the conversation is empty */
+  autoInitialize?: boolean;
+  /** Whether to parse and display AI-generated suggestions (e.g. report_suggestions) in the internal rail */
+  showAiSuggestions?: boolean;
 }
 
 export function ModularChatbot({
@@ -77,6 +82,8 @@ export function ModularChatbot({
   onPendingInputConsumed,
   onLoadingChange,
   headerActions,
+  autoInitialize = false,
+  showAiSuggestions = false,
 }: ModularChatbotProps) {
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -119,7 +126,7 @@ export function ModularChatbot({
   // If we have a predefinedPrompt but no conversationId and no messages,
   // we auto-send the predefined prompt to get the initial state/suggestions.
   useEffect(() => {
-    if (loading || conversationId || messages.length > 0 || !predefinedPrompt) return;
+    if (!autoInitialize || loading || conversationId || messages.length > 0 || !predefinedPrompt || pendingInput) return;
 
     // We send a small delay to ensure everything is mounted
     const timer = setTimeout(() => {
@@ -145,16 +152,17 @@ export function ModularChatbot({
         if (displayedText) {
           setMessages([{ role: "assistant", text: displayedText }]);
           
-          // Extract suggestions
-          try {
-            const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
-            const parsed = JSON.parse(cleanText);
-            const suggestions = parsed.report_suggestions || parsed.chart_suggestions || [];
-            if (Array.isArray(suggestions) && suggestions.length > 0) {
-              setAiSuggestions(suggestions);
-              setShowPrompts(true);
+            if (showAiSuggestions) {
+              try {
+                const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
+                const parsed = JSON.parse(cleanText);
+                const suggestions = parsed.report_suggestions || [];
+                if (Array.isArray(suggestions) && suggestions.length > 0) {
+                  setAiSuggestions(suggestions);
+                  setShowPrompts(true);
+                }
+              } catch (e) {}
             }
-          } catch (e) {}
 
           if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
         }
@@ -167,6 +175,53 @@ export function ModularChatbot({
 
     return () => clearTimeout(timer);
   }, [conversationId, messages.length, predefinedPrompt, loading]);
+
+  const refreshSuggestions = useCallback(async () => {
+    if (loading) return;
+    setLoading(true);
+    // Hide suggestions while loading if you want, or keep them
+    const finalPrompt = formatPrompt ? formatPrompt("(Refreshing suggestions)") : formatUserPrompt("(Refreshing suggestions)");
+    
+    try {
+      const res = await apiSendMessage({
+        conversation_id: conversationId, // Refresh within same conversation if exists
+        instruction_set: instructionSet,
+        predefined_prompt: predefinedPromptRef.current,
+        conversation_metadata: conversationMetadata || {},
+        user_prompt: finalPrompt,
+      });
+
+      if (res.conversation_id && res.conversation_id !== conversationId) {
+        setConversationId(res.conversation_id);
+        if (onConversationIdChange) onConversationIdChange(res.conversation_id);
+      }
+      
+      const rawResponseText = res.response ?? "";
+      const displayedText = extractAssistantDisplayText(rawResponseText);
+      
+      if (displayedText) {
+        // We add it to messages so context remains
+        setMessages(prev => [...prev, { role: "assistant", text: displayedText }]);
+        
+        if (showAiSuggestions) {
+          try {
+            const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
+            const parsed = JSON.parse(cleanText);
+            const suggestions = parsed.report_suggestions || parsed.chart_suggestions || [];
+            if (Array.isArray(suggestions) && suggestions.length > 0) {
+              setAiSuggestions(suggestions);
+              setShowPrompts(true);
+            }
+          } catch (e) {}
+        }
+        if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
+      }
+    } catch (err) {
+      console.error("Refresh failed", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [conversationId, instructionSet, conversationMetadata, formatPrompt, showAiSuggestions, loading, onAssistantResponse, onConversationIdChange]);
 
   const sendMessageToAI = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
@@ -205,17 +260,20 @@ export function ModularChatbot({
           { role: "assistant", text: displayedText },
         ]);
         
-        // Extract AI suggestions if any
-        try {
-          const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
-          const parsed = JSON.parse(cleanText);
-          const suggestions = parsed.report_suggestions || parsed.chart_suggestions || [];
-          if (Array.isArray(suggestions) && suggestions.length > 0) {
-            setAiSuggestions(suggestions);
-            setShowPrompts(true); // Auto-show suggestions when AI provides them
+        // Extract AI suggestions if opt-in enabled
+        if (showAiSuggestions) {
+          try {
+            const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
+            const parsed = JSON.parse(cleanText);
+            // We ONLY look for report_suggestions here to avoid conflict with chart dashboard logic
+            const suggestions = parsed.report_suggestions || [];
+            if (Array.isArray(suggestions) && suggestions.length > 0) {
+              setAiSuggestions(suggestions);
+              setShowPrompts(true); // Auto-show suggestions when AI provides them
+            }
+          } catch (e) {
+            // No suggestions in this response
           }
-        } catch (e) {
-          // No suggestions in this response
         }
 
         if (onAssistantResponse) {
@@ -354,7 +412,12 @@ export function ModularChatbot({
   };
 
   const selectPrompt = (text: string) => {
-    sendMessageToAI(text);
+    setInput(text);
+    setShowPrompts(false);
+    // Focus the input area after setting the text
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
   };
 
   const hasMessages = messages.length > 0;
@@ -386,7 +449,11 @@ export function ModularChatbot({
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => setShowPrompts((prev) => !prev)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowPrompts((prev) => !prev);
+                }}
                 className={`size-8 rounded-lg border transition-all ${
                   showPrompts
                     ? "border-indigo-200 bg-indigo-50 text-indigo-600 shadow-inner"
@@ -517,30 +584,58 @@ export function ModularChatbot({
             </div>
           </ScrollArea>
           
-          <div className="shrink-0 border-t border-slate-200 bg-white px-4 pb-4 pt-3">
-            {/* Suggestion Rail Moved Here */}
+          <div className="shrink-0 border-t border-slate-200 bg-white px-4 pb-4 pt-3 relative">
+            {/* Floating Suggestion List */}
             {showPrompts && (suggestedPrompts.length > 0 || aiSuggestions.length > 0) && (
-              <div className="mx-auto mb-4 flex w-full max-w-4xl gap-2 overflow-x-auto pb-2 no-scrollbar">
-                {/* AI Dynamic Suggestions first */}
-                {aiSuggestions.map((suggestion, index) => (
-                  <button
-                    key={`ai-${index}`}
-                    onClick={() => selectPrompt(suggestion)}
-                    className="shrink-0 rounded-full border border-indigo-100 bg-indigo-50 px-4 py-1.5 text-xs font-medium text-indigo-600 transition-all hover:bg-indigo-100 hover:border-indigo-200 hover:shadow-sm"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-                {/* Static Suggested Prompts */}
-                {suggestedPrompts.map((prompt, index) => (
-                  <button
-                    key={`static-${index}`}
-                    onClick={() => selectPrompt(prompt.description)}
-                    className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-50 hover:border-indigo-200 hover:shadow-sm"
-                  >
-                    {prompt.title}
-                  </button>
-                ))}
+              <div className="absolute bottom-[calc(100%+8px)] left-4 right-4 z-[100] flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_20px_50px_rgba(0,0,0,0.2)] max-h-[300px] overflow-y-auto scrollbar-minimal">
+                  <div className="flex items-center justify-between px-2 mb-1.5 sticky top-0 bg-white pb-1 z-10">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">AI Suggestions</span>
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        refreshSuggestions();
+                      }}
+                      disabled={loading}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 transition-colors disabled:opacity-50"
+                    >
+                      <RotateCw className={`size-2.5 ${loading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
+                  </div>
+
+                  {/* AI Dynamic Suggestions */}
+                  {aiSuggestions.map((suggestion, index) => (
+                    <button
+                      key={`ai-${index}`}
+                      onClick={() => selectPrompt(suggestion)}
+                      className="group flex w-full items-center gap-2.5 rounded-xl border border-transparent bg-slate-50/50 px-3.5 py-2.5 text-left text-xs font-medium text-slate-700 transition-all hover:border-indigo-100 hover:bg-white hover:text-indigo-600 hover:shadow-sm"
+                    >
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm transition-colors group-hover:bg-indigo-50">
+                        <Bot className="size-3 text-indigo-500" />
+                      </div>
+                      <span className="truncate">{suggestion}</span>
+                    </button>
+                  ))}
+                  
+                  {/* Static Suggested Prompts (if no AI suggestions yet) */}
+                  {aiSuggestions.length === 0 && suggestedPrompts.map((prompt, index) => (
+                    <button
+                      key={`static-${index}`}
+                      onClick={() => selectPrompt(prompt.description)}
+                      className="group flex w-full items-center gap-2.5 rounded-xl border border-transparent bg-slate-50/50 px-3.5 py-2.5 text-left text-xs font-medium text-slate-700 transition-all hover:border-indigo-100 hover:bg-white hover:text-indigo-600 hover:shadow-sm"
+                    >
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm transition-colors group-hover:bg-indigo-50">
+                        <HelpCircle className="size-3 text-indigo-500" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">{prompt.title}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -549,11 +644,15 @@ export function ModularChatbot({
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => setShowPrompts((prev) => !prev)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowPrompts((prev) => !prev);
+                  }}
                   className={`mb-0.5 size-9 shrink-0 rounded-xl p-0 transition-all ${
                     showPrompts
-                      ? "bg-indigo-50 text-indigo-600"
-                      : "bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
+                      ? "bg-indigo-50 text-indigo-600 shadow-inner"
+                      : "bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 shadow-sm"
                   }`}
                 >
                   <HelpCircle className="size-5" />

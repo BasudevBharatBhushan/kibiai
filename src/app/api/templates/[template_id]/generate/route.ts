@@ -13,6 +13,7 @@ const generateBodySchema = z.object({
     .optional(),
   report_header: z.string().optional(),
   report_name: z.string().optional(), // kept for backwards-compat
+  persist_to_template: z.boolean().optional(),
 });
 
 // ── POST /api/templates/[template_id]/generate ───────────────────────────────
@@ -129,7 +130,6 @@ export async function POST(
     const reportStructureJson = engineResult.report_structure_json;
 
     // 6. Extract report heading from TitleHeader for use as report name
-    //    (report_template_data_json is intentionally NOT updated — that is admin-only territory)
     const titleHeaderItem = Array.isArray(reportStructureJson)
       ? reportStructureJson.find((i: any) => i && "TitleHeader" in i)
       : null;
@@ -138,7 +138,25 @@ export async function POST(
       template.report_template_name ||
       "Report";
 
-    // 7. Look up the actual users.user_id (FK target) from the users table
+    const { persist_to_template } = parsed.data;
+
+    // 7. Persist to template if requested (e.g. from Builder/Admin context)
+    if (persist_to_template) {
+      const { error: updateError } = await supabase
+        .from("report_templates")
+        .update({
+          report_template_data_json: reportStructureJson,
+          updated_on: new Date().toISOString(),
+        })
+        .eq("report_template_id", template_id)
+        .eq("company_id", session.companyId);
+
+      if (updateError) {
+        console.error("[POST /api/templates/[id]/generate] persist error:", updateError);
+      }
+    }
+
+    // 8. Look up the actual users.user_id (FK target) from the users table
     //    session.accountId = auth_accounts.account_id, NOT users.user_id
     let generatedByUserId: string | null = null;
     if (session.accountId && session.companyId) {
