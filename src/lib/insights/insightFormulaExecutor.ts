@@ -1,6 +1,6 @@
 import HyperFormula from "hyperformula";
 import type { AIInsightPlan, AIInsightItem, InsightResult, InsightSeverity } from "./types";
-import { toSafeIdentifier } from "./fieldSchemaAdapter";
+import { toSafeIdentifier, type FieldSchema } from "./fieldSchemaAdapter";
 
 /**
  * Insight Formula Executor — ST-8
@@ -264,7 +264,8 @@ export interface InsightContext {
 export function executeInsightPlan(
   plan: AIInsightPlan,
   dataset: Record<string, unknown>[],
-  context?: InsightContext
+  context?: InsightContext,
+  schemas?: FieldSchema[]
 ): InsightResult[] {
   const results: InsightResult[] = [];
   if (!dataset.length) return [];
@@ -281,13 +282,41 @@ export function executeInsightPlan(
   const midTs = startTs + (endTs - startTs) / 2;
   const reportMidpointStr = new Date(midTs).toISOString().split("T")[0];
 
+  // Map label/meaning -> AI safe name
+  const schemaMap: Record<string, string> = {};
+  if (schemas) {
+    schemas.forEach(s => {
+      if (s.meaning) {
+        schemaMap[s.meaning] = s.name;
+        schemaMap[s.meaning.toLowerCase()] = s.name;
+      }
+      schemaMap[s.name] = s.name;
+      schemaMap[s.name.toLowerCase()] = s.name;
+    });
+  }
+
   // 1. Create a fully normalized dataset:
   // - Keys are converted to safe camelCase identifiers (matching FieldSchema names sent to AI)
   // - Dates are normalized to ISO strings if possible
   const normalizedDataset = dataset.map(row => {
     const newRow: Record<string, any> = {};
     for (const [key, val] of Object.entries(row)) {
-      const safeKey = toSafeIdentifier(key);
+      // Data often comes as "Table::FieldName", but the AI schema only knows "FieldName"
+      const rawFieldName = key.includes("::") ? key.split("::").pop()! : key;
+      
+      let safeKey = toSafeIdentifier(rawFieldName);
+      
+      // If we have schemas, try to map from FileMaker label -> safe AI name
+      if (schemaMap[key]) {
+        safeKey = schemaMap[key];
+      } else if (schemaMap[key.toLowerCase()]) {
+        safeKey = schemaMap[key.toLowerCase()];
+      } else if (schemaMap[rawFieldName]) {
+        safeKey = schemaMap[rawFieldName];
+      } else if (schemaMap[rawFieldName.toLowerCase()]) {
+        safeKey = schemaMap[rawFieldName.toLowerCase()];
+      }
+
       let finalVal = val;
 
       // Basic Date Normalization

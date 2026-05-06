@@ -394,23 +394,36 @@ export function DashboardProvider({
       const colorIndex = prev.length % COLOR_PALETTES.length;
       const defaultW = PROCESSOR_DEFAULTS.LAYOUT_WIDTH;
       const defaultH = PROCESSOR_DEFAULTS.LAYOUT_HEIGHT;
+      const newChartHeight = newChart.kind === 'insight' ? 8 : defaultH;
 
-      // Place after last active chart
-      const activeCount = prev.filter(c => visibleChartIds.has(c.id)).length;
+      // Shift existing active charts down to make room at the top
+      const nextPrev = prev.map(c => {
+        if (visibleChartIds.has(c.id) && c.layout) {
+          return {
+            ...c,
+            layout: {
+              ...c.layout,
+              y: c.layout.y + newChartHeight
+            }
+          };
+        }
+        return c;
+      });
+
       const chartWithLayout: ChartConfig = {
         ...newChart,
         colors: COLOR_PALETTES[colorIndex],
         layout: {
-          x: (activeCount % 2) * defaultW,
-          y: Math.floor(activeCount / 2) * defaultH,
+          x: 0,
+          y: 0,
           w: defaultW,
-          h: newChart.kind === 'insight' ? 8 : defaultH,
+          h: newChartHeight,
           i: newChart.id,
         },
       };
 
-      const next = [...prev, chartWithLayout];
-      const nextIds = new Set([...Array.from(visibleChartIds), newChart.id]);
+      const next = [chartWithLayout, ...nextPrev];
+      const nextIds = new Set([newChart.id, ...Array.from(visibleChartIds)]);
       setVisibleChartIds(nextIds);
       triggerAutoSave(next, nextIds, activeLayout);
       return next;
@@ -428,26 +441,44 @@ export function DashboardProvider({
     setAllCharts(prev => {
       const defaultW = PROCESSOR_DEFAULTS.LAYOUT_WIDTH;
       const defaultH = PROCESSOR_DEFAULTS.LAYOUT_HEIGHT;
-      const startIdx = prev.filter(c => visibleChartIds.has(c.id)).length;
 
+      let maxNewY = 0;
       const newCharts: ChartConfig[] = processed.map((chart, i) => {
         const colorIndex = (prev.length + i) % COLOR_PALETTES.length;
-        const idx = startIdx + i;
+        const h = chart.kind === 'insight' ? 8 : defaultH;
+        const y = Math.floor(i / 2) * defaultH;
+        if (y + h > maxNewY) {
+          maxNewY = y + h;
+        }
+
         return {
           ...chart,
           colors: COLOR_PALETTES[colorIndex],
           layout: {
-            x: (idx % 2) * defaultW,
-            y: Math.floor(idx / 2) * defaultH,
+            x: (i % 2) * defaultW,
+            y,
             w: defaultW,
-            h: chart.kind === 'insight' ? 8 : defaultH,
+            h,
             i: chart.id,
           },
         };
       });
 
-      const next = [...prev, ...newCharts];
-      const nextIds = new Set([...Array.from(visibleChartIds), ...newCharts.map(c => c.id)]);
+      const nextPrev = prev.map(c => {
+        if (visibleChartIds.has(c.id) && c.layout) {
+          return {
+            ...c,
+            layout: {
+              ...c.layout,
+              y: c.layout.y + maxNewY
+            }
+          };
+        }
+        return c;
+      });
+
+      const next = [...newCharts, ...nextPrev];
+      const nextIds = new Set([...newCharts.map(c => c.id), ...Array.from(visibleChartIds)]);
       setVisibleChartIds(nextIds);
       triggerAutoSave(next, nextIds, activeLayout);
       return next;

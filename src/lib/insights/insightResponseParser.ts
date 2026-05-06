@@ -27,9 +27,18 @@ export function parseInsightResponse(rawText: string): AIInsightPlan | null {
 
     let parsed = JSON.parse(jsonStr);
 
-    // Some wrappers might return {"conversation_id": "...", "response": { ... }}
+    // Some wrappers might return {"conversation_id": "...", "response": "{ ... }" }
     if (parsed && typeof parsed === "object" && parsed.response) {
-      parsed = parsed.response;
+      if (typeof parsed.response === "string") {
+        try {
+          parsed = JSON.parse(parsed.response);
+        } catch (e) {
+          // If parsing the string fails, fallback to the string itself (which will fail validation)
+          parsed = parsed.response;
+        }
+      } else {
+        parsed = parsed.response;
+      }
     }
 
     // Validate required shape: { insights: [...] }

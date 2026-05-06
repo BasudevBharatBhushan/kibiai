@@ -182,7 +182,7 @@ export function ModularChatbot({
             try {
               const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
               const parsed = JSON.parse(cleanText);
-              const suggestions = parsed.report_suggestions || [];
+              const suggestions = parsed.report_suggestions || parsed.chart_suggestions || [];
               if (Array.isArray(suggestions) && suggestions.length > 0) {
                 setAiSuggestions(suggestions);
                 setShowPrompts(true);
@@ -293,8 +293,7 @@ export function ModularChatbot({
           try {
             const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
             const parsed = JSON.parse(cleanText);
-            // We ONLY look for report_suggestions here to avoid conflict with chart dashboard logic
-            const suggestions = parsed.report_suggestions || [];
+            const suggestions = parsed.report_suggestions || parsed.chart_suggestions || [];
             if (Array.isArray(suggestions) && suggestions.length > 0) {
               setAiSuggestions(suggestions);
               setShowPrompts(true); // Auto-show suggestions when AI provides them

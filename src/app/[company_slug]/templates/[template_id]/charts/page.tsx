@@ -85,34 +85,7 @@ function extractJson(raw: string): ParsedChartAssistantResponse | null {
   }
 }
 
-function SuggestionChips({
-  suggestions,
-  onSelect,
-}: {
-  suggestions: string[];
-  onSelect: (text: string) => void;
-}) {
-  if (!suggestions.length) return null;
 
-  return (
-    <div className="px-4 pb-2 flex flex-col gap-2">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-        Suggested Charts
-      </p>
-      <div className="flex flex-col gap-1.5">
-        {suggestions.map((suggestion, index) => (
-          <button
-            key={`${suggestion}-${index}`}
-            onClick={() => onSelect(suggestion)}
-            className="text-left text-[12px] rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-blue-700 font-medium hover:bg-blue-100 hover:border-blue-300 transition-all active:scale-95"
-          >
-            {suggestion}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function LoadingSkeleton() {
   return (
@@ -339,7 +312,8 @@ function ChartBuilderWorkspace({
         }
 
         const context = { reportStart, reportEnd };
-        const results = executeInsightPlan(plan, rows, context);
+        const schemas = deriveFieldSchemas(configJson, setupJson);
+        const results = executeInsightPlan(plan, rows, context, schemas);
         if (!results.length) {
           addToast("warning", "No valid insights", "The AI generated insights but they failed validation or returned zero results.");
           return;
@@ -386,12 +360,9 @@ function ChartBuilderWorkspace({
       const parsed = extractJson(rawResponseText || displayedText);
       if (!parsed) return;
 
+      // Suggestions are now handled internally by ModularChatbot via showAiSuggestions
       setChartSuggestions([]);
 
-      if (parsed.chart_suggestions && Array.isArray(parsed.chart_suggestions)) {
-        setChartSuggestions(parsed.chart_suggestions);
-        return;
-      }
 
       if (parsed.responses && Array.isArray(parsed.responses)) {
         const chartSchemas: ReportChartSchema[] = [];
@@ -524,15 +495,7 @@ function ChartBuilderWorkspace({
             {/* Chart Copilot */}
             {assistantMode === "chart" && (
               <>
-                {chartSuggestions.length > 0 && (
-                  <SuggestionChips
-                    suggestions={chartSuggestions}
-                    onSelect={(text) => {
-                      setChartSuggestions([]);
-                      setPendingSuggestion(text);
-                    }}
-                  />
-                )}
+
                 <ModularChatbot
                   botName="Charts"
                   instructionSet={CHARTS_SYSTEM_INSTRUCTION}
@@ -549,6 +512,7 @@ function ChartBuilderWorkspace({
                   onLoadingChange={(loading) => {
                     if (!loading && isAutoGeneratingCharts) setIsAutoGeneratingCharts(false);
                   }}
+                  showAiSuggestions={true}
                   headerActions={
                     <div className="flex items-center gap-1.5 mr-1 bg-slate-100/50 p-1 rounded-lg">
                       <Button
@@ -589,6 +553,7 @@ function ChartBuilderWorkspace({
                 onLoadingChange={setInsightLoading}
                 className="h-full w-full flex flex-col bg-white overflow-hidden relative"
                 welcomeMessage={`Hello! I am the Business Insight Assistant. I analyze your report schema and generate structured insights — without ever seeing your actual data.\n\nI have mapped ${fieldSchemas.length} field(s) from your template. Ask me to generate insights!`}
+                showAiSuggestions={true}
                 headerActions={
                   <div className="flex items-center gap-1.5 mr-1 bg-slate-100/50 p-1 rounded-lg">
                     <Button
