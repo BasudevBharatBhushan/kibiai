@@ -39,6 +39,23 @@ In production, the application utilizes subdomains to isolate the **Admin Panel*
   - When displaying links to other workspaces (e.g., in the Admin Panel), use the `NEXT_PUBLIC_BASE_DOMAIN` environment variable to construct the full subdomain URL.
   - See `CompanyDetails.tsx` for a reference implementation of environment-aware link construction.
 
+### Authentication & Redirection Rules
+The application enforces strict role-based and state-based redirection via `middleware.ts` and root-level routes.
+
+- **Role-Based Entry Points**:
+  - **Platform Admins**: Automatically redirected to the `admin` subdomain/route when hitting the **Apex domain** (`/`) or the main entry point on localhost.
+  - **Company Users**: Redirected to their specific company templates page (`/[company_slug]/templates`) after login.
+- **Cross-Subdomain Flexibility**:
+  - **IMPORTANT**: Platform admins are allowed to access and operate within any company subdomain workspace (e.g., `us-spice-mills.kibiai.itsb3.xyz`). 
+  - **NEVER** force a platform admin from a valid company subdomain back to the `admin` subdomain automatically, as they may be using the company workspace as a superadmin.
+- **Auth Guards**:
+  - Unauthenticated requests to protected routes are redirected to the `/login` page of the **current subdomain**.
+- **Session Lifespan**:
+  - Sessions (JWT and Cookie) are long-lived (**30 days**).
+- **Auto Sign-out**:
+  - The `apiClient` monitors for `401 Unauthorized` responses and triggers an automatic redirect to `/login`.
+  - An idle listener in `AccessControlContext` validates the session after 30 minutes of inactivity.
+
 ## Branding & Logo Usage
 - **KiBiAI Logo**: Always use the official KiBiAI logo for consistent branding. Source: `@/assets/kibiai.png`.
 - **Company Branding**:

@@ -4,7 +4,7 @@ import { comparePassword, createSession } from "@/utils/auth";
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
+    const { email, password, companyId: requestedCompanyId } = await req.json();
 
     if (!email || !password) {
       return NextResponse.json({ success: false, error: "Email and password are required" }, { status: 400 });
@@ -29,31 +29,58 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid credentials" }, { status: 401 });
     }
 
-    // 3. Always resolve company affiliation from the users table.
-    //    This handles accounts that exist as platform_admin in auth_accounts
-    //    but also have a company association in the users table (e.g., company portal logins).
-    const { data: userData } = await supabase
+    // 3. Resolve identity and company context (Company-First)
+    let sessionAccountType: "platform_admin" | "company_user" = account.account_type as any;
+    let sessionCompanyId: string | undefined = requestedCompanyId;
+
+    // Check if they have a specific user record for this company
+    const { data: companyUser } = await supabase
       .from("users")
       .select("company_id")
       .eq("account_id", account.account_id)
+      .eq("company_id", requestedCompanyId || "")
       .maybeSingle();
 
-    const companyId: string | undefined = userData?.company_id ?? undefined;
+    if (companyUser) {
+      // They are a legitimate company user for this workspace
+      sessionAccountType = "company_user";
+      sessionCompanyId = companyUser.company_id;
+    } else if (account.account_type === "platform_admin") {
+      // They are a platform admin acting as a superadmin for this company
+      sessionAccountType = "platform_admin";
+      sessionCompanyId = requestedCompanyId;
 
+      // If no company requested, try to find their default association
+      if (!sessionCompanyId) {
+        const { data: defaultUser } = await supabase
+          .from("users")
+          .select("company_id")
+          .eq("account_id", account.account_id)
+          .maybeSingle();
+        sessionCompanyId = defaultUser?.company_id;
+      }
+    } else if (requestedCompanyId) {
+      // Not a platform admin and not a member of the requested company
+      return NextResponse.json({ 
+        success: false, 
+        error: "You do not have access to this workspace." 
+      }, { status: 403 });
+    }
 
     // 4. Create session
     await createSession({
       accountId: account.account_id,
       email: account.email,
-      accountType: account.account_type as any,
-      companyId
+      accountType: sessionAccountType,
+      companyId: sessionCompanyId
     });
 
     return NextResponse.json({ 
       success: true, 
       user: { 
         email: account.email, 
-        accountType: account.account_type 
+        accountType: sessionAccountType,
+        companyId: sessionCompanyId
       } 
     });
 

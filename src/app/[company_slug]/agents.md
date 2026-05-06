@@ -23,7 +23,8 @@ This module provides the multi-tenant workspace experience for client companies.
 
 ## Security & Auth
 - **Tenant Binding**: Login requests are bound to a specific `company_id`.
-- **Identity Isolation**: (In Progress) Ensuring sessions only grant access to data belonging to the resolved `company_id`.
+- **Identity Isolation**: Ensuring sessions only grant access to data belonging to the resolved `company_id`.
+- **Platform Admin Access**: Platform admins have "Superadmin" capabilities and are permitted to log in and work directly within any company workspace. Middleware must NOT force them out of a valid company subdomain.
 - **Branding**: Logos and names are dynamically injected from the database to ensure a white-labeled experience.
 
 ## Database Relationships

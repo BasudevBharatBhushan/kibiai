@@ -28,12 +28,15 @@ export async function createSession(payload: UserPayload) {
     .sign(JWT_SECRET);
 
   const cookieStore = await cookies();
+  const domain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
+  
   cookieStore.set(COOKIE_NAME, jwt, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 24 * 30 // 30 days
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+    ...(domain && !domain.includes('localhost') ? { domain: domain } : {})
   });
 
   return jwt;

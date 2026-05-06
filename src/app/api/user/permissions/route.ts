@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  * Superadmins (roles.is_super_admin = true) receive full-access
  * permissions on every template in the company.
  */
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getSession();
 
@@ -36,7 +36,15 @@ export async function GET() {
       );
     }
 
-    const { accountId, email, companyId } = session;
+    const { accountId, email, accountType } = session;
+    let { companyId } = session;
+
+    // If companyId is missing from session (common for platform admins),
+    // allow it to be provided via query parameter.
+    if (!companyId) {
+      const { searchParams } = new URL(req.url);
+      companyId = searchParams.get("companyId") || undefined;
+    }
 
     if (!companyId) {
       return NextResponse.json(
@@ -104,10 +112,26 @@ export async function GET() {
     }
 
     if (!user) {
-      return NextResponse.json(
-        { success: false, error: "User not found in company workspace" },
-        { status: 404 }
-      );
+      // Special case: Platform admins are treated as superadmins for ANY company,
+      // even if they don't have a record in the users table for that company.
+      if (accountType === "platform_admin") {
+        user = {
+          user_id: `admin-${accountId}`,
+          account_id: accountId,
+          user_email: email,
+          company_id: companyId,
+          roles: {
+            role_id: "platform-admin",
+            role_name: "Platform Admin",
+            is_super_admin: true,
+          },
+        };
+      } else {
+        return NextResponse.json(
+          { success: false, error: "User not found in company workspace" },
+          { status: 404 }
+        );
+      }
     }
 
     const roleData = Array.isArray(user.roles) ? user.roles[0] : user.roles;
