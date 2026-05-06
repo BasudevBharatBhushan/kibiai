@@ -2,13 +2,14 @@
 
 import { useEffect, useReducer, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
-import { Save, Loader2, CheckCircle, AlertCircle, Database, Network, FileJson, Plus, ArrowRight } from "lucide-react";
+import { Save, Loader2, CheckCircle, AlertCircle, Database, Network, FileJson, Plus, ArrowRight, FolderOpen, Info } from "lucide-react";
 import Link from "next/link";
 import { HostConfigSection } from "@/components/setup/HostConfigSection";
 import { AddDatabaseSection } from "@/components/setup/AddDatabaseSection";
 import { TableCard } from "@/components/setup/TableCard";
 import { RelationshipsPanel } from "@/components/setup/RelationshipsPanel";
 import { SetupJsonPreview } from "@/components/setup/SetupJsonPreview";
+import { SaveSetupModal } from "@/components/setup/SaveSetupModal";
 import { 
   FieldConfig, 
   TableConfig, 
@@ -180,6 +181,11 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedView, setSelectedView] = useState<string>("");
   const [showAddDatabaseModal, setShowAddDatabaseModal] = useState(false);
+  const [showSaveAsModal, setShowSaveAsModal] = useState(false);
+  const [isSavingAsReusable, setIsSavingAsReusable] = useState(false);
+  const [moduleId, setModuleId] = useState<string>("");
+  const [savedSetups, setSavedSetups] = useState<any[]>([]);
+  const [isLoadingSetups, setIsLoadingSetups] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   // Default to showing add database modal if no tables exist initially
@@ -204,6 +210,9 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           const existing = data.template.report_template_setup_json;
           if (existing?.host !== undefined || Object.keys(existing?.tables || {}).length > 0) {
             dispatch({ type: "SET_CONFIG", payload: existing });
+            if (data.template?.module_id) {
+              setModuleId(data.template.module_id);
+            }
             
             // Auto-select the first table if exists, else relationships if exists, else add_database
             const tableKeys = Object.keys(existing.tables || {});
@@ -220,6 +229,61 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
     };
     load();
   }, [templateId]);
+
+  const fetchSavedSetups = useCallback(async () => {
+    if (!moduleId) return;
+    setIsLoadingSetups(true);
+    try {
+      const res = await fetch(`/api/company/setups?module_id=${moduleId}`);
+      const data = await res.json();
+      if (data.success) {
+        setSavedSetups(data.setups);
+      }
+    } catch (error) {
+      console.error("Failed to fetch saved setups:", error);
+    } finally {
+      setIsLoadingSetups(false);
+    }
+  }, [moduleId]);
+
+  useEffect(() => {
+    if (moduleId) {
+      fetchSavedSetups();
+    }
+  }, [moduleId, fetchSavedSetups]);
+
+  const handleApplySetup = async (setup: any) => {
+    if (!window.confirm(`Load "${setup.setup_name}"? This will replace your current configuration.`)) {
+      return;
+    }
+    
+    // We need to fetch the full setup JSON as the list might only return metadata
+    try {
+      const res = await fetch(`/api/company/setups/${setup.setup_id}`);
+      const data = await res.json();
+      if (data.success && data.setup?.setup_json) {
+        dispatch({ type: "SET_CONFIG", payload: data.setup.setup_json });
+        
+        // Auto-select first table
+        const tableKeys = Object.keys(data.setup.setup_json.tables || {});
+        if (tableKeys.length > 0) {
+          setSelectedView(`table:${tableKeys[0]}`);
+        }
+        
+        // Also update the template's setup_id and local setup_json in the DB
+        await fetch(`/api/company/templates/${templateId}/setup`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            setup_id: setup.setup_id,
+            setup_json: data.setup.setup_json 
+          }),
+        });
+      }
+    } catch (error) {
+      console.error("Failed to apply setup:", error);
+    }
+  };
 
   // Clean empty optional fields before saving
   const cleanConfig = useCallback((cfg: SetupConfig): SetupConfig => {
@@ -263,6 +327,37 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
     }
   };
 
+  const handleSaveAsReusable = async (name: string, description: string) => {
+    setIsSavingAsReusable(true);
+    try {
+      const payload = cleanConfig(config);
+      const res = await fetch(`/api/company/setups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          setup_name: name,
+          setup_description: description,
+          setup_json: payload,
+          module_id: moduleId,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to save setup");
+      }
+      
+      setSaveStatus("saved");
+      fetchSavedSetups(); // Refresh list
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (err: any) {
+      setSaveError(err.message);
+      setSaveStatus("error");
+      throw err;
+    } finally {
+      setIsSavingAsReusable(false);
+    }
+  };
+
   const tableNames = Object.keys(config.tables);
 
   // Show a "Continue to Configure" CTA after a successful save
@@ -274,11 +369,49 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
         
         {/* LEFT SIDEBAR */}
         <div className="sw-sidebar">
+          
+          {/* Available Setups Group */}
+          <div className="sw-sidebar-group">
+            <div className="sw-sidebar-header">
+              <div className="sw-sidebar-title">
+                <FolderOpen size={14} className="sw-icon" />
+                Available Setups
+              </div>
+            </div>
+            <div className="sw-nav-list sw-available-list">
+              {isLoadingSetups ? (
+                <div className="sw-nav-loading">
+                  <Loader2 size={12} className="sw-spin" />
+                  Loading...
+                </div>
+              ) : savedSetups.length === 0 ? (
+                <div className="sw-nav-empty">No reusable setups found</div>
+              ) : (
+                savedSetups.map((s) => (
+                  <button
+                    key={s.setup_id}
+                    className="sw-nav-item sw-setup-item"
+                    onClick={() => handleApplySetup(s)}
+                    title={s.setup_description || "No description"}
+                  >
+                    <div className="sw-setup-item-content">
+                      <div className="sw-nav-label">{s.setup_name}</div>
+                      {s.setup_description && (
+                        <div className="sw-setup-desc">{s.setup_description}</div>
+                      )}
+                    </div>
+                    <ArrowRight size={12} className="sw-item-arrow" />
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
           <div className="sw-sidebar-group">
             <div className="sw-sidebar-header">
               <div className="sw-sidebar-title">
                 <Database size={14} className="sw-icon" />
-                Databases
+                Current Databases
               </div>
               <button 
                 className="sw-add-btn" 
@@ -333,6 +466,17 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
               <FileJson size={14} />
               Preview Config JSON
             </button>
+            <button
+              className="sw-reusable-btn"
+              onClick={() => setShowSaveAsModal(true)}
+              disabled={tableNames.length === 0}
+              title="Save this setup to reuse in other templates"
+            >
+              <Save size={14} />
+              Save as Reusable Setup
+            </button>
+
+            {/* Remove legacy sidebar continue button if any */}
           </div>
         </div>
 
@@ -429,52 +573,16 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
         onSave={(newConfig) => dispatch({ type: "SET_CONFIG", payload: newConfig })}
       />
 
-      {/* ── Continue to Configure CTA ───────────────────────────────────── */}
-      {showContinueCTA && (
-        <div style={{
-          position: "fixed",
-          bottom: "24px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 50,
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          background: "#2563eb",
-          color: "#fff",
-          borderRadius: "16px",
-          padding: "14px 24px",
-          boxShadow: "0 8px 32px rgba(37,99,235,0.35)",
-          fontWeight: 700,
-          fontSize: "14px",
-          animation: "fadeInUp 0.3s ease",
-        }}>
-          <CheckCircle size={18} style={{ color: "#86efac" }} />
-          <span>Setup saved! Ready to configure your report.</span>
-          <Link
-            href={`/${companySlug}/templates/${templateId}/configurator`}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              background: "#fff",
-              color: "#2563eb",
-              padding: "6px 16px",
-              borderRadius: "10px",
-              fontWeight: 700,
-              fontSize: "13px",
-              textDecoration: "none",
-              marginLeft: "8px",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Continue to Configure
-            <ArrowRight size={15} />
-          </Link>
-        </div>
+      {showSaveAsModal && (
+        <SaveSetupModal
+          onClose={() => setShowSaveAsModal(false)}
+          onSave={handleSaveAsReusable}
+          isSaving={isSavingAsReusable}
+        />
       )}
 
-      {/* --- Subheader Save Button (Portal) --- */}
+      {/* Removed fixed floating CTA */}
+
       {mounted && typeof document !== "undefined" && document.getElementById("setup-wizard-save-container")
         ? createPortal(
             <button
@@ -507,6 +615,20 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
               )}
             </button>,
             document.getElementById("setup-wizard-save-container")!
+          )
+        : null}
+
+      {/* --- Subheader Continue Button (Portal) --- */}
+      {mounted && typeof document !== "undefined" && document.getElementById("setup-wizard-continue-container") && tableNames.length > 0
+        ? createPortal(
+            <Link
+              href={`/${companySlug}/templates/${templateId}/configurator`}
+              className="sw-continue-btn-standard"
+            >
+              Continue to Configure
+              <ArrowRight size={14} />
+            </Link>,
+            document.getElementById("setup-wizard-continue-container")!
           )
         : null}
 
@@ -645,6 +767,71 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           color: #1e40af;
         }
 
+        .sw-available-list {
+          max-height: 200px;
+          overflow-y: auto;
+          padding-right: 4px;
+        }
+
+        .sw-available-list::-webkit-scrollbar {
+          width: 4px;
+        }
+
+        .sw-available-list::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 10px;
+        }
+
+        .sw-setup-item {
+          padding: 8px 12px;
+          margin-bottom: 4px;
+          border: 1px solid #e2e8f0;
+          background: #fdfdfd;
+        }
+
+        .sw-setup-item:hover {
+          border-color: #636ae8;
+          background: #f5f3ff;
+        }
+
+        .sw-setup-item-content {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .sw-setup-desc {
+          font-size: 11px;
+          color: #64748b;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .sw-item-arrow {
+          color: #94a3b8;
+          opacity: 0;
+          transition: all 0.2s;
+        }
+
+        .sw-setup-item:hover .sw-item-arrow {
+          opacity: 1;
+          transform: translateX(2px);
+          color: #636ae8;
+        }
+
+        .sw-nav-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          font-size: 12px;
+          color: #94a3b8;
+          padding: 12px;
+        }
+
         .sw-json-btn {
           display: flex;
           align-items: center;
@@ -666,6 +853,85 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           background: #f1f5f9;
           color: #0f172a;
           border-color: #94a3b8;
+        }
+
+        .sw-reusable-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          width: 100%;
+          padding: 10px 16px;
+          background: linear-gradient(135deg, #636ae8, #818cf8);
+          border: none;
+          border-radius: 8px;
+          color: #fff;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 4px 12px rgba(99, 106, 232, 0.2);
+        }
+
+        .sw-reusable-btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(99, 106, 232, 0.3);
+        }
+
+        .sw-reusable-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          background: #f1f5f9;
+          color: #94a3b8;
+          box-shadow: none;
+        }
+
+        .sw-continue-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          width: 100%;
+          padding: 10px 16px;
+          background: #fff;
+          border: 1.5px solid #2563eb;
+          border-radius: 8px;
+          color: #2563eb;
+          font-size: 13px;
+          font-weight: 700;
+          text-decoration: none;
+          transition: all 0.2s;
+        }
+
+        .sw-continue-btn:hover {
+          background: #eff6ff;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+        }
+
+        :global(.sw-continue-btn-standard) {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 14px;
+          background: #2563eb;
+          color: white !important;
+          border-radius: 6px;
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: none !important;
+          transition: all 0.2s;
+          border: none;
+          height: 32px; /* Matching mini save button height */
+        }
+
+        :global(.sw-continue-btn-standard:hover) {
+          background: #1d4ed8;
+          transform: translateY(-1px);
+        }
+
+        :global(.sw-continue-btn-standard:active) {
+          transform: translateY(0);
         }
 
         .sw-main {

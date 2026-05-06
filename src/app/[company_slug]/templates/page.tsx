@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
 import { CreateTemplateModal } from "@/components/templates/CreateTemplateModal";
 import { TemplatePreviewPanel } from "@/components/templates/TemplatePreviewPanel";
+import { SetupLibraryModal } from "@/components/setup/SetupLibraryModal";
 import {
   Plus,
   FileText,
@@ -17,6 +18,7 @@ import {
   Zap,
   ArrowRight,
   Settings,
+  FolderOpen,
 } from "lucide-react";
 import { useHeader } from "@/context/HeaderContext";
 import { useAccessControl } from "@/context/AccessControlContext";
@@ -118,6 +120,7 @@ export default function TemplatesPage() {
   const slug = params?.company_slug as string;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -220,6 +223,17 @@ export default function TemplatesPage() {
             <div className="flex items-center gap-3">
               {isAdmin && (
                 <ViewToggle activeView={activeView} onSwitch={setActiveView} />
+              )}
+              {activeView === "admin" && (
+                <button
+                  onClick={() => setShowLibraryModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-sm font-bold
+                             shadow-sm transition-all duration-200
+                             hover:bg-slate-50 hover:border-slate-300 active:scale-95"
+                >
+                  <FolderOpen size={16} />
+                  Setups Library
+                </button>
               )}
               {activeView === "admin" && canCreateTemplate && (
                 <button
@@ -460,6 +474,14 @@ export default function TemplatesPage() {
           companySlug={slug}
           onClose={() => setShowCreateModal(false)}
           onSuccess={fetchTemplates}
+        />
+      )}
+
+      {/* Setups Library Modal */}
+      {showLibraryModal && company && (
+        <SetupLibraryModal
+          companyId={company.id}
+          onClose={() => setShowLibraryModal(false)}
         />
       )}
     </>

@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       .from("report_templates")
       .select(
         `report_template_id, report_template_name, report_template_status,
-         report_template_setup_json, version_number, updated_on,
+         report_template_setup_json, setup_id, version_number, updated_on,
          module_id, modules(module_name, module_code)`
       )
       .eq("report_template_id", template_id);
@@ -42,6 +42,22 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         { success: false, error: "Template not found or access denied." },
         { status: 404 }
       );
+    }
+
+    // If template has a linked setup_id, fetch that setup and merge it
+    if (template.setup_id) {
+      const { data: reusableSetup, error: setupError } = await adminClient
+        .from("report_template_setups")
+        .select("setup_json, setup_name")
+        .eq("setup_id", template.setup_id)
+        .maybeSingle();
+
+      if (!setupError && reusableSetup) {
+        // Merge reusable setup into the template response
+        // Usually, the reusable setup should be the primary source if linked
+        template.report_template_setup_json = reusableSetup.setup_json;
+        (template as any).reusable_setup_name = reusableSetup.setup_name;
+      }
     }
 
     return NextResponse.json({ success: true, template });
@@ -116,6 +132,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       .from("report_templates")
       .update({
         report_template_setup_json: setup_json,
+        setup_id: null,
         updated_on: new Date().toISOString(),
       })
       .eq("report_template_id", template_id)
@@ -135,5 +152,43 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   } catch (err: any) {
     console.error(`PUT /api/company/templates/[template_id]/setup error:`, err);
     return NextResponse.json({ success: false, error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+// PATCH /api/company/templates/[template_id]/setup — Update specific fields (e.g. setup_id)
+export async function PATCH(req: NextRequest, { params }: RouteParams) {
+  try {
+    const session = await getSession();
+    if (!session || (session.accountType !== "company_user" && session.accountType !== "platform_admin")) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { template_id } = await params;
+    const body = await req.json();
+    const { setup_id, setup_json } = body;
+
+    const adminClient = createAdminClient();
+
+    let query = adminClient
+      .from("report_templates")
+      .update({ 
+        setup_id, 
+        report_template_setup_json: setup_json,
+        updated_on: new Date().toISOString() 
+      })
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      query = query.eq("company_id", session.companyId);
+    }
+
+    const { data, error } = await query.select("*").single();
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, template: data });
+  } catch (err: any) {
+    console.error(`PATCH /api/company/templates/[template_id]/setup error:`, err);
+    return NextResponse.json({ success: false, error: err.message || "Internal Server Error" }, { status: 500 });
   }
 }

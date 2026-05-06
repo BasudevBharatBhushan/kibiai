@@ -31,7 +31,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("report_templates")
       .select(
-        "report_template_id, report_template_name, report_template_setup_json, report_template_config_json, report_template_data_json, conversation_id, version_number, report_template_status"
+        "report_template_id, report_template_name, report_template_setup_json, setup_id, report_template_config_json, report_template_data_json, conversation_id, version_number, report_template_status"
       )
       .eq("report_template_id", template_id)
       .eq("company_id", session.companyId)
@@ -41,18 +41,33 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
     }
 
+    let setupJson = data.report_template_setup_json;
+    
+    // If local setup is empty but we have a linked setup_id, fetch from library
+    if ((!setupJson || Object.keys(setupJson).length === 0) && data.setup_id) {
+      const { data: reusableSetup } = await supabase
+        .from("report_template_setups")
+        .select("setup_json")
+        .eq("setup_id", data.setup_id)
+        .maybeSingle();
+      
+      if (reusableSetup) {
+        setupJson = reusableSetup.setup_json;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         template_id: data.report_template_id,
         template_name: data.report_template_name,
         template_status: data.report_template_status,
-        setup_json: data.report_template_setup_json ?? null,
+        setup_json: setupJson ?? null,
         config_json: data.report_template_config_json ?? null,
         preview_data_json: data.report_template_data_json ?? null,
         conversation_id: data.conversation_id ?? null,
         version_number: data.version_number ?? 1,
-        has_setup: data.report_template_setup_json !== null,
+        has_setup: setupJson !== null && Object.keys(setupJson || {}).length > 0,
         has_config: data.report_template_config_json !== null,
       },
     });

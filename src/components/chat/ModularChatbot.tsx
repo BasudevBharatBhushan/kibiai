@@ -65,7 +65,7 @@ export function ModularChatbot({
   conversationMetadata,
   predefinedPrompt = "",
   formatPrompt,
-  botName = "AI Assistant",
+  botName = "Assistant",
   welcomeMessage = "Hello! How can I help you today?",
   botAvatar = "/bot-avatar.png",
   suggestedPrompts = SUGGESTED_PROMPTS,
@@ -83,6 +83,7 @@ export function ModularChatbot({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLTextAreaElement>(null); 
   const scrollRef = useAutoScroll<HTMLDivElement>([messages, loading]);
@@ -113,6 +114,59 @@ export function ModularChatbot({
       setMessages([]); // Clear messages to trigger fetch
     }
   }, [initialConversationId]);
+
+  // ── Automatic Initialization ──────────────────────────────────────────────
+  // If we have a predefinedPrompt but no conversationId and no messages,
+  // we auto-send the predefined prompt to get the initial state/suggestions.
+  useEffect(() => {
+    if (loading || conversationId || messages.length > 0 || !predefinedPrompt) return;
+
+    // We send a small delay to ensure everything is mounted
+    const timer = setTimeout(() => {
+      // Internal call to start the conversation with the schema
+      // We don't use sendMessageToAI directly because we don't want to add "(Initialization)" to the UI
+      setLoading(true);
+      const finalPrompt = formatPrompt ? formatPrompt("(Initializing schema)") : formatUserPrompt("(Initializing schema)");
+      
+      apiSendMessage({
+        conversation_id: null,
+        instruction_set: instructionSet,
+        predefined_prompt: predefinedPromptRef.current,
+        conversation_metadata: conversationMetadata || {},
+        user_prompt: finalPrompt,
+      }).then(res => {
+        if (res.conversation_id) {
+          setConversationId(res.conversation_id);
+          if (onConversationIdChange) onConversationIdChange(res.conversation_id);
+        }
+        
+        const rawResponseText = res.response ?? "";
+        const displayedText = extractAssistantDisplayText(rawResponseText);
+        if (displayedText) {
+          setMessages([{ role: "assistant", text: displayedText }]);
+          
+          // Extract suggestions
+          try {
+            const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
+            const parsed = JSON.parse(cleanText);
+            const suggestions = parsed.report_suggestions || parsed.chart_suggestions || [];
+            if (Array.isArray(suggestions) && suggestions.length > 0) {
+              setAiSuggestions(suggestions);
+              setShowPrompts(true);
+            }
+          } catch (e) {}
+
+          if (onAssistantResponse) onAssistantResponse(displayedText, rawResponseText);
+        }
+      }).catch(err => {
+        console.error("Auto-init failed", err);
+      }).finally(() => {
+        setLoading(false);
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [conversationId, messages.length, predefinedPrompt, loading]);
 
   const sendMessageToAI = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
@@ -150,6 +204,20 @@ export function ModularChatbot({
           ...prev,
           { role: "assistant", text: displayedText },
         ]);
+        
+        // Extract AI suggestions if any
+        try {
+          const cleanText = rawResponseText.replace(/```json\s*|\s*```/g, "").trim();
+          const parsed = JSON.parse(cleanText);
+          const suggestions = parsed.report_suggestions || parsed.chart_suggestions || [];
+          if (Array.isArray(suggestions) && suggestions.length > 0) {
+            setAiSuggestions(suggestions);
+            setShowPrompts(true); // Auto-show suggestions when AI provides them
+          }
+        } catch (e) {
+          // No suggestions in this response
+        }
+
         if (onAssistantResponse) {
           onAssistantResponse(displayedText, rawResponseText);
         }
@@ -276,6 +344,7 @@ export function ModularChatbot({
     setMessages([]);         
     setInput("");            
     setShowPrompts(false);   
+    setAiSuggestions([]);
     if (onConversationIdChange) onConversationIdChange(null);
   }, [onConversationIdChange]);
 
@@ -303,28 +372,16 @@ export function ModularChatbot({
               <Bot className="size-4" />
             </div>
             <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="truncate text-sm font-bold tracking-tight text-slate-900">
-                  {botName}
-                </h2>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
-                  loading
-                    ? "bg-indigo-100 text-indigo-700"
-                    : "bg-emerald-100 text-emerald-700"
-                }`}>
-                  <span className={`h-1 w-1 rounded-full ${
-                    loading ? "animate-pulse bg-indigo-500" : "bg-emerald-500"
-                  }`} />
-                  {loading ? "Thinking" : "Ready"}
-                </span>
-              </div>
+              <h2 className="truncate text-sm font-bold tracking-tight text-slate-900">
+                {botName}
+              </h2>
             </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
             {headerActions}
             
-            {suggestedPrompts.length > 0 && (
+            {(suggestedPrompts.length > 0 || aiSuggestions.length > 0) && (
               <Button
                 type="button"
                 variant="outline"
@@ -355,8 +412,8 @@ export function ModularChatbot({
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 p-0 overflow-hidden relative bg-slate-50">
-          <ScrollArea className="h-full">
+        <CardContent className="flex-1 p-0 overflow-hidden relative bg-slate-50 flex flex-col">
+          <ScrollArea className="flex-1">
             <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 px-5 pb-40 pt-6">
               {!hasMessages && (
                 <div className="flex w-full justify-start">
@@ -460,47 +517,47 @@ export function ModularChatbot({
             </div>
           </ScrollArea>
           
-          {showPromptRail && (
-            <div className="absolute inset-x-0 bottom-28 z-10 px-4">
-              <div className="mx-auto flex max-w-4xl gap-3 overflow-x-auto pb-2 no-scrollbar">
+          <div className="shrink-0 border-t border-slate-200 bg-white px-4 pb-4 pt-3">
+            {/* Suggestion Rail Moved Here */}
+            {showPrompts && (suggestedPrompts.length > 0 || aiSuggestions.length > 0) && (
+              <div className="mx-auto mb-4 flex w-full max-w-4xl gap-2 overflow-x-auto pb-2 no-scrollbar">
+                {/* AI Dynamic Suggestions first */}
+                {aiSuggestions.map((suggestion, index) => (
+                  <button
+                    key={`ai-${index}`}
+                    onClick={() => selectPrompt(suggestion)}
+                    className="shrink-0 rounded-full border border-indigo-100 bg-indigo-50 px-4 py-1.5 text-xs font-medium text-indigo-600 transition-all hover:bg-indigo-100 hover:border-indigo-200 hover:shadow-sm"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+                {/* Static Suggested Prompts */}
                 {suggestedPrompts.map((prompt, index) => (
                   <button
-                    key={index}
+                    key={`static-${index}`}
                     onClick={() => selectPrompt(prompt.description)}
-                    className="group w-64 shrink-0 rounded-[22px] border border-slate-200 bg-white p-4 text-left shadow-lg transition-all hover:-translate-y-0.5 hover:border-indigo-200"
+                    className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-50 hover:border-indigo-200 hover:shadow-sm"
                   >
-                    <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-50 transition-colors group-hover:bg-indigo-100">
-                      {prompt.icon}
-                    </div>
-                    <h3 className="text-sm font-semibold text-slate-800">
-                      {prompt.title}
-                    </h3>
-                    <p className="mt-1 text-xs leading-6 text-slate-500">
-                      {prompt.description}
-                    </p>
+                    {prompt.title}
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-          
-          <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-white px-4 pb-4 pt-3">
+            )}
+
             <form onSubmit={handleSend} className="mx-auto flex w-full max-w-4xl items-end gap-3">
               <div className="flex min-h-[44px] flex-1 items-end gap-3 rounded-2xl border border-slate-300 bg-white px-3 py-2 shadow-sm focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-shadow">
-                {suggestedPrompts.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setShowPrompts((prev) => !prev)}
-                    className={`mb-0.5 size-9 shrink-0 rounded-xl p-0 transition-all ${
-                      showPrompts
-                        ? "bg-indigo-50 text-indigo-600"
-                        : "bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
-                    }`}
-                  >
-                    <HelpCircle className="size-5" />
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowPrompts((prev) => !prev)}
+                  className={`mb-0.5 size-9 shrink-0 rounded-xl p-0 transition-all ${
+                    showPrompts
+                      ? "bg-indigo-50 text-indigo-600"
+                      : "bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
+                  }`}
+                >
+                  <HelpCircle className="size-5" />
+                </Button>
 
                 <div className="flex-1 min-w-0">
                   <TextareaAutosize

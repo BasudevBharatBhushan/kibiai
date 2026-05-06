@@ -29,6 +29,7 @@ erDiagram
     COMPANIES ||--o{ USERS : "belongs to"
     COMPANIES ||--o{ ROLES : "belongs to"
     COMPANIES ||--o{ MODULES : "belongs to"
+    COMPANIES ||--o{ REPORT_TEMPLATE_SETUPS : "belongs to"
     COMPANIES ||--o{ REPORT_TEMPLATES : "belongs to"
     COMPANIES ||--o{ REPORTS : "belongs to"
     COMPANIES ||--o{ CHART_TEMPLATES : "belongs to"
@@ -41,7 +42,9 @@ erDiagram
     AUTH_ACCOUNTS ||--o{ USERS : "authenticates"
     AUTH_ACCOUNTS ||--o{ PLATFORM_ADMINS : "authenticates"
 
+    MODULES ||--o{ REPORT_TEMPLATE_SETUPS : "contains"
     MODULES ||--o{ REPORT_TEMPLATES : "contains"
+    REPORT_TEMPLATE_SETUPS ||--o{ REPORT_TEMPLATES : "configures"
     REPORT_TEMPLATES ||--o{ REPORTS : "generates"
     REPORT_TEMPLATES ||--o{ CHART_TEMPLATES : "visualizes"
     REPORTS ||--o{ CHARTS : "derived from"
@@ -144,14 +147,30 @@ AI-generated report definitions.
 | `created_by_user_id` | uuid | FK -> users | |
 | `created_on` | timestamptz | DEFAULT now() | |
 | `updated_on` | timestamptz | DEFAULT now() | |
+| `setup_id` | uuid | FK -> report_template_setups | Reusable configuration link |
 | `chart_conversation_id` | varchar | | AI thread ID for Chart Builder session |
 | `insight_conversation_id` | varchar | | OpenAI conversation ID for Business Insight Assistant session |
 | `insight_results` | jsonb | | Persisted `InsightResult[]` — JS-computed from AI formulas, never raw data |
 
 > **Migration**: `ai-workspace/sql/015-add-chart-conv-id.sql`  
 > **Migration**: `ai-workspace/sql/023_add_insight_fields.sql`
+> **Migration**: `ai-workspace/sql/025_reusable_setups.sql`
 
-### 8. reports
+### 8. report_template_setups
+Reusable database connection configurations.
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `setup_id` | uuid | PK | |
+| `company_id` | uuid | FK -> companies | |
+| `module_id` | uuid | FK -> modules | |
+| `setup_name` | varchar(180) | NOT NULL | |
+| `setup_description` | text | | Short description of the configuration |
+| `setup_json` | jsonb | NOT NULL | |
+| `created_by_user_id` | uuid | FK -> users | |
+| `created_on` | timestamptz | DEFAULT now() | |
+| `updated_on` | timestamptz | DEFAULT now() | |
+
+### 9. reports
 Snapshots of generated reports.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |

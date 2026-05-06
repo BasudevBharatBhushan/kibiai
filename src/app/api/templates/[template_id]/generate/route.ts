@@ -45,7 +45,7 @@ export async function POST(
     const supabase = createAdminClient();
     const { data: template, error: fetchError } = await supabase
       .from("report_templates")
-      .select("report_template_setup_json, report_template_config_json, report_template_name, company_id")
+      .select("report_template_setup_json, setup_id, report_template_config_json, report_template_name, company_id")
       .eq("report_template_id", template_id)
       .eq("company_id", session.companyId)
       .single();
@@ -54,7 +54,25 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
     }
 
-    if (!template.report_template_setup_json) {
+    let setupJson = template.report_template_setup_json as any;
+    const isLocalEmpty = !setupJson || 
+                         (typeof setupJson === "object" && Object.keys(setupJson).length === 0) ||
+                         (setupJson.tables && Object.keys(setupJson.tables).length === 0);
+
+    // If local setup is empty or has no tables, but we have a linked setup_id, fetch from library
+    if (isLocalEmpty && template.setup_id) {
+      const { data: reusableSetup, error: setupError } = await supabase
+        .from("report_template_setups")
+        .select("setup_json")
+        .eq("setup_id", template.setup_id)
+        .maybeSingle();
+
+      if (!setupError && reusableSetup) {
+        setupJson = reusableSetup.setup_json;
+      }
+    }
+
+    if (!setupJson || (typeof setupJson === "object" && Object.keys(setupJson).length === 0)) {
       return NextResponse.json(
         { success: false, error: "Template setup is not complete. Please run the Setup Wizard first." },
         { status: 400 }
@@ -67,8 +85,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    const setupJson = template.report_template_setup_json as any;
 
     // 4. Merge runtime filters into config (runtime-only — never persisted)
     const configJson = {

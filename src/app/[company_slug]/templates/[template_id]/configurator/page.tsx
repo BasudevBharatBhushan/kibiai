@@ -39,7 +39,7 @@ function buildPredefinedPrompt(setup: any, config: any): string {
     return `Today's date (reference for date ranges): ${today}. Here is my DB Schema - ${setupStr}. Here is my Previous Report Config - ${configStr}.`;
   }
 
-  return `Today's date (reference for date ranges): ${today}. Here is my DB Schema - ${setupStr}.`;
+  return `Today's date (reference for date ranges): ${today}. Here is my DB Schema - ${setupStr}. Suggest me prompt related to it.`;
 }
 
 // ── Panel toggle buttons — injected into the global Header via HeaderContext ───
@@ -375,7 +375,7 @@ function ConfiguratorPageContent({
       >
         <div className="flex-1 overflow-hidden flex flex-col min-w-[400px]">
           <ModularChatbot
-            botName="Kibiai Report Assistant"
+            botName="Reports"
             instructionSet={REPORTS_SYSTEM_INSTRUCTION}
             predefinedPrompt={predefinedPrompt}
             formatPrompt={formatPrompt}

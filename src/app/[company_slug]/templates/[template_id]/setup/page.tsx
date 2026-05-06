@@ -96,6 +96,7 @@ export default function TemplateSetupPage() {
         rightElement={
           <div className="flex items-center gap-3">
             <div id="setup-wizard-save-container"></div>
+            <div id="setup-wizard-continue-container"></div>
             {template.modules && (
               <div className="sp-module-badge">
                 {template.modules.module_name}

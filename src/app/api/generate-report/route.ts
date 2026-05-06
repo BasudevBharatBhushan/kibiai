@@ -283,7 +283,18 @@ async function fetchDataFromAPI(
     return [];
   }
 
-  const tableConfig = setupJson.tables[table];
+  let tableConfig = setupJson.tables[table];
+  
+  // Case-insensitive fallback
+  if (!tableConfig) {
+    const foundKey = Object.keys(setupJson.tables).find(
+      k => k.toLowerCase() === table.toLowerCase()
+    );
+    if (foundKey) {
+      tableConfig = setupJson.tables[foundKey];
+    }
+  }
+
   if (!tableConfig) {
     throw new Error(`Table configuration not found: ${table}`);
   }
@@ -1790,11 +1801,10 @@ export async function POST(req: NextRequest) {
       const fetchDef = sortedFetchDefs[i];
 
       // Find the dataset of the primary table for this fetch definition
-      const sourceFetchDef = sortedFetchDefs.find(
-        (def) =>
-          (def.fetch_order === 1 ? def.primary_table : def.joined_table) ===
-          fetchDef.primary_table
-      );
+      const sourceFetchDef = sortedFetchDefs.find((def) => {
+        const tableName = def.fetch_order === 1 ? def.primary_table : def.joined_table;
+        return tableName?.toLowerCase() === fetchDef.primary_table?.toLowerCase();
+      });
 
       const sourceDataset = sourceFetchDef
         ? dataManager.getDataset(sourceFetchDef.fetch_order) || currentDataset

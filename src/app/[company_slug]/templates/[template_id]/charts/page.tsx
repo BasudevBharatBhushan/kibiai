@@ -534,7 +534,7 @@ function ChartBuilderWorkspace({
                   />
                 )}
                 <ModularChatbot
-                  botName="Chart Copilot"
+                  botName="Charts"
                   instructionSet={CHARTS_SYSTEM_INSTRUCTION}
                   predefinedPrompt={predefinedPrompt}
                   formatPrompt={formatPrompt}
@@ -578,7 +578,7 @@ function ChartBuilderWorkspace({
             {/* Business Insight Assistant */}
             {assistantMode === "insight" && (
               <ModularChatbot
-                botName="Insight Assistant"
+                botName="Insights"
                 instructionSet={BUSINESS_INSIGHT_SYSTEM_INSTRUCTION}
                 predefinedPrompt={insightPredefinedPrompt}
                 formatPrompt={formatInsightPrompt}

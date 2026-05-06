@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, FileText, Layers, Loader2 } from "lucide-react";
+import { X, FileText, Layers, Loader2, Database } from "lucide-react";
 
 interface Module {
   module_id: string;
@@ -28,8 +28,11 @@ export function CreateTemplateModal({
 
   const [templateName, setTemplateName] = useState("");
   const [selectedModuleId, setSelectedModuleId] = useState("");
+  const [selectedSetupId, setSelectedSetupId] = useState("");
   const [modules, setModules] = useState<Module[]>([]);
+  const [savedSetups, setSavedSetups] = useState<any[]>([]);
   const [modulesLoading, setModulesLoading] = useState(true);
+  const [setupsLoading, setSetupsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +75,30 @@ export function CreateTemplateModal({
     if (companyId) fetchModules();
   }, [companyId]);
 
+  // Fetch saved setups when module changes
+  useEffect(() => {
+    const fetchSetups = async () => {
+      if (!selectedModuleId) {
+        setSavedSetups([]);
+        return;
+      }
+      setSetupsLoading(true);
+      try {
+        const res = await fetch(`/api/company/setups?company_id=${companyId}&module_id=${selectedModuleId}`);
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        const data = await res.json();
+        if (data.success) {
+          setSavedSetups(data.setups || []);
+        }
+      } catch (err) {
+        console.error("Setups fetch error:", err);
+      } finally {
+        setSetupsLoading(false);
+      }
+    };
+    fetchSetups();
+  }, [companyId, selectedModuleId]);
+
   const handleCreate = async () => {
     setError(null);
     if (!templateName.trim()) {
@@ -93,6 +120,7 @@ export function CreateTemplateModal({
           module_id: selectedModuleId,
           report_template_name: templateName.trim(),
           company_id: companyId,
+          setup_id: selectedSetupId || null,
         }),
       });
 
@@ -207,6 +235,52 @@ export function CreateTemplateModal({
                 ))}
               </select>
             )}
+          </div>
+
+          {/* Reusable Setup */}
+          <div className="ctm-field">
+            <label htmlFor="ctm-setup" className="ctm-label">
+              <Database size={14} style={{ display: "inline", marginRight: 5 }} />
+              Database Setup (Optional)
+            </label>
+            {setupsLoading ? (
+              <div className="ctm-module-loading">
+                <Loader2 size={15} className="ctm-spin" />
+                <span>Loading saved setups…</span>
+              </div>
+            ) : !selectedModuleId ? (
+              <div className="ctm-no-modules" style={{ background: "#f8fafc", color: "#64748b", borderColor: "#e2e8f0" }}>
+                Select a module first to see saved setups
+              </div>
+            ) : savedSetups.length === 0 ? (
+              <div className="ctm-no-modules" style={{ background: "#f8fafc", color: "#64748b", borderColor: "#e2e8f0" }}>
+                No saved setups for this module. You can create one from scratch.
+              </div>
+            ) : (
+              <select
+                id="ctm-setup"
+                className="ctm-select"
+                value={selectedSetupId}
+                onChange={(e) => setSelectedSetupId(e.target.value)}
+              >
+                <option value="">Create from scratch (Manual Setup)</option>
+                {savedSetups.map((s) => (
+                  <option key={s.setup_id} value={s.setup_id}>
+                    {s.setup_name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedSetupId && (
+              <div className="ctm-setup-preview">
+                <p className="ctm-setup-desc-text">
+                  {savedSetups.find(s => s.setup_id === selectedSetupId)?.setup_description || "No description provided."}
+                </p>
+              </div>
+            )}
+            <p className="ctm-help-text">
+              Reusing a saved setup will pre-configure database connections and table mappings.
+            </p>
           </div>
 
           {/* Error */}
@@ -466,9 +540,31 @@ export function CreateTemplateModal({
           animation: ctm-spin 0.8s linear infinite;
         }
 
+        .ctm-help-text {
+          font-size: 11px;
+          color: #94a3b8;
+          margin-top: 4px;
+          padding-left: 2px;
+        }
+
         @keyframes ctm-spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+
+        .ctm-setup-preview {
+          margin-top: 4px;
+          padding: 8px 12px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+        }
+
+        .ctm-setup-desc-text {
+          font-size: 12px;
+          color: #475569;
+          margin: 0;
+          line-height: 1.4;
         }
       `}</style>
     </div>

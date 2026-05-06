@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { module_id, report_template_name, company_id: providedCompanyId } = body;
+    const { module_id, report_template_name, company_id: providedCompanyId, setup_id } = body;
     const company_id = providedCompanyId || session.companyId;
 
     if (!module_id || !report_template_name || !company_id) {
@@ -54,10 +54,11 @@ export async function POST(req: Request) {
         created_by_user_id,
         report_template_status: "Draft",
         report_template_setup_json: {},
+        setup_id: setup_id || null,
         version_number: 1,
       })
       .select(
-        "report_template_id, report_template_name, report_template_status, module_id, created_on"
+        "report_template_id, report_template_name, report_template_status, module_id, created_on, setup_id"
       )
       .single();
 
