@@ -111,6 +111,9 @@ export function AccessControlProvider({
   >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeView, setActiveViewState] = useState<ViewMode>("user");
+  const [lastActivity, setLastActivity] = useState(Date.now());
+
+  const IDLE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
   useEffect(() => {
     const load = async () => {
@@ -196,6 +199,48 @@ export function AccessControlProvider({
 
     load();
   }, []);
+
+  // ── Idle Detection ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleActivity = () => {
+      setLastActivity(Date.now());
+    };
+
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("click", handleActivity);
+    window.addEventListener("scroll", handleActivity);
+
+    return () => {
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("click", handleActivity);
+      window.removeEventListener("scroll", handleActivity);
+    };
+  }, []);
+
+  // ── Periodic Session Validation ──────────────────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const now = Date.now();
+      
+      // If idle for too long, validate session
+      if (now - lastActivity > IDLE_THRESHOLD_MS) {
+        try {
+          const isValid = await apiClient.validateSession();
+          if (!isValid) {
+            window.location.href = "/login?reason=idle";
+          }
+        } catch (e) {
+          // Ignore network errors, but 401 will be caught by apiClient anyway
+        }
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [lastActivity]);
 
 
   // ── Derived flags ─────────────────────────────────────────────────────────

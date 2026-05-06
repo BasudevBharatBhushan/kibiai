@@ -19,27 +19,55 @@ export class CompanyService {
 
     const adminClient = createAdminClient();
     
-    // Normalize slug to match potential company names
-    const searchName = slug.replace(/-/g, " ");
-    
-    // Try exact match first (case-insensitive)
-    let { data: company, error } = await adminClient
-      .from("companies")
-      .select("*")
-      .ilike("company_name", searchName)
+    // 1. Try resolving via allowed_subdomains table (source of truth for slugs)
+    const { data: slugMapping, error: slugError } = await adminClient
+      .from("allowed_subdomains")
+      .select("company_id")
+      .eq("slug", slug)
+      .eq("is_active", true)
       .maybeSingle();
 
-    // If not found, try removing dots from the company_name in the query
-    // or just match with a wildcard if the searchName is a prefix
-    if (!company && !error) {
-       const { data: fuzzyMatch, error: fuzzyError } = await adminClient
+    let company = null;
+    let error = slugError;
+
+    if (slugMapping) {
+      const { data: companyData, error: companyError } = await adminClient
         .from("companies")
         .select("*")
-        .ilike("company_name", `${searchName}%`)
-        .limit(1)
+        .eq("company_id", slugMapping.company_id)
         .maybeSingle();
-       
-       if (fuzzyMatch) company = fuzzyMatch;
+      
+      company = companyData;
+      error = companyError;
+    }
+
+    // 2. Fallback to heuristic matching (backward compatibility)
+    if (!company && !error) {
+      // Normalize slug to match potential company names
+      const searchName = slug.replace(/-/g, " ");
+      
+      // Try exact match first (case-insensitive)
+      const { data: exactMatch, error: exactError } = await adminClient
+        .from("companies")
+        .select("*")
+        .ilike("company_name", searchName)
+        .maybeSingle();
+
+      company = exactMatch;
+      error = exactError;
+
+      // If still not found, try fuzzy prefix match
+      if (!company && !error) {
+        const { data: fuzzyMatch, error: fuzzyError } = await adminClient
+          .from("companies")
+          .select("*")
+          .ilike("company_name", `${searchName}%`)
+          .limit(1)
+          .maybeSingle();
+        
+        company = fuzzyMatch;
+        error = fuzzyError;
+      }
     }
 
     if (error || !company) {

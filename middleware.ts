@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret');
+const COOKIE_NAME = 'kibiai_session';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -95,12 +99,40 @@ export async function middleware(request: NextRequest) {
   const hostname = request.headers.get("host") || "";
   const pathname = request.nextUrl.pathname;
 
-  // ── 1. Skip in dev/localhost environment ──────────────────────────────────
+  // ── 0. Session Check ──────────────────────────────────────────────────────
+  const sessionCookie = request.cookies.get(COOKIE_NAME)?.value;
+  let user: any = null;
+  if (sessionCookie) {
+    try {
+      const { payload } = await jwtVerify(sessionCookie, JWT_SECRET);
+      user = payload;
+    } catch (e) {
+      // Invalid session, cookie will be ignored
+    }
+  }
+
+  // Define public routes that don't need auth
+  const isPublicRoute = 
+    pathname.startsWith('/login') || 
+    pathname.startsWith('/api/auth') ||
+    pathname === '/invalid-subdomain';
+
+  // ── 1. Skip subdomain logic in dev/localhost environment ──────────────────
   if (
     hostname.includes("localhost") ||
     hostname.includes("127.0.0.1") ||
     hostname.startsWith("192.168.")
   ) {
+    // Still perform auth checks on localhost
+    if (!user && !isPublicRoute) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // Platform admin redirect on localhost
+    if (user?.accountType === 'platform_admin' && !pathname.startsWith('/admin')) {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+
     return NextResponse.next();
   }
 
@@ -113,9 +145,46 @@ export async function middleware(request: NextRequest) {
     subdomain = hostname.slice(0, -(`.${BASE_DOMAIN}`.length)).toLowerCase().trim();
   }
 
-  // No subdomain → apex domain, let the request proceed normally
+  // No subdomain → apex domain
   if (!subdomain) {
+    // Auth check for apex domain
+    if (!user && !isPublicRoute) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    
+    // Platform admin redirect on apex
+    if (user?.accountType === 'platform_admin') {
+      const adminUrl = new URL(pathname, `https://admin.${BASE_DOMAIN}`);
+      adminUrl.search = request.nextUrl.search;
+      return NextResponse.redirect(adminUrl);
+    }
+
     return NextResponse.next();
+  }
+
+  // ── 2.5 Role-Based Redirection ──────────────────────────────────────────
+  
+  // If platform admin is on a company subdomain, redirect to admin subdomain
+  if (user?.accountType === 'platform_admin' && subdomain !== 'admin') {
+    const adminUrl = new URL(pathname, `https://admin.${BASE_DOMAIN}`);
+    adminUrl.search = request.nextUrl.search;
+    return NextResponse.redirect(adminUrl);
+  }
+
+  // If company user is on the admin subdomain, redirect them to their company subdomain
+  if (user?.accountType === 'company_user' && subdomain === 'admin' && user.companyId) {
+    // We need to fetch the company slug for this companyId? 
+    // Or assume they should just go back to a safe place.
+    // For now, let's just let them proceed and they will likely get 403 from the page logic,
+    // OR we could redirect them to their company subdomain if we knew the slug.
+    // Since we don't know the slug here without a DB lookup (which we want to avoid),
+    // we'll let it pass for now.
+  }
+
+  // Auth Guard: If not logged in and not public route, redirect to login
+  if (!user && !isPublicRoute) {
+    const loginUrl = new URL('/login', request.url);
+    return NextResponse.redirect(loginUrl);
   }
 
   // ── 3. Handle reserved platform subdomains (e.g. "admin") ─────────────────

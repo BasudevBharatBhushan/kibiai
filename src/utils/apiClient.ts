@@ -56,6 +56,16 @@ class ApiClient {
       body: finalBody,
     });
 
+    if (response.status === 401) {
+      // Token likely expired or invalid
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+        // Clear session and redirect to login
+        // We can't clear the httpOnly cookie from JS, but we can redirect 
+        // to a logout route or just the login page.
+        window.location.href = '/login?reason=expired';
+      }
+    }
+
     if (!response.ok) {
       let errorData;
       try {
@@ -73,6 +83,15 @@ class ApiClient {
     // Standard KI-BI response format
     const data = await response.json();
     return data as T;
+  }
+
+  async validateSession(): Promise<boolean> {
+    try {
+      await this.get('/api/auth/validate');
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   async get<T>(endpoint: string, options?: ApiOptions) {
