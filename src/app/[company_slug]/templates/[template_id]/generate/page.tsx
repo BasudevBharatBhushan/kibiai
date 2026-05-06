@@ -861,22 +861,22 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                       </div>
                     ))}
                   </div>
-                  {/* ── Log overlay — floating on top of skeleton ── */}
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-start pt-10 px-8 pointer-events-none">
-                    <div className="w-full pointer-events-auto bg-transparent">
-                      <div className="flex items-center gap-2.5 px-4 py-3 pb-2">
-                        <div className="relative flex h-5 w-5 items-center justify-center shrink-0">
-                          <Loader2 size={13} className="animate-spin text-blue-500" />
+                  {/* ── Log overlay — floating at center of skeleton ── */}
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center px-8 pointer-events-none">
+                    <div className="w-full max-w-lg pointer-events-auto bg-white/[0.01] backdrop-blur-[1px] rounded-xl border border-white/5 shadow-none overflow-hidden min-h-[280px] flex flex-col justify-center">
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        <div className="relative flex h-6 w-6 items-center justify-center shrink-0">
+                          <Loader2 size={16} className="animate-spin text-blue-600" />
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
                         </div>
-                        <p className="text-xs font-bold text-slate-700 flex-1">Generating Report…</p>
-                        <span className="text-[10px] text-slate-400 tabular-nums font-medium px-1.5 py-0.5 rounded-full">
+                        <p className="text-sm font-extrabold text-slate-900 flex-1">Generating Report…</p>
+                        <span className="text-[11px] text-slate-500 tabular-nums font-bold bg-slate-100/50 px-2 py-0.5 rounded-full border border-slate-200/50">
                           {generationLogs.length} steps
                         </span>
                       </div>
                       <div
-                        className="overflow-y-auto px-4 py-3 space-y-1.5"
-                        style={{ maxHeight: "200px" }}
+                        className="overflow-y-auto px-4 py-2 space-y-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+                        style={{ maxHeight: "240px" }}
                         ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
                       >
                         {generationLogs.length === 0 ? (
@@ -896,9 +896,9 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                                   isSuccess ? "bg-emerald-500" : isWarning ? "bg-amber-400" :
                                   isError ? "bg-red-500" : isLast ? "bg-blue-500 animate-pulse" : "bg-slate-300"
                                 }`} />
-                                <span className={`text-[10.5px] leading-relaxed ${
-                                  isSuccess ? "text-emerald-700 font-medium" : isWarning ? "text-amber-700" :
-                                  isError ? "text-red-700 font-medium" : isLast ? "text-slate-800 font-medium" : "text-slate-500"
+                                <span className={`text-[12px] leading-relaxed ${
+                                  isSuccess ? "text-emerald-800 font-semibold" : isWarning ? "text-amber-800" :
+                                  isError ? "text-red-800 font-semibold" : isLast ? "text-slate-900 font-bold" : "text-slate-700"
                                 }`}>
                                   {line.replace(/^[✅❌⚠️]\s*/, "")}
                                 </span>
@@ -907,9 +907,9 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                           })
                         )}
                       </div>
-                      <div className="h-0.5 bg-slate-100/60">
+                      <div className="h-1 bg-slate-100/30 mt-auto">
                         <div
-                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-400 transition-all duration-500"
+                          className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all duration-500 shadow-[0_0_8px_rgba(37,99,235,0.4)]"
                           style={{ width: generationLogs.length === 0 ? "5%" : `${Math.min(95, (generationLogs.length / 15) * 100)}%` }}
                         />
                       </div>

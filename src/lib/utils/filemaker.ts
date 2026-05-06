@@ -239,7 +239,6 @@ export async function fmCreateRecord(
   });
 
   const data = await res.json();
-  console.log("fmCreateRecord response:", data);
 
   if (autoSession && localToken) {
     await fmSignOut(localToken);

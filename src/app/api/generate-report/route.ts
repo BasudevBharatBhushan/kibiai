@@ -699,12 +699,8 @@ function calculateCustomFields(
         !dependencies ||
         dependencies.length === 0
       ) {
-        console.warn("⚠️ Invalid calculated field:", calcField);
         return;
       }
-
-      console.log(`\n🧮 Processing: ${field_name}`);
-      console.log(`📝 Formula: ${formula}`);
 
       const dependencyLabels: string[] = [];
       const missingDeps: string[] = [];
@@ -734,7 +730,6 @@ function calculateCustomFields(
       });
 
       if (missingDeps.length > 0) {
-        console.warn(`⚠️ Missing dependencies:`, missingDeps);
         return;
       }
 
@@ -772,10 +767,8 @@ function calculateCustomFields(
               const excelSerial = dateToExcelSerial(trimmed);
 
               if (excelSerial !== null) {
-                console.log(`📅 Converted "${trimmed}" → ${excelSerial}`);
                 value = excelSerial;
               } else {
-                console.warn(`⚠️ Failed to convert date: "${trimmed}"`);
                 value = 0;
               }
             } else {
@@ -804,29 +797,6 @@ function calculateCustomFields(
       const sheetId = hfInstance.getSheetId(sheetName)!;
       hfInstance.setSheetContent(sheetId, sheetData);
 
-      // DEBUG: Test TODAY() function
-      console.log("\n🔍 DEBUG: Testing TODAY() function...");
-      hfInstance.setCellContents(
-        { sheet: sheetId, col: dependencyLabels.length + 1, row: 0 },
-        [["=TODAY()"]]
-      );
-      const todayValue = hfInstance.getCellValue({
-        sheet: sheetId,
-        col: dependencyLabels.length + 1,
-        row: 0,
-      });
-      console.log(
-        `📅 TODAY() returns: ${todayValue} (type: ${typeof todayValue})`
-      );
-
-      // Convert today to readable date for verification
-      if (typeof todayValue === "number") {
-        const todayDate = new Date(1899, 11, 30 + todayValue);
-        console.log(
-          `📅 TODAY() as date: ${todayDate.toISOString().split("T")[0]}`
-        );
-      }
-
       // Pre-process formula (replace field names with column references)
       let processedFormula = formula.trim();
       if (processedFormula.startsWith("=")) {
@@ -839,8 +809,6 @@ function calculateCustomFields(
         processedFormula = processedFormula.replace(regex, `${colLetter}2`);
       });
 
-      console.log(`🧪 Processed formula: ${processedFormula}`);
-
       // Calculate per row
       bodyFields.forEach((row, rowIndex) => {
         try {
@@ -848,8 +816,6 @@ function calculateCustomFields(
             /([A-Z]+)(\d+)/g,
             (match, col) => `${col}${rowIndex + 2}`
           );
-
-          console.log(`\n📊 Row ${rowIndex}: =${rowFormula}`);
 
           hfInstance.setCellContents(
             { sheet: sheetId, col: dependencyLabels.length, row: rowIndex + 1 },
@@ -861,8 +827,6 @@ function calculateCustomFields(
             col: dependencyLabels.length,
             row: rowIndex + 1,
           });
-
-          console.log(`   Result: ${cellValue} (type: ${typeof cellValue})`);
 
           let finalValue: any = cellValue;
 
@@ -881,7 +845,6 @@ function calculateCustomFields(
             }
           } else if (cellValue instanceof Error) {
             finalValue = "--";
-            console.warn(`⚠️ Formula error:`, cellValue.message);
           } else {
             finalValue = "--";
           }
@@ -891,21 +854,15 @@ function calculateCustomFields(
             typeof finalValue === "string"
               ? finalValue.replace(/\u00A0/g, " ").trim()
               : finalValue;
-
-          console.log(`   ✅ Final value: ${finalValue}`);
         } catch (error) {
           const displayLabel = calcField.label || field_name;
-          console.error(`❌ Error in row ${rowIndex}:`, error);
           row[displayLabel] = "--";
         }
       });
-
-      console.log(`\n✅ Completed: ${field_name}`);
     });
 
     return bodyFields;
   } catch (error) {
-    console.error("❌ HyperFormula calculation failed:", error);
     return bodyFields;
   }
 }
@@ -1532,10 +1489,6 @@ function generateReportStructure(
             Column: fieldLabel,
             Order: sortItem.sort_order === "asc" ? "Asc" : "Desc",
           });
-        } else {
-          console.warn(
-            `⚠️ Sort field "${sortItem.field}" (label: "${fieldLabel}") not found in body fields`
-          );
         }
       });
     }
