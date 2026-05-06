@@ -772,11 +772,83 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
           {/* Preview area */}
           <div className="flex-1 overflow-auto bg-gray-100 relative">
             {isGenerating ? (
-              /* ── White skeleton + floating log overlay ── */
-              <div className="flex items-start justify-center min-h-full pt-8 pb-8 relative">
-                {/* A4 paper skeleton — mirrors the actual report layout */}
+              /* ── Log panel above skeleton, both centered ── */
+              <div className="flex flex-col items-center min-h-full pt-8 pb-8 px-4 gap-5">
+
+                {/* ── Log card — centered above the paper ── */}
+                <div className="w-[210mm] max-w-full bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg overflow-hidden">
+                  {/* Card header */}
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                    <div className="relative flex h-5 w-5 items-center justify-center shrink-0">
+                      <Loader2 size={13} className="animate-spin text-blue-500" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-700 flex-1">Generating Report…</p>
+                    <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-slate-100 px-1.5 py-0.5 rounded-full">
+                      {generationLogs.length} steps
+                    </span>
+                  </div>
+
+                  {/* Log stream */}
+                  <div
+                    className="overflow-y-auto p-3 space-y-1.5"
+                    style={{ maxHeight: "180px" }}
+                    ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+                  >
+                    {generationLogs.length === 0 ? (
+                      <div className="flex items-center gap-2 py-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                        <p className="text-[11px] text-slate-400 italic">Initialising engine…</p>
+                      </div>
+                    ) : (
+                      generationLogs.map((line, i) => {
+                        const isSuccess = line.startsWith("✅");
+                        const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
+                        const isError = line.startsWith("❌");
+                        const isLast = i === generationLogs.length - 1;
+                        return (
+                          <div
+                            key={i}
+                            className="flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-200"
+                          >
+                            {/* Status dot */}
+                            <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
+                              isSuccess ? "bg-emerald-500" :
+                              isWarning ? "bg-amber-400" :
+                              isError ? "bg-red-500" :
+                              isLast ? "bg-blue-500 animate-pulse" :
+                              "bg-slate-300"
+                            }`} />
+                            <span className={`text-[10.5px] leading-relaxed ${
+                              isSuccess ? "text-emerald-600 font-medium" :
+                              isWarning ? "text-amber-600" :
+                              isError ? "text-red-600 font-medium" :
+                              isLast ? "text-slate-700 font-medium" :
+                              "text-slate-500"
+                            }`}>
+                              {line.replace(/^[✅❌⚠️]\s*/, "")}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="h-0.5 bg-slate-100">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
+                      style={{
+                        width: generationLogs.length === 0 ? "5%" :
+                          `${Math.min(95, (generationLogs.length / 15) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* ── A4 paper skeleton ── */}
                 <div
-                  className="bg-white shadow-xl relative overflow-hidden"
+                  className="bg-white shadow-xl relative overflow-hidden shrink-0"
                   style={{ width: "210mm", minHeight: "297mm", padding: "10mm 14mm", boxSizing: "border-box" }}
                 >
                   {/* Shimmer overlay */}
@@ -860,82 +932,6 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                         ))}
                       </div>
                     ))}
-                  </div>
-                </div>
-
-                {/* ── Floating log card — overlaid on top-right of the paper ── */}
-                <div
-                  className="absolute top-10 right-6 w-80 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-2xl overflow-hidden"
-                  style={{ maxHeight: "calc(100% - 5rem)" }}
-                >
-                  {/* Card header */}
-                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-                    <div className="relative flex h-5 w-5 items-center justify-center shrink-0">
-                      <Loader2 size={13} className="animate-spin text-blue-500" />
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
-                    </div>
-                    <p className="text-xs font-bold text-slate-700 flex-1">Generating Report</p>
-                    <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-slate-100 px-1.5 py-0.5 rounded-full">
-                      {generationLogs.length}
-                    </span>
-                  </div>
-
-                  {/* Log stream */}
-                  <div
-                    className="overflow-y-auto p-3 space-y-1.5"
-                    style={{ maxHeight: "380px" }}
-                    ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
-                  >
-                    {generationLogs.length === 0 ? (
-                      <div className="flex items-center gap-2 py-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                        <p className="text-[11px] text-slate-400 italic">Initialising engine…</p>
-                      </div>
-                    ) : (
-                      generationLogs.map((line, i) => {
-                        const isSuccess = line.startsWith("✅");
-                        const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
-                        const isError = line.startsWith("❌");
-                        const isLast = i === generationLogs.length - 1;
-                        return (
-                          <div
-                            key={i}
-                            className="flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-200"
-                          >
-                            {/* Status dot */}
-                            <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
-                              isSuccess ? "bg-emerald-500" :
-                              isWarning ? "bg-amber-400" :
-                              isError ? "bg-red-500" :
-                              isLast ? "bg-blue-500 animate-pulse" :
-                              "bg-slate-300"
-                            }`} />
-                            <span className={`text-[10.5px] leading-relaxed ${
-                              isSuccess ? "text-emerald-600 font-medium" :
-                              isWarning ? "text-amber-600" :
-                              isError ? "text-red-600 font-medium" :
-                              isLast ? "text-slate-700 font-medium" :
-                              "text-slate-500"
-                            }`}>
-                              {/* Strip emoji prefix for cleaner look */}
-                              {line.replace(/^[✅❌⚠️]\s*/, "")}
-                            </span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {/* Progress bar at bottom */}
-                  <div className="h-0.5 bg-slate-100">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
-                      style={{
-                        width: generationLogs.length === 0 ? "5%" :
-                          `${Math.min(95, (generationLogs.length / 15) * 100)}%`,
-                        animation: generationLogs.length === 0 ? "pulse 1.5s infinite" : undefined,
-                      }}
-                    />
                   </div>
                 </div>
               </div>

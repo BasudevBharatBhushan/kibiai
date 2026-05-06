@@ -140,23 +140,7 @@ export async function POST(
 
     const { persist_to_template } = parsed.data;
 
-    // 7. Persist to template if requested (e.g. from Builder/Admin context)
-    if (persist_to_template) {
-      const { error: updateError } = await supabase
-        .from("report_templates")
-        .update({
-          report_template_data_json: reportStructureJson,
-          updated_on: new Date().toISOString(),
-        })
-        .eq("report_template_id", template_id)
-        .eq("company_id", session.companyId);
-
-      if (updateError) {
-        console.error("[POST /api/templates/[id]/generate] persist error:", updateError);
-      }
-    }
-
-    // 8. Look up the actual users.user_id (FK target) from the users table
+    // 7. Look up the actual users.user_id (FK target) from the users table
     //    session.accountId = auth_accounts.account_id, NOT users.user_id
     let generatedByUserId: string | null = null;
     if (session.accountId && session.companyId) {
@@ -169,23 +153,74 @@ export async function POST(
       generatedByUserId = userRow?.user_id ?? null;
     }
 
-    // 8. Always save to reports history (auto-save on every generation)
-    const { data: saved, error: saveError } = await supabase
-      .from("reports")
-      .insert({
-        company_id: session.companyId,
-        report_template_id: template_id,
-        report_name: reportHeading,
-        report_config_json: configJson,
-        report_data_json: reportStructureJson,
-        generated_by_user_id: generatedByUserId,
-      })
-      .select("report_id")
-      .single();
+    let savedReportId: string | null = null;
+    let savedVersionId: string | null = null;
 
-    if (saveError) {
-      // Non-fatal — log but still return the report data so the user sees results
-      console.error("[POST /api/templates/[id]/generate] auto-save error:", saveError.message, saveError.details, saveError.hint);
+    if (persist_to_template) {
+      // ── ADMIN CONFIGURATOR: persist preview + create a template version ──────
+      const { error: updateError } = await supabase
+        .from("report_templates")
+        .update({
+          report_template_data_json: reportStructureJson,
+          updated_on: new Date().toISOString(),
+        })
+        .eq("report_template_id", template_id)
+        .eq("company_id", session.companyId);
+
+      if (updateError) {
+        console.error("[generate] persist error:", updateError);
+      }
+
+      // Get next version number
+      const { data: maxVersionRow } = await supabase
+        .from("report_template_versions")
+        .select("version_number")
+        .eq("report_template_id", template_id)
+        .order("version_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const nextVersion = (maxVersionRow?.version_number ?? 0) + 1;
+
+      const { data: versionRow, error: versionError } = await supabase
+        .from("report_template_versions")
+        .insert({
+          report_template_id: template_id,
+          company_id: session.companyId,
+          version_number: nextVersion,
+          config_json: configJson,
+          preview_data_json: reportStructureJson,
+          changed_by_user_id: generatedByUserId,
+        })
+        .select("version_id")
+        .single();
+
+      if (versionError) {
+        console.error("[generate] version insert error:", versionError.message);
+      } else {
+        savedVersionId = versionRow?.version_id ?? null;
+      }
+    } else {
+      // ── USER GENERATE: create a reports record (history) ───────────────────
+      const { data: saved, error: saveError } = await supabase
+        .from("reports")
+        .insert({
+          company_id: session.companyId,
+          report_template_id: template_id,
+          report_name: reportHeading,
+          report_config_json: configJson,
+          report_data_json: reportStructureJson,
+          generated_by_user_id: generatedByUserId,
+        })
+        .select("report_id")
+        .single();
+
+      if (saveError) {
+        // Non-fatal — log but still return the report data so the user sees results
+        console.error("[generate] auto-save error:", saveError.message, saveError.details, saveError.hint);
+      } else {
+        savedReportId = saved?.report_id ?? null;
+      }
     }
 
     return NextResponse.json({
@@ -193,7 +228,8 @@ export async function POST(
       data: {
         report_structure_json: reportStructureJson,
         report_name: reportHeading,
-        report_id: saved?.report_id ?? null,
+        report_id: savedReportId,
+        version_id: savedVersionId,
       },
     });
   } catch (err: any) {

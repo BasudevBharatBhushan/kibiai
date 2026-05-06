@@ -14,7 +14,7 @@ const streamBodySchema = z.object({
     })
     .optional(),
   report_header: z.string().optional(),
-  persist_to_template: z.boolean().optional(),
+  persist_to_template: z.boolean().optional(), // true = admin configurator update
 });
 
 // ── Helper: encode a single SSE frame ─────────────────────────────────────────
@@ -26,10 +26,11 @@ function sseEvent(type: string, payload: Record<string, unknown>): Uint8Array {
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // ── POST /api/templates/[template_id]/generate/stream ─────────────────────────
-// Strategy: call the existing /api/generate-report engine normally (it already
-// returns processing_logs in its response), then replay those log lines back to
-// the browser progressively over an SSE stream so the user sees live progress.
-// Supports both user-generate (no persist) and admin-update (persist_to_template: true).
+// persist_to_template: true  → admin configurator "Update" flow
+//   - saves preview to report_templates
+//   - creates a report_template_versions record (NOT a reports record)
+// persist_to_template: false → user "Generate" flow
+//   - creates a reports record (history)
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ template_id: string }> }
@@ -73,7 +74,7 @@ export async function POST(
     return new Response(JSON.stringify({ error: "Template not found" }), { status: 404 });
   }
 
-  // ── Setup JSON with reusable setup_id fallback (mirrors /generate route) ─────
+  // ── Setup JSON with reusable setup_id fallback ─────────────────────────────
   let setupJson = template.report_template_setup_json as any;
   const isLocalEmpty =
     !setupJson ||
@@ -176,8 +177,11 @@ export async function POST(
           template.report_template_name ||
           "Report";
 
-        // Persist preview to template if requested (admin configurator "Update" flow)
+        let savedRecordId: string | null = null;
+
         if (persist_to_template) {
+          // ── ADMIN CONFIGURATOR: persist preview + create a template version ──
+          // 1. Update the template preview data
           const { error: persistError } = await supabase
             .from("report_templates")
             .update({
@@ -190,32 +194,72 @@ export async function POST(
           if (persistError) {
             console.error("[stream] persist error:", persistError);
           }
-        }
 
-        // Auto-save to reports history
-        const { data: saved, error: saveError } = await supabase
-          .from("reports")
-          .insert({
-            company_id: session.companyId,
-            report_template_id: template_id,
+          // 2. Get the current max version number for this template
+          const { data: maxVersionRow } = await supabase
+            .from("report_template_versions")
+            .select("version_number")
+            .eq("report_template_id", template_id)
+            .order("version_number", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const nextVersion = (maxVersionRow?.version_number ?? 0) + 1;
+
+          // 3. Insert a new version record
+          const { data: versionRow, error: versionError } = await supabase
+            .from("report_template_versions")
+            .insert({
+              report_template_id: template_id,
+              company_id: session.companyId,
+              version_number: nextVersion,
+              config_json: configJson,
+              preview_data_json: report_structure_json,
+              changed_by_user_id: generatedByUserId,
+            })
+            .select("version_id")
+            .single();
+
+          if (versionError) {
+            console.error("[stream] version insert error:", versionError.message);
+          } else {
+            savedRecordId = versionRow?.version_id ?? null;
+          }
+
+          enqueue(sseEvent("done", {
+            report_structure_json,
             report_name: reportHeading,
-            report_config_json: configJson,
-            report_data_json: report_structure_json,
-            generated_by_user_id: generatedByUserId,
-          })
-          .select("report_id")
-          .single();
+            version_id: savedRecordId,
+            report_id: null,
+          }));
+        } else {
+          // ── USER GENERATE: create a reports record ──────────────────────────
+          const { data: saved, error: saveError } = await supabase
+            .from("reports")
+            .insert({
+              company_id: session.companyId,
+              report_template_id: template_id,
+              report_name: reportHeading,
+              report_config_json: configJson,
+              report_data_json: report_structure_json,
+              generated_by_user_id: generatedByUserId,
+            })
+            .select("report_id")
+            .single();
 
-        if (saveError) {
-          console.error("[stream] auto-save error:", saveError.message);
+          if (saveError) {
+            console.error("[stream] auto-save error:", saveError.message);
+          } else {
+            savedRecordId = saved?.report_id ?? null;
+          }
+
+          enqueue(sseEvent("done", {
+            report_structure_json,
+            report_name: reportHeading,
+            report_id: savedRecordId,
+            version_id: null,
+          }));
         }
-
-        // Send the done event with the full report payload
-        enqueue(sseEvent("done", {
-          report_structure_json,
-          report_name: reportHeading,
-          report_id: saved?.report_id ?? null,
-        }));
 
       } catch (err: any) {
         enqueue(sseEvent("error", { message: err.message || "Report generation failed" }));
