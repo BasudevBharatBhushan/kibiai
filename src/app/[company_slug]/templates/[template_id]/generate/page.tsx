@@ -772,83 +772,11 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
           {/* Preview area */}
           <div className="flex-1 overflow-auto bg-gray-100 relative">
             {isGenerating ? (
-              /* ── Log panel above skeleton, both centered ── */
-              <div className="flex flex-col items-center min-h-full pt-8 pb-8 px-4 gap-5">
-
-                {/* ── Log card — centered above the paper ── */}
-                <div className="w-[210mm] max-w-full bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg overflow-hidden">
-                  {/* Card header */}
-                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-                    <div className="relative flex h-5 w-5 items-center justify-center shrink-0">
-                      <Loader2 size={13} className="animate-spin text-blue-500" />
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
-                    </div>
-                    <p className="text-xs font-bold text-slate-700 flex-1">Generating Report…</p>
-                    <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-slate-100 px-1.5 py-0.5 rounded-full">
-                      {generationLogs.length} steps
-                    </span>
-                  </div>
-
-                  {/* Log stream */}
-                  <div
-                    className="overflow-y-auto p-3 space-y-1.5"
-                    style={{ maxHeight: "180px" }}
-                    ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
-                  >
-                    {generationLogs.length === 0 ? (
-                      <div className="flex items-center gap-2 py-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                        <p className="text-[11px] text-slate-400 italic">Initialising engine…</p>
-                      </div>
-                    ) : (
-                      generationLogs.map((line, i) => {
-                        const isSuccess = line.startsWith("✅");
-                        const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
-                        const isError = line.startsWith("❌");
-                        const isLast = i === generationLogs.length - 1;
-                        return (
-                          <div
-                            key={i}
-                            className="flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-200"
-                          >
-                            {/* Status dot */}
-                            <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
-                              isSuccess ? "bg-emerald-500" :
-                              isWarning ? "bg-amber-400" :
-                              isError ? "bg-red-500" :
-                              isLast ? "bg-blue-500 animate-pulse" :
-                              "bg-slate-300"
-                            }`} />
-                            <span className={`text-[10.5px] leading-relaxed ${
-                              isSuccess ? "text-emerald-600 font-medium" :
-                              isWarning ? "text-amber-600" :
-                              isError ? "text-red-600 font-medium" :
-                              isLast ? "text-slate-700 font-medium" :
-                              "text-slate-500"
-                            }`}>
-                              {line.replace(/^[✅❌⚠️]\s*/, "")}
-                            </span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="h-0.5 bg-slate-100">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
-                      style={{
-                        width: generationLogs.length === 0 ? "5%" :
-                          `${Math.min(95, (generationLogs.length / 15) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* ── A4 paper skeleton ── */}
+              /* ── Generating view: A4 skeleton with glass log overlay floating on top ── */
+              <div className="flex items-start justify-center min-h-full pt-8 pb-8">
+                {/* A4 paper skeleton — log panel floats absolutely on top of this */}
                 <div
-                  className="bg-white shadow-xl relative overflow-hidden shrink-0"
+                  className="relative bg-white shadow-xl overflow-hidden"
                   style={{ width: "210mm", minHeight: "297mm", padding: "10mm 14mm", boxSizing: "border-box" }}
                 >
                   {/* Shimmer overlay */}
@@ -933,6 +861,69 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                       </div>
                     ))}
                   </div>
+                  {/* ── Log overlay — glass panel floating on top of skeleton ── */}
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-start pt-10 px-8 pointer-events-none">
+                    <div
+                      className="w-full pointer-events-auto rounded-2xl overflow-hidden"
+                      style={{
+                        background: "rgba(255,255,255,0.82)",
+                        backdropFilter: "blur(12px)",
+                        WebkitBackdropFilter: "blur(12px)",
+                        boxShadow: "0 4px 32px 0 rgba(30,41,59,0.10)",
+                        border: "1px solid rgba(203,213,225,0.7)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100/80">
+                        <div className="relative flex h-5 w-5 items-center justify-center shrink-0">
+                          <Loader2 size={13} className="animate-spin text-blue-500" />
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-700 flex-1">Generating Report…</p>
+                        <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-white/80 px-1.5 py-0.5 rounded-full">
+                          {generationLogs.length} steps
+                        </span>
+                      </div>
+                      <div
+                        className="overflow-y-auto px-4 py-3 space-y-1.5"
+                        style={{ maxHeight: "200px" }}
+                        ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+                      >
+                        {generationLogs.length === 0 ? (
+                          <div className="flex items-center gap-2 py-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                            <p className="text-[11px] text-slate-400 italic">Initialising engine…</p>
+                          </div>
+                        ) : (
+                          generationLogs.map((line, i) => {
+                            const isSuccess = line.startsWith("✅");
+                            const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
+                            const isError = line.startsWith("❌");
+                            const isLast = i === generationLogs.length - 1;
+                            return (
+                              <div key={i} className="flex items-start gap-2 animate-in fade-in duration-150">
+                                <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
+                                  isSuccess ? "bg-emerald-500" : isWarning ? "bg-amber-400" :
+                                  isError ? "bg-red-500" : isLast ? "bg-blue-500 animate-pulse" : "bg-slate-300"
+                                }`} />
+                                <span className={`text-[10.5px] leading-relaxed ${
+                                  isSuccess ? "text-emerald-700 font-medium" : isWarning ? "text-amber-700" :
+                                  isError ? "text-red-700 font-medium" : isLast ? "text-slate-800 font-medium" : "text-slate-500"
+                                }`}>
+                                  {line.replace(/^[✅❌⚠️]\s*/, "")}
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                      <div className="h-0.5 bg-slate-100/60">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-400 transition-all duration-500"
+                          style={{ width: generationLogs.length === 0 ? "5%" : `${Math.min(95, (generationLogs.length / 15) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : !reportData ? (
@@ -945,7 +936,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
               </div>
             ) : (
               <div className="h-full">
-                <DynamicReport jsonData={reportData} />
+                <DynamicReport jsonData={reportData!} />
               </div>
             )}
           </div>

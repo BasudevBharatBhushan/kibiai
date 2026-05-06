@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   PanelLeft,
   PanelRight,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { useHeader } from "@/context/HeaderContext";
@@ -413,7 +414,8 @@ function ConfiguratorPageContent({
       >
         {state.isLoading ? (
           <div className="w-full h-full flex justify-center py-8">
-            <div className="w-full max-w-[210mm] aspect-[1/1.414] bg-white shadow-sm rounded-sm p-12 space-y-8 animate-pulse">
+            {/* A4 paper skeleton — log overlay floats on top */}
+            <div className="relative w-full max-w-[210mm] aspect-[1/1.414] bg-white shadow-sm rounded-sm p-12 space-y-8 animate-pulse overflow-hidden">
               <div className="flex justify-between items-center">
                 <div className="h-6 w-32 bg-slate-100 rounded" />
                 <div className="h-10 w-48 bg-slate-100 rounded" />
@@ -426,6 +428,70 @@ function ConfiguratorPageContent({
               <div className="border-t border-slate-100 pt-8 space-y-4">
                 <div className="h-32 w-full bg-slate-50 rounded" />
                 <div className="h-32 w-full bg-slate-50 rounded" />
+              </div>
+
+              {/* Glass log overlay */}
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-start pt-8 px-6 pointer-events-none">
+                <div
+                  className="w-full pointer-events-auto rounded-2xl overflow-hidden"
+                  style={{
+                    background: "rgba(255,255,255,0.82)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    boxShadow: "0 4px 32px 0 rgba(30,41,59,0.10)",
+                    border: "1px solid rgba(203,213,225,0.7)",
+                  }}
+                >
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100/80">
+                    <div className="relative flex h-5 w-5 items-center justify-center shrink-0">
+                      <Loader2 size={13} className="animate-spin text-blue-500" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-700 flex-1">Generating Preview…</p>
+                    <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-white/80 px-1.5 py-0.5 rounded-full">
+                      {state.processingLogs.length} steps
+                    </span>
+                  </div>
+                  <div
+                    className="overflow-y-auto px-4 py-3 space-y-1.5"
+                    style={{ maxHeight: "160px" }}
+                    ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+                  >
+                    {state.processingLogs.length === 0 ? (
+                      <div className="flex items-center gap-2 py-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                        <p className="text-[11px] text-slate-400 italic">Initialising engine…</p>
+                      </div>
+                    ) : (
+                      state.processingLogs.map((line, i) => {
+                        const isSuccess = line.startsWith("✅");
+                        const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
+                        const isError = line.startsWith("❌");
+                        const isLast = i === state.processingLogs.length - 1;
+                        return (
+                          <div key={i} className="flex items-start gap-2 animate-in fade-in duration-150">
+                            <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
+                              isSuccess ? "bg-emerald-500" : isWarning ? "bg-amber-400" :
+                              isError ? "bg-red-500" : isLast ? "bg-blue-500 animate-pulse" : "bg-slate-300"
+                            }`} />
+                            <span className={`text-[10.5px] leading-relaxed ${
+                              isSuccess ? "text-emerald-700 font-medium" : isWarning ? "text-amber-700" :
+                              isError ? "text-red-700 font-medium" : isLast ? "text-slate-800 font-medium" : "text-slate-500"
+                            }`}>
+                              {line.replace(/^[✅❌⚠️]\s*/, "")}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="h-0.5 bg-slate-100/60">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-400 transition-all duration-500"
+                      style={{ width: state.processingLogs.length === 0 ? "5%" : `${Math.min(95, (state.processingLogs.length / 15) * 100)}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

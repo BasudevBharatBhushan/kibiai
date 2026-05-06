@@ -8,7 +8,7 @@ import { validateConfig } from "@/lib/utils/reportValidation";
 import { apiClient } from "@/utils/apiClient";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Loader2, BarChart3, Info, Zap, CheckCircle2 } from "lucide-react";
+import { Loader2, BarChart3, Info, Zap } from "lucide-react";
 
 // Components
 import { HeaderSection } from "@/components/report-builder/HeaderSection";
@@ -26,8 +26,6 @@ export function ReportConfigurator() {
   const { state, dispatch } = useReport();
   const [showJson, setShowJson] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [generationLogs, setGenerationLogs] = useState<string[]>([]);
-  const [showLogPanel, setShowLogPanel] = useState(false);
   const { addToast } = useToast();
   const params = useParams();
   const slug = params?.company_slug as string | undefined;
@@ -50,8 +48,8 @@ export function ReportConfigurator() {
     abortRef.current = controller;
 
     setIsSaving(true);
-    setGenerationLogs([]);
-    setShowLogPanel(true);
+    // Clear logs and signal loading in context so configurator page shows overlay
+    dispatch({ type: "SET_PROCESSING_LOGS", payload: [] });
     dispatch({ type: "SET_LOADING", payload: true });
 
     try {
@@ -80,6 +78,7 @@ export function ReportConfigurator() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      const logs: string[] = [];
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -97,7 +96,9 @@ export function ReportConfigurator() {
           try { event = JSON.parse(line); } catch { continue; }
 
           if (event.type === "log") {
-            setGenerationLogs(prev => [...prev, event.message as string]);
+            logs.push(event.message as string);
+            // Push every new log line to context so overlay updates live
+            dispatch({ type: "SET_PROCESSING_LOGS", payload: [...logs] });
           } else if (event.type === "done") {
             const structured = event.report_structure_json;
             if (structured) {
@@ -167,88 +168,6 @@ export function ReportConfigurator() {
            <Info size={14} /> JSON
          </button>
       </div>
-
-      {/* --- LIVE LOG PANEL (shown during generation) --- */}
-      {showLogPanel && (
-        <div className="mx-4 mt-3 rounded-xl border border-slate-200 bg-white shadow-md overflow-hidden shrink-0">
-          {/* Panel header */}
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-            <div className="relative flex h-4 w-4 items-center justify-center shrink-0">
-              {isSaving
-                ? <Loader2 size={12} className="animate-spin text-blue-500" />
-                : <CheckCircle2 size={12} className="text-emerald-500" />
-              }
-            </div>
-            <p className="text-[11px] font-bold text-slate-700 flex-1">
-              {isSaving ? "Generating Preview…" : "Preview Updated"}
-            </p>
-            <span className="text-[10px] text-slate-400 tabular-nums font-medium bg-slate-100 px-1.5 py-0.5 rounded-full">
-              {generationLogs.length} steps
-            </span>
-            {!isSaving && (
-              <button
-                onClick={() => { setShowLogPanel(false); setGenerationLogs([]); }}
-                className="text-[10px] text-slate-400 hover:text-slate-600 transition-colors ml-1"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Log stream */}
-          <div
-            className="overflow-y-auto p-2.5 space-y-1"
-            style={{ maxHeight: "160px" }}
-            ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
-          >
-            {generationLogs.length === 0 ? (
-              <div className="flex items-center gap-1.5 py-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
-                <p className="text-[10px] text-slate-400 italic">Saving configuration…</p>
-              </div>
-            ) : (
-              generationLogs.map((line, i) => {
-                const isSuccess = line.startsWith("✅");
-                const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
-                const isError = line.startsWith("❌");
-                const isLast = i === generationLogs.length - 1 && isSaving;
-                return (
-                  <div key={i} className="flex items-start gap-1.5 animate-in fade-in duration-150">
-                    <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
-                      isSuccess ? "bg-emerald-500" :
-                      isWarning ? "bg-amber-400" :
-                      isError ? "bg-red-500" :
-                      isLast ? "bg-blue-500 animate-pulse" :
-                      "bg-slate-300"
-                    }`} />
-                    <span className={`text-[10px] leading-relaxed ${
-                      isSuccess ? "text-emerald-600 font-medium" :
-                      isWarning ? "text-amber-600" :
-                      isError ? "text-red-600 font-medium" :
-                      isLast ? "text-slate-700 font-medium" :
-                      "text-slate-500"
-                    }`}>
-                      {line.replace(/^[✅❌⚠️]\s*/, "")}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Progress bar */}
-          <div className="h-0.5 bg-slate-100">
-            <div
-              className={`h-full transition-all duration-500 ${isSaving ? "bg-gradient-to-r from-blue-500 to-indigo-500" : "bg-emerald-400"}`}
-              style={{
-                width: isSaving
-                  ? generationLogs.length === 0 ? "5%" : `${Math.min(90, (generationLogs.length / 15) * 100)}%`
-                  : "100%",
-              }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* --- SCROLLABLE CONTENT --- */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-12 scrollbar-minimal">

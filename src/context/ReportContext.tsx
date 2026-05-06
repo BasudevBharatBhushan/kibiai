@@ -64,7 +64,8 @@ type Action =
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "LOAD_FULL_REPORT"; payload: { config: ReportConfig; setup: ReportSetup; templateId: string; conversationId?: string | null } }
   | { type: "SET_CONVERSATION_ID"; payload: string | null }
-  | { type: "SET_REPORT_PREVIEW"; payload: any[] };
+  | { type: "SET_REPORT_PREVIEW"; payload: any[] }
+  | { type: "SET_PROCESSING_LOGS"; payload: string[] };
 
 
 
@@ -75,6 +76,7 @@ interface ReportState {
   templateId: string | null;     // Supabase UUID (replaces fmRecordId)
   conversationId: string | null; // OpenAI thread ID
   isLoading: boolean;
+  processingLogs: string[];
   reportPreview: any | null; 
 }
 
@@ -84,6 +86,7 @@ const initialState: ReportState = {
   templateId: null,
   conversationId: null,
   isLoading: false,
+  processingLogs: [],
   reportPreview: null,
   config: {
     report_header: "",
@@ -548,6 +551,9 @@ case "SYNC_DATE_RANGES":
 
     case "SET_REPORT_PREVIEW":
       return { ...state, reportPreview: action.payload };  
+
+    case "SET_PROCESSING_LOGS":
+      return { ...state, processingLogs: action.payload };
 
     default:
       return state;
