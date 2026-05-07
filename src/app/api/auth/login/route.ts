@@ -82,20 +82,39 @@ export async function POST(req: Request) {
     }
 
     // 4. Create session
-    await createSession({
+    const jwt = await createSession({
       accountId: account.account_id,
       email: account.email,
       accountType: account.account_type as any,
       companyId: sessionCompanyId
     });
 
-    return NextResponse.json({ 
+    const isProd = process.env.NODE_ENV === 'production';
+    const host = req.headers.get('host') || '';
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+
+    // Create the response
+    const response = NextResponse.json({ 
       success: true, 
       user: { 
         email: account.email, 
         accountType: account.account_type 
       } 
     });
+
+    // Manually set the cookie header for maximum reliability in API routes
+    const cookieOptions = [
+      `kibiai_session=${jwt}`,
+      `Max-Age=${60 * 60 * 24 * 30}`,
+      `Path=/`,
+      `HttpOnly`,
+      `SameSite=Lax`,
+      isProd && !isLocalhost ? `Secure` : '',
+    ].filter(Boolean).join('; ');
+
+    response.headers.set('Set-Cookie', cookieOptions);
+
+    return response;
 
   } catch (err: any) {
     console.error("Login error:", err);

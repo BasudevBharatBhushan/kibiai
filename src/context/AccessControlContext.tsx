@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import { apiClient } from "@/utils/apiClient";
+import { useCompany } from "@/components/providers/CompanyProvider";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -102,6 +103,7 @@ export function AccessControlProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { company, isLoading: isCompanyLoading } = useCompany();
   const [userId, setUserId] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
@@ -117,8 +119,14 @@ export function AccessControlProvider({
 
   useEffect(() => {
     const load = async () => {
+      if (isCompanyLoading) return;
+      
       setIsLoading(true);
       try {
+        const url = company?.id 
+          ? `/api/user/permissions?company_id=${company.id}`
+          : "/api/user/permissions";
+
         const res = await apiClient.get<{
           success: boolean;
           user: {
@@ -128,7 +136,7 @@ export function AccessControlProvider({
             module_access: ModuleAccess[];
             template_permissions: TemplatePermission[];
           };
-        }>("/api/user/permissions");
+        }>(url);
 
         if (res.success && res.user) {
           const { user } = res;
@@ -198,7 +206,7 @@ export function AccessControlProvider({
     };
 
     load();
-  }, []);
+  }, [company?.id, isCompanyLoading]);
 
   // ── Idle Detection ────────────────────────────────────────────────────────
   useEffect(() => {

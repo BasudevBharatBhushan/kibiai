@@ -323,6 +323,7 @@ function ChartBuilderWorkspace({
           pKey: crypto.randomUUID(),
           chart_title: "Business Insights",
           chart_type: "insight",
+          insight_plan: plan,
           insight_results: results,
           response_to_user: plan.response_to_user,
         };
@@ -408,6 +409,7 @@ function ChartBuilderWorkspace({
               chart_title: "Business Insights",
               chart_type: "insight",
               business_insights: item.business_insights,
+              insight_plan: item.insight_plan, // If the chart copilot also returns a plan
               response_to_user: item.response_to_user,
             };
 
@@ -666,6 +668,28 @@ function ChartBuilderPageContent() {
       return schema;
     });
   }, [pageData]);
+  
+  const insightContext = useMemo(() => {
+    if (!pageData?.report_template_config_json?.date_range_fields) return undefined;
+    const dateRanges = pageData.report_template_config_json.date_range_fields as Record<string, Record<string, string>>;
+    
+    for (const tableFields of Object.values(dateRanges)) {
+      for (const rangeStr of Object.values(tableFields)) {
+        const parts = rangeStr.split("...");
+        if (parts.length === 2) {
+          const startD = new Date(parts[0]);
+          const endD = new Date(parts[1]);
+          if (!isNaN(startD.getTime()) && !isNaN(endD.getTime())) {
+            return {
+              reportStart: `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`,
+              reportEnd: `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`,
+            };
+          }
+        }
+      }
+    }
+    return undefined;
+  }, [pageData]);
 
   useEffect(() => {
     if (!templateId || !slug) return;
@@ -727,6 +751,7 @@ function ChartBuilderPageContent() {
       initialCanvasState={pageData.canvasState}
       initialLayoutMode={pageData.layoutMode}
       templateId={templateId}
+      context={insightContext}
     >
       <ChartBuilderWorkspace
         templateId={templateId}

@@ -22,9 +22,10 @@ export const dynamic = "force-dynamic";
  * Superadmins (roles.is_super_admin = true) receive full-access
  * permissions on every template in the company.
  */
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getSession();
+    console.log("[PERMISSIONS API] Session fetched:", session);
 
     // Allow both company_user AND platform_admin — platform admins can also
     // have a company workspace association (e.g. the company owner who is
@@ -36,7 +37,11 @@ export async function GET() {
       );
     }
 
-    const { accountId, email, companyId } = session;
+    const { searchParams } = new URL(req.url);
+    const companyId = searchParams.get("company_id") || session.companyId;
+    const { accountId, email } = session;
+
+    console.log("[PERMISSIONS API] companyId:", companyId, "accountId:", accountId, "email:", email);
 
     if (!companyId) {
       return NextResponse.json(
@@ -55,7 +60,7 @@ export async function GET() {
     let user: any = null;
 
     if (accountId) {
-      const { data } = await adminClient
+      const { data, error } = await adminClient
         .from("users")
         .select(
           `
@@ -80,7 +85,8 @@ export async function GET() {
 
     // Fallback: look up by email
     if (!user && email) {
-      const { data } = await adminClient
+      console.log("[PERMISSIONS API] Falling back to email lookup:", email);
+      const { data, error: emailError } = await adminClient
         .from("users")
         .select(
           `
@@ -103,12 +109,56 @@ export async function GET() {
       if (data) user = data;
     }
 
+    if (!user && (session as any).accountType === "platform_admin") {
+      console.log("[PERMISSIONS API] Trying platform admin auto-provisioning");
+      // Platform Admins should have access to every company. 
+      // If no user record exists yet for this company, auto-provision one.
+      const { data: saRole } = await adminClient
+        .from("roles")
+        .select("role_id")
+        .eq("company_id", companyId)
+        .eq("role_name", "Superadmin")
+        .maybeSingle();
+
+      if (saRole) {
+        const { data: newUser } = await adminClient
+          .from("users")
+          .insert({
+            account_id: accountId,
+            company_id: companyId,
+            role_id: saRole.role_id,
+            user_email: email,
+            full_name: "Platform Admin",
+            user_status: "Active",
+          })
+          .select(
+            `
+            user_id,
+            account_id,
+            user_email,
+            company_id,
+            role_id,
+            roles:role_id (
+              role_id,
+              role_name,
+              is_super_admin
+            )
+          `
+          )
+          .maybeSingle();
+
+        if (newUser) user = newUser;
+      }
+    }
+
     if (!user) {
       return NextResponse.json(
         { success: false, error: "User not found in company workspace" },
         { status: 404 }
       );
     }
+
+    console.log("[PERMISSIONS API] User authorized successfully");
 
     const roleData = Array.isArray(user.roles) ? user.roles[0] : user.roles;
     const isSuperAdmin = (roleData as any)?.is_super_admin === true;

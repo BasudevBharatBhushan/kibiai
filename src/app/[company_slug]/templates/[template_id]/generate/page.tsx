@@ -11,7 +11,7 @@ import { DashboardProvider } from "@/context/DashboardContext";
 import DashboardGrid from "@/components/chart-dashboard/DashboardGrid";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import DynamicReport from "@/components/DynamicReportPreview";
-import type { ReportChartSchema } from "@/lib/charts/ChartTypes";
+import type { ReportChartSchema, InsightContext } from "@/lib/charts/ChartTypes";
 import { extractBodyRows } from "@/lib/charts/supabaseAdapters";
 import {
   Zap, Loader2, SlidersHorizontal, BarChart3,
@@ -21,6 +21,29 @@ import {
 import React from "react";
 
 import { FILTER_OPERATORS } from "@/constants/reportOptions";
+
+// ── Extract date range from historical report body rows ───────────────────────
+// Scans every body row for any date-like field to derive the report's
+// reportStart / reportEnd. This is used to activate isViewerMode in DataProcessor
+// so that hardcoded absolute date filters in chart schemas are bypassed.
+function extractReportDateRange(rows: Record<string, unknown>[]): InsightContext | undefined {
+  const dates: Date[] = [];
+  rows.forEach(row => {
+    for (const val of Object.values(row)) {
+      if (!val || typeof val !== 'string') continue;
+      const d = new Date(val);
+      if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
+        dates.push(d);
+      }
+    }
+  });
+  if (!dates.length) return undefined;
+  dates.sort((a, b) => a.getTime() - b.getTime());
+  return {
+    reportStart: dates[0].toISOString().split('T')[0],
+    reportEnd: dates[dates.length - 1].toISOString().split('T')[0],
+  };
+}
 
 // ── Ad-hoc filter row ──────────────────────────────────────────────────────────
 interface AdHocFilter { id: string; table: string; field: string; operator: string; value: string; }
@@ -224,7 +247,11 @@ function SavedReportsList({ templateId, onLoad }: {
 }
 
 // ── Chart Modal (full interactive — drag/resize/type change) ───────────────────
-function ChartModal({ open, onClose, schemas, canvasState, rows, layoutMode, templateId }: {
+// React.memo prevents this from re-rendering on every parent state change,
+// which was causing DashboardProvider to unmount/remount in a loop.
+const ChartModal = React.memo(function ChartModal({
+  open, onClose, schemas, canvasState, rows, layoutMode, templateId, context
+}: {
   open: boolean;
   onClose: () => void;
   schemas: ReportChartSchema[];
@@ -232,11 +259,15 @@ function ChartModal({ open, onClose, schemas, canvasState, rows, layoutMode, tem
   rows: any[];
   layoutMode: string;
   templateId: string;
+  context?: InsightContext;
 }) {
-  if (!open) return null;
-
+  // Use visibility/display toggle rather than unmounting so DashboardProvider
+  // (and the WidthProvider inside it) stays mounted and doesn't cascade re-renders
   return (
-    <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col">
+    <div
+      className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col"
+      style={{ display: open ? 'flex' : 'none' }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between bg-white border-b border-slate-200 px-6 py-3.5 shrink-0">
         <div className="flex items-center gap-3">
@@ -276,15 +307,16 @@ function ChartModal({ open, onClose, schemas, canvasState, rows, layoutMode, tem
             </p>
           </div>
         ) : (
-          // Full interactive DashboardProvider — same as admin chart builder
-          // isViewerMode is intentionally omitted (defaults to false)
-          // so drag-drop, resize, and chart-type switching all work
+          // When context is present this is a historical report view:
+          // isViewerMode disables auto-save while context bypasses stale date filters.
           <DashboardProvider
             initialSchemas={schemas}
             initialDataset={rows}
             initialCanvasState={canvasState}
             initialLayoutMode={layoutMode}
             templateId={templateId}
+            context={context}
+            isViewerMode={!!context}
           >
             <DashboardGrid />
           </DashboardProvider>
@@ -292,7 +324,7 @@ function ChartModal({ open, onClose, schemas, canvasState, rows, layoutMode, tem
       </div>
     </div>
   );
-}
+});
 
 // ── Main Page Content ──────────────────────────────────────────────────────────
 function GeneratePageContent({ templateId, slug }: { templateId: string; slug: string }) {
@@ -324,6 +356,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
   const [chartLayoutMode, setChartLayoutMode] = useState("grid");
   const [chartRows, setChartRows] = useState<any[]>([]);
   const [chartSchemasFetched, setChartSchemasFetched] = useState(false);
+  const [viewerContext, setViewerContext] = useState<InsightContext | undefined>(undefined);
 
   // Filter state
   const [dateRanges, setDateRanges] = useState<Record<string, Record<string, { from: string; to: string }>>>({});
@@ -536,6 +569,8 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
             setReportData(structured);
             setSavedReportName(heading);
             dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+            // Fresh generation — clear any historical viewer context so date filters apply normally
+            setViewerContext(undefined);
 
             historyRefreshKey.current++;
             setHistoryKey(historyRefreshKey.current);
@@ -757,7 +792,11 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                       : null;
                     setSavedReportName(heading || templateName || "");
                     dispatch({ type: "SET_REPORT_PREVIEW", payload: data });
-                    setChartRows(extractBodyRows(data));
+                    const rows = extractBodyRows(data);
+                    setChartRows(rows);
+                    // Derive report date range to activate viewer mode in DataProcessor
+                    // This bypasses hardcoded absolute date filters in chart schemas
+                    setViewerContext(extractReportDateRange(rows));
                   }}
                 />
               </CollapsibleSection>
@@ -965,6 +1004,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
         rows={chartRows}
         layoutMode={chartLayoutMode}
         templateId={templateId}
+        context={viewerContext}
       />
     </>
   );

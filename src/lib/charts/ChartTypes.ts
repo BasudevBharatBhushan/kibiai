@@ -39,6 +39,11 @@ export interface RawDataItem {
   [key: string]: string | number | undefined;
 }
 
+export interface InsightContext {
+  reportStart?: string;
+  reportEnd?: string;
+}
+
 // Report Chart Schema Interface
 export interface ReportChartSchema {
   pKey: string;                
@@ -53,6 +58,7 @@ export interface ReportChartSchema {
   filters?: string[];            
   
   business_insights?: string[]; 
+  insight_plan?: any; // AIInsightPlan
   insight_results?: any[];
   insight_date_range?: {
     field: string;

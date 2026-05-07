@@ -72,6 +72,7 @@ interface DashboardProviderProps {
   initialLayoutMode?: string;   
   templateId?: string;
   isViewerMode?: boolean;
+  context?: import('@/lib/charts/ChartTypes').InsightContext;
   onNewChart?: (schema: ReportChartSchema) => void;
 }
 
@@ -95,6 +96,7 @@ export function DashboardProvider({
   initialLayoutMode = 'grid',
   templateId,
   isViewerMode = false,
+  context,
   onNewChart,
 }: DashboardProviderProps) {
   
@@ -106,8 +108,10 @@ export function DashboardProvider({
   const [isMounted, setIsMounted] = useState(false);
   const [dataset, setDataset] = useState<any[]>(initialDataset);
 
-  // Refs
+  // Refs — prevent processData running more than once per data-source change
   const hasInitialized = useRef(false);
+  const prevSchemasRef = useRef<ReportChartSchema[]>(initialSchemas);
+  const prevDatasetRef = useRef<any[]>(initialDataset);
 
   // --- DERIVED DATA ---
   
@@ -128,98 +132,102 @@ export function DashboardProvider({
   useEffect(() => {
     setIsMounted(true);
 
-    if (hasInitialized.current) return;
+    if (!initialSchemas || initialSchemas.length === 0) {
+      console.warn("[Ctx] Skipping init: No schemas provided");
+      return;
+    }
+
+    // Guard: only re-run processData when the actual data source changes (schemas or dataset),
+    // not on every re-render caused by internal state changes (context, layoutMode, canvasState).
+    const schemasChanged = initialSchemas !== prevSchemasRef.current;
+    const datasetChanged = initialDataset !== prevDatasetRef.current;
+    if (hasInitialized.current && !schemasChanged && !datasetChanged) {
+      return;
+    }
+    prevSchemasRef.current = initialSchemas;
+    prevDatasetRef.current = initialDataset;
+    hasInitialized.current = true;
 
     console.log("[Ctx] Init START", { 
       schemaCount: initialSchemas?.length, 
       datasetCount: initialDataset?.length, 
-      canvasState: initialCanvasState 
+      context 
     });
 
-    if (initialSchemas && initialSchemas.length > 0) {
-      // 1. Process Data
-      const processed = processData(initialDataset || [], initialSchemas);
-      console.log("[Ctx] Processed Charts:", processed.map(c => ({ id: c.id, title: c.title, isActive: c.isActive })));
+    // 1. Process Data — context passed here so viewer-mode filter bypass applies
+    const processed = processData(initialDataset || [], initialSchemas, context);
+    console.log("[Ctx] Processed Charts:", processed.map(c => ({ id: c.id, title: c.title, isActive: c.isActive })));
 
-      // 2. Assign Defaults
-      const defaultW = PROCESSOR_DEFAULTS?.LAYOUT_WIDTH || 6;
-      const defaultH = PROCESSOR_DEFAULTS?.LAYOUT_HEIGHT || 9;
+    // 2. Assign Defaults
+    const defaultW = PROCESSOR_DEFAULTS?.LAYOUT_WIDTH || 6;
+    const defaultH = PROCESSOR_DEFAULTS?.LAYOUT_HEIGHT || 9;
 
-      let finalCharts = processed.map((c, i) => ({
-        ...c,
-        colors: COLOR_PALETTES[i % COLOR_PALETTES.length],
-        layout: { 
-          x: (i % 2) * defaultW, 
-          y: Math.floor(i / 2) * defaultH, 
-          w: defaultW, 
-          h: defaultH, 
-          i: c.id 
+    let finalCharts = processed.map((c, i) => ({
+      ...c,
+      colors: COLOR_PALETTES[i % COLOR_PALETTES.length],
+      layout: { 
+        x: (i % 2) * defaultW, 
+        y: Math.floor(i / 2) * defaultH, 
+        w: defaultW, 
+        h: defaultH, 
+        i: c.id 
+      }
+    }));
+
+    // 3. Visibility
+    let initialVisibleIds = new Set(processed.filter(c => c.isActive).map(c => c.id));
+
+    // 4. Merge Saved State
+    if (initialCanvasState && Array.isArray(initialCanvasState) && initialCanvasState.length > 0) {
+      const isValidLayout = (l: any) =>
+        l &&
+        Number.isFinite(l.x) &&
+        Number.isFinite(l.y) &&
+        Number.isFinite(l.w) &&
+        Number.isFinite(l.h);
+
+      finalCharts = finalCharts.map(chart => {
+        const saved = initialCanvasState.find((s: any) => s.id === chart.id);
+        if (!saved) return chart;
+
+        const mergedLayout = isValidLayout(saved.layout)
+          ? {
+              ...chart.layout,
+              ...saved.layout,
+              i: chart.id,
+              w: saved.layout?.w ?? chart.layout?.w ?? defaultW,
+              h: saved.layout?.h ?? chart.layout?.h ?? defaultH,
+            }
+          : chart.layout;
+
+        return { ...chart, layout: mergedLayout, kind: saved.kind ?? chart.kind };
+      });
+
+      const existingIds = new Set(finalCharts.map(c => c.id));
+      const savedActiveIds = initialCanvasState
+        .filter((s: any) => s.isActive !== false)
+        .map((s: any) => s.id)
+        .filter(Boolean);
+        
+      initialVisibleIds = new Set(savedActiveIds.filter((id: string) => existingIds.has(id)));
+
+      const stateChartIds = new Set(initialCanvasState.map((s: any) => s.id));
+      finalCharts.forEach(c => {
+        if (!stateChartIds.has(c.id) && c.isActive) {
+          initialVisibleIds.add(c.id);
         }
-      }));
-
-      // 3. Visibility
-      let initialVisibleIds = new Set(processed.filter(c => c.isActive).map(c => c.id));
-      console.log("[Ctx] Initial Visible IDs:", Array.from(initialVisibleIds));
-
-      // 4. Merge Saved State
-      if (initialCanvasState && Array.isArray(initialCanvasState) && initialCanvasState.length > 0) {
-        console.log("[Ctx] Applying saved canvas state...");
-
-        const isValidLayout = (l: any) =>
-          l &&
-          Number.isFinite(l.x) &&
-          Number.isFinite(l.y) &&
-          Number.isFinite(l.w) &&
-          Number.isFinite(l.h);
-
-        finalCharts = finalCharts.map(chart => {
-          const saved = initialCanvasState.find((s: any) => s.id === chart.id);
-          if (!saved) return chart;
-
-          const mergedLayout = isValidLayout(saved.layout)
-            ? {
-                ...chart.layout,
-                ...saved.layout,
-                i: chart.id,
-                w: saved.layout?.w ?? chart.layout?.w ?? defaultW,
-                h: saved.layout?.h ?? chart.layout?.h ?? defaultH,
-              }
-            : chart.layout;
-
-          return { ...chart, layout: mergedLayout, kind: saved.kind ?? chart.kind };
-        });
-
-        const existingIds = new Set(finalCharts.map(c => c.id));
-        const savedActiveIds = initialCanvasState
-          .filter((s: any) => s.isActive !== false)
-          .map((s: any) => s.id)
-          .filter(Boolean);
-          
-        initialVisibleIds = new Set(savedActiveIds.filter((id: string) => existingIds.has(id)));
-
-        const stateChartIds = new Set(initialCanvasState.map((s: any) => s.id));
-        finalCharts.forEach(c => {
-          if (!stateChartIds.has(c.id) && c.isActive) {
-            initialVisibleIds.add(c.id);
-          }
-        });
-
-        console.log("[Ctx] Visible IDs after canvas merge:", Array.from(initialVisibleIds));
-      }
-
-      setAllCharts(finalCharts);
-      setVisibleChartIds(initialVisibleIds);
-      if (initialLayoutMode) {
-        setActiveLayout(normalizeLayoutMode(initialLayoutMode));
-      }
-      
-      hasInitialized.current = true;
-      console.log("[Ctx] Init COMPLETE", { finalCount: finalCharts.length, visibleCount: initialVisibleIds.size });
-    } else {
-      console.warn("[Ctx] Skipping init: No schemas provided");
-      hasInitialized.current = true;
+      });
     }
-  }, [initialSchemas, initialDataset, initialCanvasState, initialLayoutMode]);
+
+    setAllCharts(finalCharts);
+    setVisibleChartIds(initialVisibleIds);
+    if (initialLayoutMode) {
+      setActiveLayout(normalizeLayoutMode(initialLayoutMode));
+    }
+    
+    console.log("[Ctx] Init COMPLETE", { finalCount: finalCharts.length, visibleCount: initialVisibleIds.size });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSchemas, initialDataset, initialCanvasState, initialLayoutMode, context]);
 
   // Keep dataset in sync when initialDataset changes (e.g. after client fetch)
   useEffect(() => {
@@ -386,7 +394,7 @@ export function DashboardProvider({
 
   // 6. Add a single AI-generated chart schema into the dashboard
   const addNewChartFromAI = useCallback((schema: ReportChartSchema) => {
-    const processed = processData(dataset, [schema]);
+    const processed = processData(dataset, [schema], context);
     if (!processed.length) return;
 
     setAllCharts(prev => {
@@ -435,7 +443,7 @@ export function DashboardProvider({
   // 7. Add multiple AI-generated charts at once (Scenario 4: report analysis)
   const addMultipleChartsFromAI = useCallback((schemas: ReportChartSchema[]) => {
     if (!schemas.length) return;
-    const processed = processData(dataset, schemas);
+    const processed = processData(dataset, schemas, context);
     if (!processed.length) return;
 
     setAllCharts(prev => {

@@ -29,17 +29,24 @@ export async function createSession(payload: UserPayload) {
 
   const isProd = process.env.NODE_ENV === 'production';
   const domain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
-  const cookieStore = await cookies();
   
-  cookieStore.set(COOKIE_NAME, jwt, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-    // Only set domain in production to avoid localhost cookie issues
-    ...(isProd && domain && !domain.includes('localhost') ? { domain: `.${domain}` } : {})
-  });
+  // Use a try-catch for cookies() as it can throw in some contexts
+  try {
+    const cookieStore = await cookies();
+    const host = (await import('next/headers')).headers().get('host') || '';
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+
+    cookieStore.set(COOKIE_NAME, jwt, {
+      httpOnly: true,
+      secure: isProd && !isLocalhost,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      ...(isProd && domain && !domain.includes('localhost') && !isLocalhost ? { domain: `.${domain}` } : {})
+    });
+  } catch (e) {
+    console.error("[auth] Failed to set cookie in createSession:", e);
+  }
 
   return jwt;
 }
@@ -60,5 +67,15 @@ export async function getSession(): Promise<UserPayload | null> {
 
 export async function deleteSession() {
   const cookieStore = await cookies();
-  cookieStore.delete(COOKIE_NAME);
+  const isProd = process.env.NODE_ENV === 'production';
+  const domain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
+
+  // We set maxAge: 0 to expire the cookie immediately.
+  // CRITICAL: We must specify the domain if it was set with one, 
+  // otherwise the domain-level cookie will persist.
+  cookieStore.set(COOKIE_NAME, '', {
+    path: '/',
+    maxAge: 0,
+    ...(isProd && domain && !domain.includes('localhost') ? { domain: `.${domain}` } : {})
+  });
 }

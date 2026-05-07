@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { BarChart3, FileText } from "lucide-react";
 
@@ -16,6 +16,7 @@ type ReportChartsResponse = {
   report_name: string;
   report_template_id: string;
   created_on: string;
+  report_config_json: Record<string, unknown> | null;
   rows: Array<Record<string, unknown>>;
   schemas: ReportChartSchema[];
   canvasState: Array<Record<string, unknown>>;
@@ -86,6 +87,28 @@ export default function ReportChartsViewerPage() {
     load();
   }, [addToast, reportId, setBackHref, setBreadcrumbs, slug]);
 
+  const insightContext = useMemo(() => {
+    if (!pageData?.report_config_json?.date_range_fields) return undefined;
+    const dateRanges = pageData.report_config_json.date_range_fields as Record<string, Record<string, string>>;
+    
+    for (const tableFields of Object.values(dateRanges)) {
+      for (const rangeStr of Object.values(tableFields)) {
+        const parts = rangeStr.split("...");
+        if (parts.length === 2) {
+          const startD = new Date(parts[0]);
+          const endD = new Date(parts[1]);
+          if (!isNaN(startD.getTime()) && !isNaN(endD.getTime())) {
+            return {
+              reportStart: `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`,
+              reportEnd: `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`,
+            };
+          }
+        }
+      }
+    }
+    return undefined;
+  }, [pageData]);
+
   if (isLoading || !pageData) {
     return <ViewerSkeleton />;
   }
@@ -97,6 +120,7 @@ export default function ReportChartsViewerPage() {
       initialCanvasState={pageData.canvasState}
       initialLayoutMode={pageData.layoutMode}
       templateId={pageData.report_template_id}
+      context={insightContext}
       isViewerMode
     >
       <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50 font-sans">
