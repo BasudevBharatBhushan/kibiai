@@ -13,36 +13,30 @@ import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import DynamicReport from "@/components/DynamicReportPreview";
 import type { ReportChartSchema, InsightContext } from "@/lib/charts/ChartTypes";
 import { extractBodyRows } from "@/lib/charts/supabaseAdapters";
+import { buildInsightContextFromState } from "@/lib/charts/insightContextBuilder";
+import { buildReportMetadata, formatDisplayDate } from "@/lib/utils/reportMetadata";
 import {
   Zap, Loader2, SlidersHorizontal, BarChart3,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
   Plus, Trash2, Clock, FileText, RefreshCw, X, CheckCircle2,
+  Maximize2, Minimize2,
 } from "lucide-react";
 import React from "react";
 
 import { FILTER_OPERATORS } from "@/constants/reportOptions";
 
-// ── Extract date range from historical report body rows ───────────────────────
-// Scans every body row for any date-like field to derive the report's
-// reportStart / reportEnd. This is used to activate isViewerMode in DataProcessor
-// so that hardcoded absolute date filters in chart schemas are bypassed.
-function extractReportDateRange(rows: Record<string, unknown>[]): InsightContext | undefined {
-  const dates: Date[] = [];
-  rows.forEach(row => {
-    for (const val of Object.values(row)) {
-      if (!val || typeof val !== 'string') continue;
-      const d = new Date(val);
-      if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
-        dates.push(d);
-      }
-    }
-  });
-  if (!dates.length) return undefined;
-  dates.sort((a, b) => a.getTime() - b.getTime());
-  return {
-    reportStart: dates[0].toISOString().split('T')[0],
-    reportEnd: dates[dates.length - 1].toISOString().split('T')[0],
-  };
+// ── Parse a saved filter value like ">=10" / "==John" / "*" into ad-hoc shape ──
+function parseSavedFilterValue(saved: string): { operator: string; value: string } {
+  if (saved === '*' || saved === '=') return { operator: saved, value: '' };
+  const multiCharOps = ['==', '!=', '>=', '<='];
+  for (const op of multiCharOps) {
+    if (saved.startsWith(op)) return { operator: op, value: saved.slice(op.length) };
+  }
+  const singleCharOps = ['>', '<'];
+  for (const op of singleCharOps) {
+    if (saved.startsWith(op)) return { operator: op, value: saved.slice(op.length) };
+  }
+  return { operator: '==', value: saved };
 }
 
 // ── Ad-hoc filter row ──────────────────────────────────────────────────────────
@@ -196,12 +190,14 @@ function CollapsibleSection({ title, icon, children, defaultOpen = true }: {
 }
 
 // ── Saved Reports List ─────────────────────────────────────────────────────────
-function SavedReportsList({ templateId, onLoad }: {
+function SavedReportsList({ templateId, templateSetupJson, onSelectReport }: {
   templateId: string;
-  onLoad: (data: any[]) => void;
+  templateSetupJson: Record<string, unknown> | null;
+  onSelectReport: (reportId: string) => Promise<void> | void;
 }) {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingReportId, setLoadingReportId] = useState<string | null>(null);
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -228,31 +224,74 @@ function SavedReportsList({ templateId, onLoad }: {
   );
 
   return (
-    <div className="space-y-1.5 max-h-48 overflow-y-auto">
-      {reports.map(r => (
-        <button
-          key={r.report_id}
-          onClick={() => r.report_data_json && onLoad(r.report_data_json)}
-          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-blue-50 text-left transition-colors border border-transparent hover:border-blue-100 group"
-        >
-          <FileText size={13} className="text-slate-300 group-hover:text-blue-400 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-slate-700 truncate">{r.report_name}</p>
-            <p className="text-[10px] text-slate-400">{new Date(r.created_on).toLocaleString()}</p>
-          </div>
-        </button>
-      ))}
+    <div className="space-y-1.5 max-h-64 overflow-y-auto">
+      {reports.map(r => {
+        const isLoading = loadingReportId === r.report_id;
+        const metadata = buildReportMetadata(r.report_config_json ?? null, templateSetupJson);
+        const dateLine = metadata?.dateRange
+          ? `${formatDisplayDate(metadata.dateRange.start)} — ${formatDisplayDate(metadata.dateRange.end)}${metadata.dateRange.field ? ` · ${metadata.dateRange.field}` : ""}`
+          : null;
+        const filtersLine = metadata?.filters && metadata.filters.length > 0
+          ? metadata.filters.join(" · ")
+          : null;
+        const tooltip = [
+          dateLine && `Date Range: ${dateLine}`,
+          filtersLine && `Filters: ${filtersLine}`,
+        ].filter(Boolean).join("\n");
+
+        return (
+          <button
+            key={r.report_id}
+            disabled={isLoading}
+            onClick={async () => {
+              setLoadingReportId(r.report_id);
+              try {
+                await onSelectReport(r.report_id);
+              } finally {
+                setLoadingReportId(null);
+              }
+            }}
+            title={tooltip || undefined}
+            className="w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg hover:bg-blue-50 text-left transition-colors border border-transparent hover:border-blue-100 group disabled:opacity-60"
+          >
+            {isLoading
+              ? <Loader2 size={13} className="text-blue-400 shrink-0 animate-spin mt-0.5" />
+              : <FileText size={13} className="text-slate-300 group-hover:text-blue-400 shrink-0 mt-0.5" />
+            }
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-slate-700 truncate">{r.report_name}</p>
+              <p className="text-[10px] text-slate-400">{new Date(r.created_on).toLocaleString()}</p>
+              {dateLine && (
+                <p className="text-[10px] text-slate-500 mt-0.5 truncate flex items-center gap-1">
+                  <Clock size={9} className="text-slate-400 shrink-0" />
+                  <span className="truncate">{dateLine}</span>
+                </p>
+              )}
+              {filtersLine && (
+                <p className="text-[10px] text-slate-400 truncate flex items-center gap-1">
+                  <SlidersHorizontal size={9} className="text-slate-400 shrink-0" />
+                  <span className="truncate">{filtersLine}</span>
+                </p>
+              )}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-// ── Chart Modal (full interactive — drag/resize/type change) ───────────────────
+// ── Chart Panel (split + modal modes — fully interactive) ────────────────────
 // React.memo prevents this from re-rendering on every parent state change,
 // which was causing DashboardProvider to unmount/remount in a loop.
-const ChartModal = React.memo(function ChartModal({
-  open, onClose, schemas, canvasState, rows, layoutMode, templateId, context
+type ChartViewMode = 'split' | 'modal';
+
+const ChartPanel = React.memo(function ChartPanel({
+  mode, onExpand, onCollapse, onClose, schemas, canvasState, rows, layoutMode, templateId, context
 }: {
-  open: boolean;
+  mode: ChartViewMode;
+  onExpand: () => void;
+  onCollapse: () => void;
   onClose: () => void;
   schemas: ReportChartSchema[];
   canvasState: any[];
@@ -261,37 +300,62 @@ const ChartModal = React.memo(function ChartModal({
   templateId: string;
   context?: InsightContext;
 }) {
-  // Use visibility/display toggle rather than unmounting so DashboardProvider
-  // (and the WidthProvider inside it) stays mounted and doesn't cascade re-renders
+  const isModal = mode === 'modal';
+
+  // Outer container: fixed fullscreen overlay in modal mode, inline pane in split mode.
+  // Same React tree in both cases → DashboardProvider stays mounted across mode switches.
+  const containerClass = isModal
+    ? "fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col"
+    : "h-full w-full flex flex-col bg-white border-l border-slate-200 shadow-sm";
+
   return (
-    <div
-      className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col"
-      style={{ display: open ? 'flex' : 'none' }}
-    >
+    <div className={containerClass}>
       {/* Header */}
-      <div className="flex items-center justify-between bg-white border-b border-slate-200 px-6 py-3.5 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-purple-50 rounded-xl flex items-center justify-center">
-            <BarChart3 size={16} className="text-purple-600" />
+      <div className={`flex items-center justify-between bg-white border-b border-slate-200 shrink-0 ${isModal ? "px-6 py-3.5" : "px-4 py-2.5"}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`shrink-0 flex items-center justify-center rounded-xl bg-purple-50 ${isModal ? "w-8 h-8" : "w-7 h-7"}`}>
+            <BarChart3 size={isModal ? 16 : 14} className="text-purple-600" />
           </div>
-          <div>
-            <p className="text-sm font-bold text-slate-800">Chart Dashboard</p>
-            <p className="text-[10px] text-slate-400 font-medium">
-              Drag to rearrange · Click type to change · Live report data
-            </p>
+          <div className="min-w-0">
+            <p className={`font-bold text-slate-800 truncate ${isModal ? "text-sm" : "text-[13px]"}`}>Chart Dashboard</p>
+            {isModal && (
+              <p className="text-[10px] text-slate-400 font-medium">
+                Drag to rearrange · Click type to change · Live report data
+              </p>
+            )}
           </div>
-          {rows.length > 0 && (
-            <span className="ml-2 text-[10px] bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full font-bold border border-emerald-200">
+          {isModal && rows.length > 0 && (
+            <span className="ml-2 text-[10px] bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full font-bold border border-emerald-200 shrink-0">
               {rows.length} rows · Live data
             </span>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-700"
-        >
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {isModal ? (
+            <button
+              onClick={onCollapse}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-700"
+              title="Collapse to split view"
+            >
+              <Minimize2 size={16} />
+            </button>
+          ) : (
+            <button
+              onClick={onExpand}
+              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-700"
+              title="Expand to full view"
+            >
+              <Maximize2 size={14} />
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className={`hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-700 ${isModal ? "p-2" : "p-1.5"}`}
+            title="Close charts"
+          >
+            <X size={isModal ? 18 : 14} />
+          </button>
+        </div>
       </div>
 
       {/* Body — overflow-y-auto so charts are scrollable */}
@@ -349,20 +413,89 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
   const [historyKey, setHistoryKey] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Chart modal state
-  const [chartsModalOpen, setChartsModalOpen] = useState(false);
+  // Chart view state: 'none' (hidden), 'split' (right pane half), 'modal' (fullscreen overlay)
+  const [chartsView, setChartsView] = useState<'none' | ChartViewMode>('none');
   const [chartSchemas, setChartSchemas] = useState<ReportChartSchema[]>([]);
   const [chartCanvasState, setChartCanvasState] = useState<any[]>([]);
   const [chartLayoutMode, setChartLayoutMode] = useState("grid");
   const [chartRows, setChartRows] = useState<any[]>([]);
   const [chartSchemasFetched, setChartSchemasFetched] = useState(false);
-  const [viewerContext, setViewerContext] = useState<InsightContext | undefined>(undefined);
 
   // Filter state
   const [dateRanges, setDateRanges] = useState<Record<string, Record<string, { from: string; to: string }>>>({});
   const [configFilters, setConfigFilters] = useState<Record<string, Record<string, string>>>({});
   const [adHocFilters, setAdHocFilters] = useState<AdHocFilter[]>([]);
   const [adHocDateRanges, setAdHocDateRanges] = useState<AdHocDateRange[]>([]);
+
+  // Derive the dashboard's InsightContext from the current filter state. Falls
+  // back to the template's default date_range_fields if the user hasn't touched
+  // anything, so the chart cards always show the effective window — whether
+  // we're viewing a fresh generation or a loaded historical report.
+  const viewerContext = useMemo<InsightContext | undefined>(
+    () => buildInsightContextFromState({
+      dateRanges,
+      adHocDateRanges,
+      templateConfigJson: configJson,
+      templateSetupJson: (state.setup as unknown as Record<string, unknown>) ?? null,
+    }),
+    [dateRanges, adHocDateRanges, configJson, state.setup]
+  );
+
+  // Effective config = template defaults overlaid with anything in current state.
+  // Used to render the date-range + filter subheader on the preview, matching
+  // what the engine will actually apply when Generate is pressed.
+  const previewMetadata = useMemo(() => {
+    const effectiveDateRangeFields: Record<string, Record<string, string>> = {
+      ...((configJson?.date_range_fields ?? {}) as Record<string, Record<string, string>>),
+    };
+    for (const [table, fields] of Object.entries(dateRanges)) {
+      for (const [field, { from, to }] of Object.entries(fields)) {
+        if (from && to) {
+          effectiveDateRangeFields[table] = {
+            ...(effectiveDateRangeFields[table] ?? {}),
+            [field]: `${from}...${to}`,
+          };
+        }
+      }
+    }
+    for (const r of adHocDateRanges) {
+      if (r.table && r.field && r.from && r.to) {
+        if (!effectiveDateRangeFields[r.table]) effectiveDateRangeFields[r.table] = {};
+        effectiveDateRangeFields[r.table][r.field] = `${r.from}...${r.to}`;
+      }
+    }
+
+    const effectiveFilters: Record<string, Record<string, string>> = {
+      ...((configJson?.filters ?? {}) as Record<string, Record<string, string>>),
+    };
+    for (const [table, fields] of Object.entries(configFilters)) {
+      for (const [field, value] of Object.entries(fields)) {
+        if (value) {
+          effectiveFilters[table] = {
+            ...(effectiveFilters[table] ?? {}),
+            [field]: value,
+          };
+        }
+      }
+    }
+    for (const f of adHocFilters) {
+      if (f.table && f.field) {
+        const finalVal = ["*", "="].includes(f.operator)
+          ? f.operator
+          : f.value
+            ? `${f.operator}${f.value}`
+            : "";
+        if (!finalVal) continue;
+        if (!effectiveFilters[f.table]) effectiveFilters[f.table] = {};
+        effectiveFilters[f.table][f.field] = finalVal;
+      }
+    }
+
+    return buildReportMetadata(
+      { date_range_fields: effectiveDateRangeFields, filters: effectiveFilters },
+      (state.setup as unknown as Record<string, unknown>) ?? null
+    );
+  }, [configJson, dateRanges, adHocDateRanges, configFilters, adHocFilters, state.setup]);
 
   // Memoized available fields based on report columns and subsummaries
   const availableFields = useMemo<{ table: string; field: string; label: string; type: string }[]>(() => {
@@ -569,8 +702,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
             setReportData(structured);
             setSavedReportName(heading);
             dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
-            // Fresh generation — clear any historical viewer context so date filters apply normally
-            setViewerContext(undefined);
+            // viewerContext is derived from current filter state — no manual reset needed.
 
             historyRefreshKey.current++;
             setHistoryKey(historyRefreshKey.current);
@@ -594,13 +726,110 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
     }
   }, [templateId, buildRuntimeFilters, savedReportName, fetchChartSchemas, dispatch, addToast, templateName]);
 
-  // Open chart modal (ensure schemas loaded first)
+  // Open chart panel in split view (ensure schemas loaded first).
+  // Also auto-collapse the left filter panel so the charts have room to breathe.
   const handleViewCharts = useCallback(async () => {
     if (!chartSchemasFetched) {
       await fetchChartSchemas();
     }
-    setChartsModalOpen(true);
+    setChartsView('split');
+    setConfigOpen(false);
   }, [chartSchemasFetched, fetchChartSchemas]);
+
+  // Load a saved report from history: render its data AND prefill the
+  // configurator so the user can re-run with the same parameters.
+  const handleLoadFromHistory = useCallback(async (reportId: string) => {
+    try {
+      const res = await apiClient.get<{ success: boolean; data: any }>(
+        `/api/reports/${reportId}`
+      );
+      if (!res.success || !res.data) {
+        addToast("error", "Load Error", "Failed to load saved report.");
+        return;
+      }
+      const report = res.data;
+      const data = report.report_data_json;
+      const savedConfig = (report.report_config_json ?? {}) as Record<string, any>;
+
+      // 1. Render the report
+      setReportData(data);
+      const heading = Array.isArray(data)
+        ? data.find((i: any) => i && "TitleHeader" in i)?.TitleHeader?.MainHeading
+        : null;
+      setSavedReportName(report.report_name || heading || templateName || "");
+      dispatch({ type: "SET_REPORT_PREVIEW", payload: data });
+      const rows = extractBodyRows(data);
+      setChartRows(rows);
+
+      // 2. Split the saved config into pre-configured (template-defined) vs ad-hoc
+      //    so each section of the configurator UI prefills correctly.
+      const templateDateFields = (configJson?.date_range_fields ?? {}) as Record<string, Record<string, string>>;
+      const templateFilters = (configJson?.filters ?? {}) as Record<string, Record<string, unknown>>;
+
+      const savedDateFields = (savedConfig.date_range_fields ?? {}) as Record<string, Record<string, string>>;
+      const savedFilters = (savedConfig.filters ?? {}) as Record<string, Record<string, unknown>>;
+
+      const nextDateRanges: Record<string, Record<string, { from: string; to: string }>> = {};
+      const nextAdHocDateRanges: AdHocDateRange[] = [];
+
+      for (const [table, fields] of Object.entries(savedDateFields)) {
+        for (const [field, rangeStr] of Object.entries(fields)) {
+          const parts = String(rangeStr).split("...");
+          if (parts.length !== 2) continue;
+          const [from, to] = parts;
+          const isPreConfigured = !!templateDateFields[table]?.[field];
+          if (isPreConfigured) {
+            if (!nextDateRanges[table]) nextDateRanges[table] = {};
+            nextDateRanges[table][field] = { from, to };
+          } else {
+            nextAdHocDateRanges.push({
+              id: `${Date.now()}-${table}-${field}`,
+              table,
+              field,
+              from,
+              to,
+            });
+          }
+        }
+      }
+
+      const nextConfigFilters: Record<string, Record<string, string>> = {};
+      const nextAdHocFilters: AdHocFilter[] = [];
+
+      for (const [table, fields] of Object.entries(savedFilters)) {
+        for (const [field, rawValue] of Object.entries(fields)) {
+          const value = String(rawValue ?? "");
+          const isPreConfigured = !!templateFilters[table]?.[field];
+          if (isPreConfigured) {
+            if (!nextConfigFilters[table]) nextConfigFilters[table] = {};
+            nextConfigFilters[table][field] = value;
+          } else {
+            const parsed = parseSavedFilterValue(value);
+            nextAdHocFilters.push({
+              id: `${Date.now()}-${table}-${field}`,
+              table,
+              field,
+              operator: parsed.operator,
+              value: parsed.value,
+            });
+          }
+        }
+      }
+
+      setDateRanges(nextDateRanges);
+      setAdHocDateRanges(nextAdHocDateRanges);
+      setConfigFilters(nextConfigFilters);
+      setAdHocFilters(nextAdHocFilters);
+
+      addToast(
+        "success",
+        "Report Loaded",
+        "Filters and date ranges restored from history."
+      );
+    } catch (err: any) {
+      addToast("error", "Load Error", err.message || "Failed to load saved report.");
+    }
+  }, [configJson, templateName, dispatch, addToast]);
 
   // Page loading skeleton
   if (isPageLoading) {
@@ -785,19 +1014,8 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                 <SavedReportsList
                   key={historyKey}
                   templateId={templateId}
-                  onLoad={data => {
-                    setReportData(data);
-                    const heading = Array.isArray(data) 
-                      ? data.find((i: any) => i && "TitleHeader" in i)?.TitleHeader?.MainHeading 
-                      : null;
-                    setSavedReportName(heading || templateName || "");
-                    dispatch({ type: "SET_REPORT_PREVIEW", payload: data });
-                    const rows = extractBodyRows(data);
-                    setChartRows(rows);
-                    // Derive report date range to activate viewer mode in DataProcessor
-                    // This bypasses hardcoded absolute date filters in chart schemas
-                    setViewerContext(extractReportDateRange(rows));
-                  }}
+                  templateSetupJson={(state.setup as unknown as Record<string, unknown>) ?? null}
+                  onSelectReport={handleLoadFromHistory}
                 />
               </CollapsibleSection>
 
@@ -805,8 +1023,11 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
           )}
         </div>
 
-        {/* ── RIGHT: Report Preview ──────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* ── RIGHT: Report Preview (+ optional Chart Split) ─────────── */}
+        <div className="flex-1 flex overflow-hidden">
+
+        {/* Report preview side */}
+        <div className={`${chartsView === 'split' ? 'w-[35%]' : 'flex-1'} flex flex-col overflow-hidden transition-[width] duration-200`}>
 
           {/* Preview area */}
           <div className="flex-1 overflow-auto bg-gray-100 relative">
@@ -966,7 +1187,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
               </div>
             ) : (
               <div className="h-full">
-                <DynamicReport jsonData={reportData!} />
+                <DynamicReport jsonData={reportData!} metadata={previewMetadata} />
               </div>
             )}
           </div>
@@ -983,29 +1204,51 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
               </div>
               <button
                 id="view-charts-btn"
-                onClick={handleViewCharts}
+                onClick={chartsView === 'split' ? () => setChartsView('none') : handleViewCharts}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
                 style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
               >
                 <BarChart3 size={14} />
-                View Charts
+                {chartsView === 'split' ? 'Hide Charts' : 'View Charts'}
               </button>
             </div>
           )}
         </div>
+        {/* ── Charts inline pane (split mode) ──────────────────────── */}
+        {chartsView === 'split' && (
+          <div className="w-[65%] flex flex-col flex-shrink-0 overflow-hidden">
+            <ChartPanel
+              mode="split"
+              onExpand={() => setChartsView('modal')}
+              onCollapse={() => setChartsView('split')}
+              onClose={() => setChartsView('none')}
+              schemas={chartSchemas}
+              canvasState={chartCanvasState}
+              rows={chartRows}
+              layoutMode={chartLayoutMode}
+              templateId={templateId}
+              context={viewerContext}
+            />
+          </div>
+        )}
+        </div>
       </div>
 
-      {/* ── Chart Modal ──────────────────────────────────────────────── */}
-      <ChartModal
-        open={chartsModalOpen}
-        onClose={() => setChartsModalOpen(false)}
-        schemas={chartSchemas}
-        canvasState={chartCanvasState}
-        rows={chartRows}
-        layoutMode={chartLayoutMode}
-        templateId={templateId}
-        context={viewerContext}
-      />
+      {/* ── Chart Modal overlay (modal mode) ─────────────────────────── */}
+      {chartsView === 'modal' && (
+        <ChartPanel
+          mode="modal"
+          onExpand={() => setChartsView('modal')}
+          onCollapse={() => setChartsView('split')}
+          onClose={() => setChartsView('none')}
+          schemas={chartSchemas}
+          canvasState={chartCanvasState}
+          rows={chartRows}
+          layoutMode={chartLayoutMode}
+          templateId={templateId}
+          context={viewerContext}
+        />
+      )}
     </>
   );
 }

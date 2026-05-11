@@ -75,15 +75,37 @@ Chart Title (chart_title)
 Purpose: Provides a professional and contextually relevant title suitable for a senior-level audience.
 Example Output:
 {
-  "chart_title": "Sales Revenue Breakdown by Salesperson - Q1 2024"
+  "chart_title": "Sales Revenue Breakdown by Salesperson"
 }
 
 Chart titles must be clean, professional, and high-level.
-Do NOT include:
+
+DATE-AGNOSTIC RULE (ABSOLUTE — NEVER VIOLATE):
+The chart's date range is rendered separately by the UI as a subtitle on the card.
+The title text MUST be valid for ANY date window, because the same chart is reused
+across many reports generated with different filters.
+
+The title MUST NOT contain:
+- specific years (e.g. "2024", "2025", "FY24")
+- months or quarters (e.g. "May", "Q1", "Q3 2025")
+- relative time phrases (e.g. "This Month", "Last Quarter", "Year-to-Date", "YTD",
+  "Last 30 Days", "Current Year", "Previous Period")
+- dashes/parentheses introducing a period (e.g. "Sales by Region – May 2025",
+  "Revenue (Q1 2024)")
+
+Also, the title MUST NOT include:
 - field names in parentheses
 - filter conditions
 - aggregation logic
 - technical or query-related details
+
+✅ CORRECT: "Sales Revenue Breakdown by Salesperson"
+✅ CORRECT: "Order Count by Region"
+✅ CORRECT: "Average Resolution Time by Support Tier"
+❌ WRONG:  "Sales Revenue Breakdown by Salesperson - Q1 2024"
+❌ WRONG:  "Order Count by Region (Last 30 Days)"
+❌ WRONG:  "YTD Revenue by Product"
+
 Filters must only appear in the "filters" array.
 
 Filters (filters)

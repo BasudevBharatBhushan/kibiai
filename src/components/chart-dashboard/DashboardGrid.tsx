@@ -122,7 +122,7 @@ function DashboardInner() {
       {/* Edit Panel (Right) */}
       {!isViewerMode && (
         <div
-          className={`bg-white border-l border-slate-200 h-full shadow-xl z-10 transition-[width] duration-300 ease-in-out flex flex-col shrink-0 ${
+          className={`bg-white border-l-2 border-slate-300 h-full shadow-[-6px_0_18px_-6px_rgba(15,23,42,0.18)] z-20 transition-[width] duration-300 ease-in-out flex flex-col shrink-0 ${
             isEditOpen
               ? "w-[400px]"
               : "w-0 border-none overflow-hidden"

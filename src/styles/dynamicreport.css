@@ -39,6 +39,23 @@
     @apply text-[10pt] font-normal text-black normal-case;
   }
 
+  /* --- Report Scope (date range + filters subheader) --- */
+  .report-scope {
+    @apply mt-1.5 flex flex-col items-end gap-0.5 text-[7.5pt] font-normal normal-case;
+    color: #94a3b8; /* slate-400 */
+  }
+  .report-scope .scope-line {
+    @apply leading-tight;
+  }
+  .report-scope .scope-label {
+    @apply font-semibold uppercase tracking-wide text-[7pt] mr-1;
+    color: #94a3b8;
+  }
+  .report-scope .scope-field {
+    @apply ml-1;
+    color: #cbd5e1; /* slate-300 */
+  }
+
   /* --- Subsummary Groups --- */
   .subsummary {
     @apply mb-4 border-none bg-transparent overflow-visible mx-0;

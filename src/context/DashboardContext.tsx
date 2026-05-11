@@ -68,11 +68,13 @@ interface DashboardProviderProps {
   children: ReactNode;
   initialSchemas?: ReportChartSchema[];
   initialDataset?: any[];
-  initialCanvasState?: any; 
-  initialLayoutMode?: string;   
+  initialCanvasState?: any;
+  initialLayoutMode?: string;
   templateId?: string;
   isViewerMode?: boolean;
   context?: import('@/lib/charts/ChartTypes').InsightContext;
+  /** Field schemas used by the insight formula executor for safe identifier mapping */
+  fieldSchemas?: import('@/lib/insights/fieldSchemaAdapter').FieldSchema[];
   onNewChart?: (schema: ReportChartSchema) => void;
 }
 
@@ -88,15 +90,16 @@ function normalizeLayoutMode(value?: string): LayoutMode {
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
-export function DashboardProvider({ 
-  children, 
-  initialSchemas = [], 
-  initialDataset = [], 
-  initialCanvasState, 
+export function DashboardProvider({
+  children,
+  initialSchemas = [],
+  initialDataset = [],
+  initialCanvasState,
   initialLayoutMode = 'grid',
   templateId,
   isViewerMode = false,
   context,
+  fieldSchemas,
   onNewChart,
 }: DashboardProviderProps) {
   
@@ -155,7 +158,7 @@ export function DashboardProvider({
     });
 
     // 1. Process Data — context passed here so viewer-mode filter bypass applies
-    const processed = processData(initialDataset || [], initialSchemas, context);
+    const processed = processData(initialDataset || [], initialSchemas, context, fieldSchemas);
     console.log("[Ctx] Processed Charts:", processed.map(c => ({ id: c.id, title: c.title, isActive: c.isActive })));
 
     // 2. Assign Defaults
@@ -394,7 +397,7 @@ export function DashboardProvider({
 
   // 6. Add a single AI-generated chart schema into the dashboard
   const addNewChartFromAI = useCallback((schema: ReportChartSchema) => {
-    const processed = processData(dataset, [schema], context);
+    const processed = processData(dataset, [schema], context, fieldSchemas);
     if (!processed.length) return;
 
     setAllCharts(prev => {
@@ -438,12 +441,12 @@ export function DashboardProvider({
     });
 
     if (onNewChart) onNewChart(schema);
-  }, [dataset, visibleChartIds, activeLayout, triggerAutoSave, onNewChart]);
+  }, [dataset, visibleChartIds, activeLayout, triggerAutoSave, onNewChart, context, fieldSchemas]);
 
   // 7. Add multiple AI-generated charts at once (Scenario 4: report analysis)
   const addMultipleChartsFromAI = useCallback((schemas: ReportChartSchema[]) => {
     if (!schemas.length) return;
-    const processed = processData(dataset, schemas, context);
+    const processed = processData(dataset, schemas, context, fieldSchemas);
     if (!processed.length) return;
 
     setAllCharts(prev => {
@@ -491,7 +494,7 @@ export function DashboardProvider({
       triggerAutoSave(next, nextIds, activeLayout);
       return next;
     });
-  }, [dataset, visibleChartIds, activeLayout, triggerAutoSave]);
+  }, [dataset, visibleChartIds, activeLayout, triggerAutoSave, context, fieldSchemas]);
 
   // --- VALUE ---
   

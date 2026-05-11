@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -15,6 +15,7 @@ import { useToast } from "@/context/ToastContext";
 import { apiClient } from "@/utils/apiClient";
 import { ReportPreview } from "@/components/ReportPreview";
 import { ReportProvider, useReport } from "@/context/ReportContext";
+import { buildReportMetadata } from "@/lib/utils/reportMetadata";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ interface SavedReport {
   created_on: string;
   report_data_json: any;
   report_config_json: any;
+  report_template_setup_json?: Record<string, unknown> | null;
   report_insight?: string;
   report_templates?: { report_template_name?: string } | null;
 }
@@ -75,6 +77,14 @@ function ReportDetailContent({
   const [charts, setCharts] = useState<Chart[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChartsLoading, setIsChartsLoading] = useState(true);
+
+  const reportMetadata = useMemo(() => {
+    if (!report) return undefined;
+    return buildReportMetadata(
+      report.report_config_json ?? null,
+      (report.report_template_setup_json ?? null) as Record<string, unknown> | null
+    );
+  }, [report]);
 
   // Load report
   useEffect(() => {
@@ -209,7 +219,7 @@ function ReportDetailContent({
             </span>
           </div>
           <div className="p-4 bg-gray-50 overflow-auto max-h-[70vh]">
-            <ReportPreview />
+            <ReportPreview metadata={reportMetadata} />
           </div>
         </div>
 

@@ -9,6 +9,7 @@ import { useDashboard } from '@/context/DashboardContext';
 import { buildOptions } from '@/lib/utils/chartsUtils';
 import type { ChartConfig, ChartKind } from '@/lib/charts/ChartTypes';
 import { CHART_VISUALS, AVAILABLE_CHART_TYPES } from '@/constants/dashboard';
+import { CardScopeMeta } from './CardScopeMeta';
 import '@/styles/dashboard.css';
 
 
@@ -30,9 +31,9 @@ export default function ChartCard({ config }: Props) {
     const base = buildOptions(config);
     return {
       ...base,
-      title: { text: undefined }, 
-      chart: { 
-        ...base.chart, 
+      title: { text: undefined },
+      chart: {
+        ...base.chart,
         backgroundColor: CHART_VISUALS.BACKGROUND,
         spacingTop: CHART_VISUALS.SPACING.TOP,
         spacingBottom: CHART_VISUALS.SPACING.BOTTOM,
@@ -42,26 +43,32 @@ export default function ChartCard({ config }: Props) {
       credits: { enabled: false },
       legend: {
         ...base.legend,
-        margin: CHART_VISUALS.LEGEND.MARGIN, 
-        itemStyle: CHART_VISUALS.LEGEND.ITEM_STYLE 
+        margin: CHART_VISUALS.LEGEND.MARGIN,
+        itemStyle: CHART_VISUALS.LEGEND.ITEM_STYLE
       }
     };
   }, [config]);
 
   // Render
   return (
-    <div className="card-base flex flex-col h-full w-full">      
-      <div className="card-header">        
-        <div className="flex items-center gap-2 overflow-hidden">
-          <div className="dragHandle drag-handle">            
+    <div className="card-base flex flex-col h-full w-full">
+      <div className="card-header">
+        <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
+          <div className="dragHandle drag-handle shrink-0">
             <FiMove size={16} />
           </div>
-          <h3 className="text-sm font-semibold text-slate-700 truncate leading-tight" title={config.title}>
-            {config.title}
-          </h3>
+          <div className="flex flex-col min-w-0">
+            <h3 className="text-sm font-semibold text-slate-700 truncate leading-tight" title={config.title}>
+              {config.title}
+            </h3>
+            <CardScopeMeta
+              dateRange={config.report_date_range}
+              filters={config.filters}
+            />
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 pl-2">
+        <div className="flex items-center gap-2 pl-2 shrink-0">
           {!isViewerMode && (
             <>
               <select
@@ -76,7 +83,7 @@ export default function ChartCard({ config }: Props) {
                 ))}
               </select>
 
-              <button 
+              <button
                 onClick={() => removeChart(config.id)}
                 className="delete-btn"
                 title="Inactivate Chart"
@@ -89,10 +96,10 @@ export default function ChartCard({ config }: Props) {
       </div>
 
       <div className="flex-1 p-2 w-full min-h-0 overflow-y-auto scrollbar-minimal relative">
-        <HighchartsReact 
-          highcharts={Highcharts} 
-          options={opts} 
-          containerProps={{ style: { height: '100%', width: '100%' } }} 
+        <HighchartsReact
+          highcharts={Highcharts}
+          options={opts}
+          containerProps={{ style: { height: '100%', width: '100%' } }}
         />
       </div>
     </div>

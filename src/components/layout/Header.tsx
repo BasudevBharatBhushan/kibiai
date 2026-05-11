@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   ChevronDown,
+  MoreHorizontal,
 } from "lucide-react";
 import { useHeader } from "@/context/HeaderContext";
 import { useParams, useRouter, usePathname } from "next/navigation";
@@ -61,6 +62,71 @@ function PlanBadge({ plan }: { plan: string }) {
   );
 }
 
+// ── Compact Breadcrumbs ──────────────────────────────────────────────────────
+// Icon-only summary used when full breadcrumbs would collide with the right-side
+// header actions. Clicking the … reveals the full path in a small popover.
+function CompactBreadcrumbs({
+  crumbs,
+  expanded,
+  onToggle,
+}: {
+  crumbs: { label: string; href?: string }[];
+  expanded: boolean;
+  onToggle: (e: React.MouseEvent) => void;
+}) {
+  const last = crumbs[crumbs.length - 1];
+  const middle = crumbs.slice(0, -1);
+
+  return (
+    <div className="relative flex items-center min-w-0">
+      {middle.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+            title={middle.map(c => c.label).join(" › ")}
+            aria-haspopup="menu"
+            aria-expanded={expanded}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
+          <ChevronRight className="mx-1.5 h-3 w-3 text-slate-300 shrink-0" />
+        </>
+      )}
+      <span className="text-[13px] font-semibold text-blue-600 truncate max-w-[180px]">
+        {last?.label}
+      </span>
+
+      {expanded && middle.length > 0 && (
+        <div
+          className="absolute top-full left-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[200px]"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {middle.map((crumb, idx) => (
+            <React.Fragment key={idx}>
+              {crumb.href ? (
+                <Link
+                  href={crumb.href}
+                  className="flex items-center gap-2 px-3 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-blue-600"
+                >
+                  <ChevronRight className="h-3 w-3 text-slate-300 shrink-0" />
+                  <span className="truncate">{crumb.label}</span>
+                </Link>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 text-[13px] text-slate-500">
+                  <ChevronRight className="h-3 w-3 text-slate-300 shrink-0" />
+                  <span className="truncate">{crumb.label}</span>
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Header Component ─────────────────────────────────────────────────────────
 export default function Header() {
   const { company, isLoading: companyLoading } = useCompany();
@@ -79,6 +145,14 @@ export default function Header() {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  // Breadcrumb collision detection — when the full-text breadcrumbs would
+  // overflow their container (because page action buttons claim more width),
+  // collapse to an icon-only summary (Home > … > current).
+  const breadcrumbNavRef = useRef<HTMLElement>(null);
+  const breadcrumbMeasureRef = useRef<HTMLDivElement>(null);
+  const [compactBreadcrumbs, setCompactBreadcrumbs] = useState(false);
+  const [crumbsExpanded, setCrumbsExpanded] = useState(false);
 
   const [userName, setUserName] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string>("");
@@ -127,6 +201,39 @@ export default function Header() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Compare the hidden full-text measurer against the visible nav width.
+  // Use a small slack to avoid flapping when widths are within a few pixels.
+  useEffect(() => {
+    const containerEl = breadcrumbNavRef.current;
+    const measureEl = breadcrumbMeasureRef.current;
+    if (!containerEl || !measureEl) return;
+
+    const SLACK = 8;
+    const recompute = () => {
+      const available = containerEl.clientWidth;
+      const needed = measureEl.scrollWidth;
+      setCompactBreadcrumbs(needed > available - SLACK);
+    };
+
+    recompute();
+
+    const ro = new ResizeObserver(recompute);
+    ro.observe(containerEl);
+    ro.observe(measureEl);
+    window.addEventListener("resize", recompute);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", recompute);
+    };
+  }, [breadcrumbs, headerActions, collapsed]);
+
+  useEffect(() => {
+    if (!crumbsExpanded) return;
+    const close = () => setCrumbsExpanded(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [crumbsExpanded]);
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -273,28 +380,58 @@ export default function Header() {
           </div>
 
           {/* Center: Breadcrumbs */}
-          <nav className="hidden md:flex items-center ml-10 flex-1 overflow-hidden">
-            <div className="h-4 w-[1px] bg-slate-200 mr-4" />
-            
-            <div className="flex items-center overflow-hidden">
-              {!pathname?.includes("/generate") && breadcrumbs.map((crumb, idx) => (
-                <React.Fragment key={idx}>
-                  {idx > 0 && <ChevronRight className="mx-2 h-3 w-3 text-slate-300 shrink-0" />}
-                  {crumb.href ? (
-                    <Link 
-                      href={crumb.href} 
-                      className="text-[13px] font-medium text-slate-400 hover:text-blue-600 transition-colors whitespace-nowrap"
-                    >
-                      {crumb.label}
-                    </Link>
+          <nav ref={breadcrumbNavRef} className="hidden md:flex items-center ml-10 flex-1 overflow-hidden min-w-0">
+            <div className="h-4 w-[1px] bg-slate-200 mr-4 shrink-0" />
+
+            {!pathname?.includes("/generate") && breadcrumbs.length > 0 && (
+              <>
+                {/* Visible breadcrumbs — compact or full based on collision check */}
+                <div className="flex items-center overflow-hidden min-w-0">
+                  {compactBreadcrumbs ? (
+                    <CompactBreadcrumbs
+                      crumbs={breadcrumbs}
+                      expanded={crumbsExpanded}
+                      onToggle={(e) => { e.stopPropagation(); setCrumbsExpanded(o => !o); }}
+                    />
                   ) : (
-                    <span className="text-[13px] font-semibold text-blue-600 whitespace-nowrap truncate max-w-[200px]">
-                      {crumb.label}
-                    </span>
+                    breadcrumbs.map((crumb, idx) => (
+                      <React.Fragment key={idx}>
+                        {idx > 0 && <ChevronRight className="mx-2 h-3 w-3 text-slate-300 shrink-0" />}
+                        {crumb.href ? (
+                          <Link
+                            href={crumb.href}
+                            className="text-[13px] font-medium text-slate-400 hover:text-blue-600 transition-colors whitespace-nowrap"
+                          >
+                            {crumb.label}
+                          </Link>
+                        ) : (
+                          <span className="text-[13px] font-semibold text-blue-600 whitespace-nowrap truncate max-w-[200px]">
+                            {crumb.label}
+                          </span>
+                        )}
+                      </React.Fragment>
+                    ))
                   )}
-                </React.Fragment>
-              ))}
-            </div>
+                </div>
+
+                {/* Hidden measurer: always renders full-text version so we can
+                    compare its natural width against the visible nav width.
+                    Position: absolute keeps it out of layout flow. */}
+                <div
+                  ref={breadcrumbMeasureRef}
+                  aria-hidden
+                  className="absolute -left-[9999px] top-0 flex items-center whitespace-nowrap pointer-events-none"
+                  style={{ visibility: "hidden" }}
+                >
+                  {breadcrumbs.map((crumb, idx) => (
+                    <React.Fragment key={idx}>
+                      {idx > 0 && <ChevronRight className="mx-2 h-3 w-3" />}
+                      <span className="text-[13px] font-medium">{crumb.label}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              </>
+            )}
           </nav>
 
           {/* Right: Nav + Page Actions (injected by page) + User */}

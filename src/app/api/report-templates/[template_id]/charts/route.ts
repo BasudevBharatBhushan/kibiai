@@ -23,6 +23,7 @@ const chartSchema = z.object({
     .optional(),
   filters: z.array(z.string()).optional(),
   business_insights: z.array(z.string()).optional(),
+  insight_plan: z.any().optional(),
   insight_results: z.array(z.any()).optional(),
   insight_date_range: z.object({
     field: z.string(),
@@ -68,6 +69,9 @@ export async function GET(
       .eq("company_id", session.companyId)
       .single();
 
+    // The full preview structure is needed by the admin chart-builder so it can
+    // optionally render a side-by-side report preview alongside the dashboard.
+
     if (templateError || !template) {
       return NextResponse.json(
         { success: false, error: "Template not found" },
@@ -107,6 +111,7 @@ export async function GET(
         insight_results: template.insight_results ?? null,
         report_template_config_json: template.report_template_config_json ?? null,
         report_template_setup_json: template.report_template_setup_json ?? null,
+        report_template_data_json: template.report_template_data_json ?? null,
         report_insight: template.report_template_insight ?? null,
         fieldNames,
         rows,

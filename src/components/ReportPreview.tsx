@@ -1,11 +1,29 @@
 "use client";
 
+import { useMemo } from "react";
 import { useReport } from "@/context/ReportContext";
-import DynamicReport from "@/components/DynamicReportPreview"; 
+import DynamicReport from "@/components/DynamicReportPreview";
+import { buildReportMetadata, type ReportMetadata } from "@/lib/utils/reportMetadata";
 
-export function ReportPreview() {
+interface ReportPreviewProps {
+  /** Optional pre-built metadata. When omitted, metadata is derived from ReportContext. */
+  metadata?: ReportMetadata;
+}
+
+export function ReportPreview({ metadata: metadataProp }: ReportPreviewProps = {}) {
   const { state } = useReport();
   const rawData = state.reportPreview;
+
+  // Fallback: derive metadata from the current config in ReportContext so
+  // admin previews stay in sync with date_range_fields / filters edits.
+  const derivedMetadata = useMemo<ReportMetadata | undefined>(() => {
+    if (metadataProp) return metadataProp;
+    if (!state.config) return undefined;
+    return buildReportMetadata(
+      state.config as unknown as Record<string, unknown>,
+      (state.setup as unknown as Record<string, unknown>) ?? null
+    );
+  }, [metadataProp, state.config, state.setup]);
 
   if (!rawData) {
     return (
@@ -62,7 +80,7 @@ export function ReportPreview() {
   // Render the DynamicReport with the normalized array
   return (
     <div className="w-full h-full p-4 overflow-auto">
-      <DynamicReport jsonData={finalJsonData} />
+      <DynamicReport jsonData={finalJsonData} metadata={derivedMetadata} />
     </div>
   );
 }

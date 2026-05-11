@@ -1,10 +1,11 @@
 import { ChartConfig, ChartKind, ReportChartSchema, InsightContext } from './ChartTypes';
 import { v4 as uuidv4 } from 'uuid';
-import { 
-  PROCESSOR_DEFAULTS, 
-  CHART_TYPE_MAP 
+import {
+  PROCESSOR_DEFAULTS,
+  CHART_TYPE_MAP
 } from "@/constants/analytics";
 import { executeInsightPlan } from '@/lib/insights/insightFormulaExecutor';
+import type { FieldSchema } from '@/lib/insights/fieldSchemaAdapter';
 
 // Helper to recursively extract BodyFields from nested data
 function extractBodyFields(data: any): any[] {
@@ -43,11 +44,12 @@ function coerceIsActive(value: unknown): boolean {
 
 // Main data processing function
 export function processData(
-  rawData: any[], 
+  rawData: any[],
   aiConfigs: ReportChartSchema[],
-  context?: InsightContext
+  context?: InsightContext,
+  fieldSchemas?: FieldSchema[]
 ): ChartConfig[] {
-  
+
   let rawBodyData: any[] = [];
 
   const isAlreadyFlat = Array.isArray(rawData) && rawData.length > 0 && !rawData.some(item => item.Body || item.TitleHeader);
@@ -64,6 +66,15 @@ export function processData(
   // findActualKey handles case/space normalization at lookup time.
   const bodyData = rawBodyData.map((item: any) => ({ ...item }));
 
+  // Date range shared by every card in the current report
+  const reportDateRange = context?.reportStart && context?.reportEnd
+    ? {
+        field: context.reportDateField,
+        start: context.reportStart,
+        end: context.reportEnd,
+      }
+    : undefined;
+
   const results: ChartConfig[] = [];
 
   aiConfigs.forEach((aiResponse) => {
@@ -71,22 +82,45 @@ export function processData(
     const activeStatus = coerceIsActive(aiResponse.isActive);
 
     // 1. Handle Insight Cards
-    if (aiResponse.chart_type === 'insight' || aiResponse.insight_plan || aiResponse.insight_results) {
-      
-      let finalResults = aiResponse.insight_results;
-      
-      // If we have a plan, re-calculate based on current data
-      if (aiResponse.insight_plan && bodyData.length > 0) {
-        try {
-          console.log(`[DataProcessor] Re-calculating insights for chart ${newId}`);
-          finalResults = executeInsightPlan(aiResponse.insight_plan, bodyData, {
-            reportStart: context?.reportStart,
-            reportEnd: context?.reportEnd
-          });
-        } catch (err) {
-          console.error(`[DataProcessor] Failed to execute insight plan for ${newId}:`, err);
-        }
+    // Only render insights that have a plan we can recompute against the
+    // current report. Cached `insight_results` are obsolete and intentionally
+    // ignored — the user only ever sees insights derived from current data.
+    if (aiResponse.chart_type === 'insight' || aiResponse.insight_plan) {
+      if (!aiResponse.insight_plan || bodyData.length === 0) {
+        console.warn(`[DataProcessor] Skipping insight card ${newId}: no insight_plan or no data.`);
+        return;
       }
+
+      let finalResults;
+      try {
+        finalResults = executeInsightPlan(
+          aiResponse.insight_plan,
+          bodyData,
+          {
+            reportStart: context?.reportStart,
+            reportEnd: context?.reportEnd,
+          },
+          fieldSchemas
+        );
+      } catch (err) {
+        console.error(`[DataProcessor] Failed to execute insight plan for ${newId}:`, err);
+        return;
+      }
+
+      if (!finalResults || finalResults.length === 0) {
+        console.warn(`[DataProcessor] Insight plan for ${newId} produced no results.`);
+        return;
+      }
+
+      const insightDateRange = reportDateRange
+        ? {
+            field: reportDateRange.field
+              ?? aiResponse.insight_date_range?.field
+              ?? 'Report range',
+            start: reportDateRange.start,
+            end: reportDateRange.end,
+          }
+        : aiResponse.insight_date_range;
 
       results.push({
         id: newId,
@@ -97,10 +131,11 @@ export function processData(
         series: [],
         insights: aiResponse.business_insights,
         insight_results: finalResults,
-        insight_date_range: aiResponse.insight_date_range,
+        insight_date_range: insightDateRange,
+        report_date_range: reportDateRange,
         layout: { x: 0, y: 0, w: 6, h: 6, i: newId }
       });
-      return; 
+      return;
     }
 
     // 2. Handle Charts
@@ -278,7 +313,9 @@ export function processData(
       isActive: activeStatus,
       supabaseId: aiResponse.supabaseId,
       categories: labels as string[],
-      series: series,     
+      series: series,
+      filters: activeFilters,
+      report_date_range: reportDateRange,
       layout
     });
   });

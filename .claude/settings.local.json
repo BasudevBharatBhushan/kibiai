@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 80)",
+      "PowerShell(npx vitest run src/lib/charts/__tests__/DataProcessor.test.ts 2>&1 | Select-Object -Last 60)",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)"
+    ]
+  },
+  "disabledMcpjsonServers": [
+    "code-review-graph"
+  ]
+}

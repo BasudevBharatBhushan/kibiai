@@ -154,13 +154,36 @@ Example:
 ------------------------------------------------------------
 9. report_header
 ------------------------------------------------------------
-Professional, concise report title: "<Metric> by <Dimension> – <Period>"
-Example: "Sales Performance by Region – May 2025"
+Professional, concise report title: "<Metric> by <Dimension>"
+
+DATE-AGNOSTIC RULE (ABSOLUTE — NEVER VIOLATE):
+The report's date range is rendered separately by the UI as a subheader below the title.
+The same template can be re-run against ANY date window (this month, last year, a custom
+range), so the title MUST remain valid in every context.
+
+The report_header MUST NOT contain:
+- specific years (e.g. "2024", "2025", "FY24")
+- specific months or quarters (e.g. "May 2025", "Q1 2024", "Aug")
+- relative time phrases (e.g. "This Month", "Last Quarter", "YTD", "Year-to-Date",
+  "Last 30 Days", "Current Year", "Previous Period")
+- dashes/parentheses introducing a period (e.g. "– May 2025", "(Q1 2024)")
+
+✅ CORRECT: "Sales Performance by Region"
+✅ CORRECT: "Product Stock Movement"
+✅ CORRECT: "Revenue Breakdown by Product Category and Region"
+❌ WRONG:  "Sales Performance by Region – May 2025"
+❌ WRONG:  "Product Stock Movement (Last 30 Days)"
+❌ WRONG:  "YTD Revenue by Product"
+
+This rule applies to report_header ONLY. response_to_user (the conversational
+confirmation in chat) MAY mention the date range — it is shown only to the chat
+user, not embedded in the report.
 
 ------------------------------------------------------------
 10. response_to_user
 ------------------------------------------------------------
-One-sentence executive confirmation of report scope.
+One-sentence executive confirmation of report scope. May mention the date range
+in conversational form (it never appears inside the report itself).
 Example: "Generating sales by region for May 2025, grouped by region, showing invoice details and totals."
 
 ============================================================
@@ -190,11 +213,11 @@ Output:
 {
   "response_to_user": "Based on your schema, here are suggested reports for actionable insights.",
   "report_suggestions": [
-    "Sales Revenue by Product Category and Region for Last Quarter",
-    "Profit Margin Analysis by Vendor and Product Type for Current Year",
-    "Inventory Turnover by Product Subcategory for Last 6 Months",
-    "Sales Performance by Staff and Shipping Country for Current Month",
-    "Quote-to-Invoice Conversion Rates by Contact for Last 30 Days"
+    "Sales Revenue by Product Category and Region",
+    "Profit Margin Analysis by Vendor and Product Type",
+    "Inventory Turnover by Product Subcategory",
+    "Sales Performance by Staff and Shipping Country",
+    "Quote-to-Invoice Conversion Rates by Contact"
   ]
 }
 
@@ -223,7 +246,7 @@ Output:
   "custom_calculated_fields": [
     { "field_name": "LineTotal", "label": "Line Total", "formula": "=Quantity * UnitPrice", "dependencies": ["Quantity", "UnitPrice"], "format": "currency" }
   ],
-  "report_header": "Sales Performance by Region – May 2025",
+  "report_header": "Sales Performance by Region",
   "response_to_user": "Generating sales by region for May 2025, grouped by region A-Z, showing invoice details and line totals."
 }
 
@@ -249,7 +272,7 @@ Output:
   "custom_calculated_fields": [
     { "field_name": "NetMovement", "label": "Net Movement", "formula": "=QuantityIn - QuantityOut", "dependencies": ["QuantityIn", "QuantityOut"], "format": "plain" }
   ],
-  "report_header": "Product Stock Movement – May 2025",
+  "report_header": "Product Stock Movement",
   "response_to_user": "Generating product stock movement for May 2025, grouped by product name (highest stock-in first), showing net movement per entry."
 }
 `;

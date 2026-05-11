@@ -37,6 +37,15 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Report not found" }, { status: 404 });
     }
 
+    // Fetch the parent template's config + setup so the dashboard can derive
+    // FieldSchemas needed by the insight formula executor.
+    const { data: template } = await supabase
+      .from("report_templates")
+      .select("report_template_config_json, report_template_setup_json")
+      .eq("report_template_id", data.report_template_id)
+      .eq("company_id", session.companyId)
+      .single();
+
     const { data: chartTemplates, error: chartError } = await supabase
       .from("chart_templates")
       .select(
@@ -60,6 +69,8 @@ export async function GET(
       success: true,
       data: {
         ...data,
+        report_template_config_json: template?.report_template_config_json ?? null,
+        report_template_setup_json: template?.report_template_setup_json ?? null,
         rows,
         ...normalized,
       },

@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     const supabase = createAdminClient();
     let query = supabase
       .from("reports")
-      .select("report_id, report_name, created_on, report_template_id, report_data_json")
+      .select("report_id, report_name, created_on, report_template_id, report_data_json, report_config_json")
       .eq("company_id", session.companyId)
       .order("created_on", { ascending: false })
       .limit(limit);

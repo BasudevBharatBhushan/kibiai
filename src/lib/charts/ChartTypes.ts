@@ -25,12 +25,20 @@ export interface ChartConfig {
       start: string;
       end: string;
     };
+    /** Filters applied to this chart's data (after viewer-mode date-filter stripping) */
+    filters?: string[];
+    /** Date range of the currently selected report, shown in every card's subtitle */
+    report_date_range?: {
+      field?: string;
+      start: string;
+      end: string;
+    };
     layout?: {
     x: number;
     y: number;
     w: number;
     h: number;
-    i: string; 
+    i: string;
   };
 }
 
@@ -42,6 +50,8 @@ export interface RawDataItem {
 export interface InsightContext {
   reportStart?: string;
   reportEnd?: string;
+  /** Human-readable label of the field that drives the report date window */
+  reportDateField?: string;
 }
 
 // Report Chart Schema Interface

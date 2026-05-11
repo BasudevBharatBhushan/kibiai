@@ -14,10 +14,14 @@ import {
   X
 } from "lucide-react";
 import DOMPurify from "dompurify";
+import type { ReportMetadata } from "@/lib/utils/reportMetadata";
+import { formatDisplayDate } from "@/lib/utils/reportMetadata";
 
 interface DynamicReportProps {
   jsonData: any[];
   previewMode?: boolean;
+  /** Date range + filter sentences rendered as a subheader under the main heading */
+  metadata?: ReportMetadata;
 }
 
 // --- CONFIGURATION ---
@@ -88,6 +92,11 @@ const ExpandedReportView = ({ htmlContent, onClose }: { htmlContent: string, onC
               .title-header h1 { font-size: 14pt; font-weight: bold; text-transform: uppercase; margin: 0 0 4px 0; color: #000; letter-spacing: 0.05em; }
               .title-header h2 { font-size: 10pt; font-weight: normal; margin: 0; color: #000; }
               .current-date { text-align: right; font-size: 9pt; color: #000; margin-bottom: 10px; }
+
+              .report-scope { margin-top: 6px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 7.5pt; color: #94a3b8; font-weight: normal; text-transform: none; }
+              .report-scope .scope-line { line-height: 1.3; }
+              .report-scope .scope-label { font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; font-size: 7pt; color: #94a3b8; margin-right: 4px; }
+              .report-scope .scope-field { color: #cbd5e1; margin-left: 4px; }
 
               /* Subsummaries */
               .subsummary { margin-bottom: 16px; }
@@ -173,7 +182,7 @@ const ExpandedReportView = ({ htmlContent, onClose }: { htmlContent: string, onC
 
 
 // --- MAIN COMPONENT ---
-const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = false }) => {
+const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = false, metadata }) => {
   const [reportHtml, setReportHtml] = useState<string>("");
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -205,10 +214,10 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
   // 1. Generate HTML
   useEffect(() => {
     if (jsonData?.length > 0) {
-      const html = generateDynamicReport(jsonData);
+      const html = generateDynamicReport(jsonData, metadata);
       setReportHtml(DOMPurify.sanitize(html));
     }
-  }, [jsonData]);
+  }, [jsonData, metadata]);
 
   // 2. Inject & Paginate
   useLayoutEffect(() => {
@@ -400,6 +409,11 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
             .title-header h1 { font-size: 14pt; font-weight: bold; text-transform: uppercase; margin: 0 0 4px 0; color: #000; letter-spacing: 0.05em; }
             .title-header h2 { font-size: 10pt; font-weight: normal; margin: 0; color: #000; }
             .current-date { text-align: right; font-size: 9pt; color: #000; margin-bottom: 10px; }
+
+            .report-scope { margin-top: 6px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 7.5pt; color: #94a3b8; font-weight: normal; text-transform: none; }
+            .report-scope .scope-line { line-height: 1.3; }
+            .report-scope .scope-label { font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; font-size: 7pt; color: #94a3b8; margin-right: 4px; }
+            .report-scope .scope-field { color: #cbd5e1; margin-left: 4px; }
 
             .subsummary { margin-bottom: 16px; page-break-inside: avoid; }
             .subsummary.level-0 { margin-left: 0; }
@@ -694,7 +708,37 @@ export default DynamicReport;
 
 // ================== GENERATION LOGIC ==================
 
-function generateDynamicReport(jsonData: any[]): string {
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function generateScopeSubheader(metadata?: ReportMetadata): string {
+  if (!metadata) return '';
+  const parts: string[] = [];
+
+  if (metadata.dateRange) {
+    const { start, end, field } = metadata.dateRange;
+    const fieldSuffix = field ? ` <span class="scope-field">(${escapeHtml(field)})</span>` : '';
+    parts.push(
+      `<span class="scope-line">${escapeHtml(formatDisplayDate(start))} &mdash; ${escapeHtml(formatDisplayDate(end))}${fieldSuffix}</span>`
+    );
+  }
+
+  if (metadata.filters && metadata.filters.length > 0) {
+    const formatted = metadata.filters.map(escapeHtml).join(' &middot; ');
+    parts.push(`<span class="scope-line"><span class="scope-label">Filters:</span> ${formatted}</span>`);
+  }
+
+  if (parts.length === 0) return '';
+  return `<div class="report-scope">${parts.join('')}</div>`;
+}
+
+function generateDynamicReport(jsonData: any[], metadata?: ReportMetadata): string {
   
   // 1. Parser for Sorting
   function parseSortValue(val: any): number | string {
@@ -774,12 +818,14 @@ function generateDynamicReport(jsonData: any[]): string {
   let tableData_ = "";
 
   function generateTitleHeader(titleHeader: any) {
+      const scopeHtml = generateScopeSubheader(metadata);
       return `
       <div class="title-header">
-          <div></div> 
+          <div></div>
           <div>
              <h1>${titleHeader.MainHeading}</h1>
              <h2>${titleHeader.SubHeading || ""}</h2>
+             ${scopeHtml}
           </div>
       </div>`;
   }

@@ -5,6 +5,7 @@ import { FiMinus, FiMove } from 'react-icons/fi';
 import { useDashboard } from '@/context/DashboardContext';
 import { ChartConfig } from '@/lib/charts/ChartTypes';
 import type { InsightResult, InsightCategory, InsightSeverity } from '@/lib/insights/types';
+import { CardScopeMeta } from './CardScopeMeta';
 import '@/styles/dashboard.css';
 
 // Props Type
@@ -39,28 +40,20 @@ export default function InsightCard({ config }: Props) {
   return (
     <div className="card-base flex flex-col h-full w-full">      
       <div className="card-header shrink-0 flex items-start justify-between p-3 border-b border-slate-100">
-        <div className="flex items-start gap-3">
-          <div className="dragHandle drag-handle mt-0.5 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <div className="dragHandle drag-handle mt-0.5 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing shrink-0">
             <FiMove size={16} />
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-0">
             <h3 className="text-sm font-semibold text-slate-700 truncate">{config.title || 'Business Insights'}</h3>
-            {config.insight_date_range && (
-              <span className="text-[11px] text-slate-500 mt-0.5 font-medium leading-tight">
-                Data: {(() => {
-                  const [y, m, d] = config.insight_date_range.start.split('-');
-                  return `${m}-${d}-${y}`;
-                })()} to {(() => {
-                  const [y, m, d] = config.insight_date_range.end.split('-');
-                  return `${m}-${d}-${y}`;
-                })()} ({config.insight_date_range.field})
-              </span>
-            )}
+            <CardScopeMeta
+              dateRange={config.insight_date_range ?? config.report_date_range}
+            />
           </div>
         </div>
-        <button 
+        <button
           onClick={() => removeChart(config.id)}
-          className="delete-btn"
+          className="delete-btn shrink-0"
           title="Inactivate Insight"
         >
           <FiMinus size={14} />

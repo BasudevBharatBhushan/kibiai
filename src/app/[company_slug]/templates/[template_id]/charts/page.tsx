@@ -10,10 +10,12 @@ import {
   useState,
 } from "react";
 import { useParams } from "next/navigation";
-import { BarChart3, Lightbulb, Loader2, PanelLeft, PanelRight } from "lucide-react";
-import { Button } from "@/components/ui/button"; 
+import { BarChart3, FileText, Lightbulb, Loader2, PanelLeft, PanelRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 import DashboardGrid from "@/components/chart-dashboard/DashboardGrid";
+import DynamicReport from "@/components/DynamicReportPreview";
+import { buildReportMetadata } from "@/lib/utils/reportMetadata";
 
 import { ModularChatbot } from "@/components/chat/ModularChatbot";
 import { CHART_PROMPT_OPTIONS } from "@/constants/chartPromptOptions";
@@ -52,6 +54,7 @@ type ChartBuilderResponse = {
   insight_results: InsightResult[] | null;
   report_template_config_json: Record<string, unknown> | null;
   report_template_setup_json: Record<string, unknown> | null;
+  report_template_data_json: unknown;
   report_insight: string | null;
   fieldNames: string[];
   rows: Array<Record<string, unknown>>;
@@ -106,13 +109,17 @@ function LoadingSkeleton() {
 function ChartHeaderActions({
   isChatOpen,
   isConfigOpen,
+  isPreviewOpen,
   onToggleChat,
   onToggleConfig,
+  onTogglePreview,
 }: {
   isChatOpen: boolean;
   isConfigOpen: boolean;
+  isPreviewOpen: boolean;
   onToggleChat: () => void;
   onToggleConfig: () => void;
+  onTogglePreview: () => void;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -137,11 +144,24 @@ function ChartHeaderActions({
               ? "bg-white text-slate-800 shadow-sm border border-slate-200"
               : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"
           }`}
-          title="Configure Charts"
+          title="Configure Charts (closes Preview)"
           aria-pressed={isConfigOpen}
         >
           <PanelRight size={14} strokeWidth={isConfigOpen ? 2 : 1.5} />
           <span className="hidden sm:inline">Configure</span>
+        </button>
+        <button
+          onClick={onTogglePreview}
+          className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all text-[11px] font-semibold ${
+            isPreviewOpen
+              ? "bg-white text-emerald-700 shadow-sm border border-emerald-100"
+              : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+          }`}
+          title="Preview Report (closes Configure)"
+          aria-pressed={isPreviewOpen}
+        >
+          <FileText size={14} strokeWidth={isPreviewOpen ? 2 : 1.5} />
+          <span className="hidden sm:inline">Preview</span>
         </button>
       </div>
     </div>
@@ -160,6 +180,7 @@ function ChartBuilderWorkspace({
   setupJson,
   rows,
   shouldBootstrapCharts,
+  reportDataJson,
 }: {
   templateId: string;
   templateName: string;
@@ -172,6 +193,7 @@ function ChartBuilderWorkspace({
   setupJson: Record<string, unknown> | null;
   rows: Array<Record<string, unknown>>;
   shouldBootstrapCharts: boolean;
+  reportDataJson: unknown;
 }) {
   const {
     addNewChartFromAI,
@@ -183,9 +205,22 @@ function ChartBuilderWorkspace({
   const { resetHeader, setHeaderActions } = useHeader();
 
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>("chart");
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
   const [insightConversationId, setInsightConversationId] = useState<string | null>(initialInsightConversationId);
+
+  // Normalize the template's preview data into the shape DynamicReport expects.
+  const previewJsonData = useMemo<any[]>(() => {
+    if (!reportDataJson) return [];
+    if (Array.isArray(reportDataJson)) return reportDataJson;
+    return [];
+  }, [reportDataJson]);
+
+  const previewMetadata = useMemo(
+    () => buildReportMetadata(configJson, setupJson),
+    [configJson, setupJson]
+  );
 
   const [insightLoading, setInsightLoading] = useState(false);
   const [chartSuggestions, setChartSuggestions] = useState<string[]>([]);
@@ -211,21 +246,31 @@ function ChartBuilderWorkspace({
     [templateName, fieldSchemas]
   );
   const toggleChat = useCallback(() => setIsChatOpen((prev) => !prev), []);
-  const toggleConfig = useCallback(
-    () => setEditOpen(!isEditOpen),
-    [isEditOpen, setEditOpen]
-  );
+  const toggleConfig = useCallback(() => {
+    const next = !isEditOpen;
+    if (next) setIsPreviewOpen(false); // mutually exclusive with preview
+    setEditOpen(next);
+  }, [isEditOpen, setEditOpen]);
+  const togglePreview = useCallback(() => {
+    setIsPreviewOpen((prev) => {
+      const next = !prev;
+      if (next) setEditOpen(false); // mutually exclusive with configure
+      return next;
+    });
+  }, [setEditOpen]);
 
   useLayoutEffect(() => {
     setHeaderActions(
       <ChartHeaderActions
         isChatOpen={isChatOpen}
         isConfigOpen={isEditOpen}
+        isPreviewOpen={isPreviewOpen}
         onToggleChat={toggleChat}
         onToggleConfig={toggleConfig}
+        onTogglePreview={togglePreview}
       />
     );
-  }, [isChatOpen, isEditOpen, assistantMode, setHeaderActions, toggleChat, toggleConfig]);
+  }, [isChatOpen, isEditOpen, isPreviewOpen, assistantMode, setHeaderActions, toggleChat, toggleConfig, togglePreview]);
 
   useLayoutEffect(() => {
     return () => setHeaderActions(null);
@@ -586,6 +631,54 @@ function ChartBuilderWorkspace({
         <div className="relative z-0 flex-1 flex overflow-hidden bg-slate-50">
           <DashboardGrid />
         </div>
+
+        {/* Report Preview pane — mutex with the configure (EditPanel) pane */}
+        <div
+          className={`bg-slate-100 border-l-2 border-slate-300 h-full shadow-[-6px_0_18px_-6px_rgba(15,23,42,0.18)] z-20 transition-[width] duration-300 ease-in-out flex flex-col shrink-0 ${
+            isPreviewOpen ? "w-[640px]" : "w-0 border-none overflow-hidden"
+          }`}
+        >
+          {isPreviewOpen && (
+            <div className="flex-1 flex flex-col min-w-[640px] overflow-hidden">
+              <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-white">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="shrink-0 w-7 h-7 rounded-xl bg-emerald-50 flex items-center justify-center">
+                    <FileText size={14} className="text-emerald-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-slate-800 truncate">Template Preview</p>
+                    <p className="text-[10px] text-slate-400 font-medium truncate">{templateName}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+                  title="Close preview"
+                >
+                  <PanelRight size={14} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto bg-gray-200">
+                {previewJsonData.length > 0 ? (
+                  <DynamicReport
+                    jsonData={previewJsonData}
+                    metadata={previewMetadata}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                    <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-3 border border-slate-100">
+                      <FileText size={20} className="text-slate-300" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-400">No preview data yet</p>
+                    <p className="text-[11px] text-slate-300 mt-1">
+                      Generate the template once in the configurator to populate this preview.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {isAutoGeneratingCharts && (
@@ -672,23 +765,38 @@ function ChartBuilderPageContent() {
   const insightContext = useMemo(() => {
     if (!pageData?.report_template_config_json?.date_range_fields) return undefined;
     const dateRanges = pageData.report_template_config_json.date_range_fields as Record<string, Record<string, string>>;
-    
-    for (const tableFields of Object.values(dateRanges)) {
-      for (const rangeStr of Object.values(tableFields)) {
+    const setupTables = (pageData.report_template_setup_json?.tables ?? null) as
+      | Record<string, { fields?: Record<string, { label?: string }> }>
+      | null;
+
+    for (const [tableName, tableFields] of Object.entries(dateRanges)) {
+      for (const [fieldName, rangeStr] of Object.entries(tableFields)) {
         const parts = rangeStr.split("...");
         if (parts.length === 2) {
           const startD = new Date(parts[0]);
           const endD = new Date(parts[1]);
           if (!isNaN(startD.getTime()) && !isNaN(endD.getTime())) {
+            const fieldLabel =
+              setupTables?.[tableName]?.fields?.[fieldName]?.label
+              ?? fieldName;
             return {
               reportStart: `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`,
               reportEnd: `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`,
+              reportDateField: fieldLabel,
             };
           }
         }
       }
     }
     return undefined;
+  }, [pageData]);
+
+  const fieldSchemas = useMemo(() => {
+    if (!pageData) return [];
+    return deriveFieldSchemas(
+      pageData.report_template_config_json,
+      pageData.report_template_setup_json
+    );
   }, [pageData]);
 
   useEffect(() => {
@@ -752,6 +860,7 @@ function ChartBuilderPageContent() {
       initialLayoutMode={pageData.layoutMode}
       templateId={templateId}
       context={insightContext}
+      fieldSchemas={fieldSchemas}
     >
       <ChartBuilderWorkspace
         templateId={templateId}
@@ -764,6 +873,7 @@ function ChartBuilderPageContent() {
         configJson={pageData.report_template_config_json}
         setupJson={pageData.report_template_setup_json}
         rows={pageData.rows}
+        reportDataJson={pageData.report_template_data_json}
         shouldBootstrapCharts={
           shouldBootstrapStarterCharts({
             schemaCount: pageData.schemas.length,
