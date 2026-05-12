@@ -1,6 +1,6 @@
 import * as bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret');
 const COOKIE_NAME = 'kibiai_session';
@@ -34,7 +34,8 @@ export async function createSession(payload: UserPayload) {
   // Use a try-catch for cookies() as it can throw in some contexts
   try {
     const cookieStore = await cookies();
-    const host = (await import('next/headers')).headers().get('host') || '';
+    const headersList = await headers();
+    const host = headersList.get('host') || '';
     const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
 
     cookieStore.set(COOKIE_NAME, jwt, {

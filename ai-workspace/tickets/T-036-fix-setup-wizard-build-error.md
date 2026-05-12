@@ -1,27 +1,28 @@
 # Ticket: T-036-fix-setup-wizard-build-error
 
 ## Status
-`TODO`
+`COMPLETED`
 
 ## Description
-The Next.js build is failing due to a `TypeError` in `src/components/setup/SetupWizard.tsx`. Specifically, `setSaveError` is called but not defined. This was likely a partial implementation of error handling in the `handleSave` function.
+The Next.js build is failing due to multiple TypeErrors:
+1. In `src/components/setup/SetupWizard.tsx`, `setSaveError` is called but not defined.
+2. In `src/utils/auth.ts`, `headers()` is called without await, which is required in Next.js 15.
 
 ## Error Details
 ```
 ./src/components/setup/SetupWizard.tsx:309:5
 Type error: Cannot find name 'setSaveError'.
-
-  307 |   const handleSave = async () => {
-  308 |     setSaveStatus("saving");
-> 309 |     setSaveError(null);
-      |     ^
+```
+```
+./src/utils/auth.ts:37:59
+Type error: Property 'get' does not exist on type 'Promise<ReadonlyHeaders>'.
 ```
 
 ## Scope
-- `frontend`
+- `fullstack`
 
 ## Tasks
-- [ ] Define `saveError` state in `SetupWizard.tsx`.
-- [ ] Update `handleSave` to correctly set the error message on failure.
-- [ ] (Optional) Display the error message in the UI if it exists.
+- [x] Define `saveError` state in `SetupWizard.tsx`.
+- [x] Update `handleSave` to correctly set the error message on failure.
+- [ ] Fix `headers()` await in `src/utils/auth.ts`.
 - [ ] Verify build with `npm run build`.

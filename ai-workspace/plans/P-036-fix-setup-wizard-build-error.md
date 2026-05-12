@@ -12,11 +12,16 @@ Fix the build error in `SetupWizard.tsx` by defining the missing `saveError` sta
     - Set `saveError` in the `catch` block with a descriptive message.
 - (Optional) Add a small error message display near the save button if `saveStatus === "error"`.
 
+### Backend/Utils: `src/utils/auth.ts`
+- Await `headers()` call in `createSession`.
+
 ## Execution Steps
 1. **Modify `SetupWizard.tsx`**:
     - Add `const [saveError, setSaveError] = useState<string | null>(null);` near other state definitions.
     - Update `handleSave` catch block to `setSaveError(e instanceof Error ? e.message : "Failed to save");`.
-2. **Verification**:
+2. **Modify `auth.ts`**:
+    - Update line 37 to properly await `headers()`.
+3. **Verification**:
     - Run `npm run lint` to check for syntax/type errors.
     - Run `npm run build` to ensure the project builds successfully.
 

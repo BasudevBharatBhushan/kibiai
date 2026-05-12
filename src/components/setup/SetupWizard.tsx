@@ -184,6 +184,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
   const [config, dispatch] = useReducer(setupReducer, EMPTY_CONFIG);
   const [showJsonPreview, setShowJsonPreview] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedView, setSelectedView] = useState<string>("");
   const [showAddDatabaseModal, setShowAddDatabaseModal] = useState(false);
   const [showSaveAsModal, setShowSaveAsModal] = useState(false);
@@ -324,8 +325,9 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
       if (!data.success) throw new Error(data.error || "Failed to save");
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 3000);
-    } catch {
+    } catch (e) {
       setSaveStatus("error");
+      setSaveError(e instanceof Error ? e.message : "Failed to save");
       setTimeout(() => setSaveStatus("idle"), 5000);
     }
   };
