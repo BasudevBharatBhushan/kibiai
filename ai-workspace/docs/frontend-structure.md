@@ -35,6 +35,10 @@ In production, the application utilizes subdomains to isolate the **Admin Panel*
 - **Implementation**:
   - Managed by `middleware.ts` using `NextResponse.rewrite()`.
   - **Localhost Rule**: Subdomain logic is bypassed on `localhost`; use path-based routing (`/admin` or `/[slug]`).
+- **Strict Isolation Rules (T-035)**:
+  - If a user is logged in to a specific company, attempting to access any other company's URL or the apex domain will instantly redirect them back to their authorized workspace.
+  - If a logged-in user hits `/login`, they are immediately redirected to their dashboard.
+  - If a logged-out user attempts to access a protected URL, they are cleanly redirected to the exact login page for that workspace (e.g., `/[company_slug]/login`).
 - **Linking**:
   - When displaying links to other workspaces (e.g., in the Admin Panel), use the `NEXT_PUBLIC_BASE_DOMAIN` environment variable to construct the full subdomain URL.
   - See `CompanyDetails.tsx` for a reference implementation of environment-aware link construction.

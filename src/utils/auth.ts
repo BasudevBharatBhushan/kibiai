@@ -10,6 +10,7 @@ export interface UserPayload {
   email: string;
   accountType: 'platform_admin' | 'company_user';
   companyId?: string;
+  companySlug?: string;
 }
 
 export async function hashPassword(password: string): Promise<string> {

@@ -128,19 +128,43 @@ export async function middleware(request: NextRequest) {
     hostname.includes("127.0.0.1") ||
     hostname.startsWith("192.168.")
   ) {
-    console.log(`[middleware] Localhost accessed: ${pathname}, isPublic: ${!!isPublicRoute}, user: ${!!user}`);
-    // Still perform auth checks on localhost
-    if (!user && !isPublicRoute) {
-      console.log(`[middleware] Redirecting to /login because not public and not authenticated`);
-      return NextResponse.redirect(new URL('/login', request.url));
+    if (user) {
+      // Rule 3: Login Bypass
+      if (pathname.endsWith('/login')) {
+        if (user.accountType === 'platform_admin' && !user.companyId) {
+          return NextResponse.redirect(new URL('/admin', request.url));
+        } else if (user.companySlug) {
+          return NextResponse.redirect(new URL(`/${user.companySlug}`, request.url));
+        }
+      }
+
+      // Rule 2: Company Isolation
+      if (user.companySlug && !pathname.startsWith('/api')) {
+        const pathSegments = pathname.split('/').filter(Boolean);
+        const pathSlug = pathSegments[0];
+        if (pathSlug && pathSlug !== 'api' && pathSlug !== user.companySlug && pathSlug !== 'invalid-subdomain') {
+          return NextResponse.redirect(new URL(`/${user.companySlug}`, request.url));
+        }
+      }
+
+      // Rule 1: Platform admin redirect
+      if (user.accountType === 'platform_admin' && !user.companyId && !pathname.startsWith('/admin') && !pathname.startsWith('/api')) {
+        return NextResponse.redirect(new URL('/admin', request.url));
+      }
+    } else {
+      // Rule 4: Not logged in
+      if (!isPublicRoute) {
+        const pathSegments = pathname.split('/').filter(Boolean);
+        const slug = pathSegments[0];
+        if (slug && slug !== 'api' && slug !== 'admin') {
+          return NextResponse.redirect(new URL(`/${slug}/login`, request.url));
+        } else if (slug === 'admin') {
+          return NextResponse.redirect(new URL(`/admin/login`, request.url));
+        }
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
     }
 
-    // Platform admin redirect on localhost (only if not acting as a company user)
-    if (user?.accountType === 'platform_admin' && !user.companyId && !pathname.startsWith('/admin')) {
-      return NextResponse.redirect(new URL('/admin', request.url));
-    }
-
-    console.log(`[middleware] Proceeding to next() for ${pathname}`);
     return NextResponse.next();
   }
 
@@ -155,16 +179,28 @@ export async function middleware(request: NextRequest) {
 
   // No subdomain → apex domain
   if (!subdomain) {
-    // Auth check for apex domain
-    if (!user && !isPublicRoute) {
+    if (user) {
+      // Rule 1: Sticky Login for Apex Domain
+      if (user.accountType === 'platform_admin' && !user.companyId) {
+        const adminUrl = new URL(pathname, `https://admin.${BASE_DOMAIN}`);
+        adminUrl.search = request.nextUrl.search;
+        return NextResponse.redirect(adminUrl);
+      } else if (user.companySlug) {
+        const companyUrl = new URL(pathname, `https://${user.companySlug}.${BASE_DOMAIN}`);
+        companyUrl.search = request.nextUrl.search;
+        return NextResponse.redirect(companyUrl);
+      }
+    } else if (!isPublicRoute) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    
-    // Platform admin redirect on apex (only if not acting as a company user)
-    if (user?.accountType === 'platform_admin' && !user.companyId) {
-      const adminUrl = new URL(pathname, `https://admin.${BASE_DOMAIN}`);
-      adminUrl.search = request.nextUrl.search;
-      return NextResponse.redirect(adminUrl);
+
+    // Login bypass for apex
+    if (user && pathname.endsWith('/login')) {
+      if (user.accountType === 'platform_admin' && !user.companyId) {
+        return NextResponse.redirect(new URL('/', `https://admin.${BASE_DOMAIN}`));
+      } else if (user.companySlug) {
+        return NextResponse.redirect(new URL('/', `https://${user.companySlug}.${BASE_DOMAIN}`));
+      }
     }
 
     return NextResponse.next();
@@ -172,22 +208,29 @@ export async function middleware(request: NextRequest) {
 
   // ── 2.5 Role-Based Redirection ──────────────────────────────────────────
   
-  // If platform admin is on a company subdomain but didn't log in through a company portal,
-  // redirect them to the admin subdomain.
-  if (user?.accountType === 'platform_admin' && !user.companyId && subdomain !== 'admin') {
-    const adminUrl = new URL(pathname, `https://admin.${BASE_DOMAIN}`);
-    adminUrl.search = request.nextUrl.search;
-    return NextResponse.redirect(adminUrl);
-  }
+  if (user) {
+    // Rule 3: Login Bypass on Subdomain
+    if (pathname.endsWith('/login')) {
+      if (user.accountType === 'platform_admin' && !user.companyId) {
+        return NextResponse.redirect(new URL('/', `https://admin.${BASE_DOMAIN}`));
+      } else if (user.companySlug) {
+        return NextResponse.redirect(new URL('/', `https://${user.companySlug}.${BASE_DOMAIN}`));
+      }
+    }
 
-  // If company user is on the admin subdomain, redirect them to their company subdomain
-  if (user?.accountType === 'company_user' && subdomain === 'admin' && user.companyId) {
-    // We need to fetch the company slug for this companyId? 
-    // Or assume they should just go back to a safe place.
-    // For now, let's just let them proceed and they will likely get 403 from the page logic,
-    // OR we could redirect them to their company subdomain if we knew the slug.
-    // Since we don't know the slug here without a DB lookup (which we want to avoid),
-    // we'll let it pass for now.
+    // Rule 1: Platform admin on wrong subdomain
+    if (user.accountType === 'platform_admin' && !user.companyId && subdomain !== 'admin') {
+      const adminUrl = new URL(pathname, `https://admin.${BASE_DOMAIN}`);
+      adminUrl.search = request.nextUrl.search;
+      return NextResponse.redirect(adminUrl);
+    }
+
+    // Rule 2: Company Isolation on Prod
+    if (user.companySlug && subdomain !== user.companySlug) {
+      const companyUrl = new URL(pathname, `https://${user.companySlug}.${BASE_DOMAIN}`);
+      companyUrl.search = request.nextUrl.search;
+      return NextResponse.redirect(companyUrl);
+    }
   }
 
   // Auth Guard: If not logged in and not public route, redirect to login

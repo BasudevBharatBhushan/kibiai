@@ -81,12 +81,26 @@ export async function POST(req: Request) {
       }
     }
 
+    let sessionCompanySlug: string | undefined = undefined;
+    if (sessionCompanyId) {
+      const { data: companyData } = await supabase
+        .from("companies")
+        .select("slug")
+        .eq("company_id", sessionCompanyId)
+        .maybeSingle();
+      
+      if (companyData) {
+        sessionCompanySlug = companyData.slug;
+      }
+    }
+
     // 4. Create session
     const jwt = await createSession({
       accountId: account.account_id,
       email: account.email,
       accountType: account.account_type as any,
-      companyId: sessionCompanyId
+      companyId: sessionCompanyId,
+      companySlug: sessionCompanySlug
     });
 
     const isProd = process.env.NODE_ENV === 'production';

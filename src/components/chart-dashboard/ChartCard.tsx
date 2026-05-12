@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { FiMinus, FiMove } from 'react-icons/fi';
+import { FiMinus, FiMove, FiGitMerge } from 'react-icons/fi';
 import * as Highcharts from 'highcharts';
 
 import { useDashboard } from '@/context/DashboardContext';
@@ -10,6 +10,7 @@ import { buildOptions } from '@/lib/utils/chartsUtils';
 import type { ChartConfig, ChartKind } from '@/lib/charts/ChartTypes';
 import { CHART_VISUALS, AVAILABLE_CHART_TYPES } from '@/constants/dashboard';
 import { CardScopeMeta } from './CardScopeMeta';
+import CompareModal from './CompareModal';
 import '@/styles/dashboard.css';
 
 
@@ -26,6 +27,9 @@ type Props = {
 export default function ChartCard({ config }: Props) {
   // Use Context hook
   const { removeChart, updateChartKind, isViewerMode } = useDashboard();
+
+  // Compare modal state
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
 
   const opts = useMemo(() => {
     const base = buildOptions(config);
@@ -69,6 +73,17 @@ export default function ChartCard({ config }: Props) {
         </div>
 
         <div className="flex items-center gap-2 pl-2 shrink-0">
+          {/* Compare button — visible in both admin and viewer modes */}
+          <button
+            id={`compare-btn-${config.id}`}
+            onClick={() => setIsCompareOpen(true)}
+            className="compare-btn"
+            title="Compare this chart with another report"
+          >
+            <FiGitMerge size={13} />
+            <span className="hidden sm:inline">Compare</span>
+          </button>
+
           {!isViewerMode && (
             <>
               <select
@@ -102,6 +117,14 @@ export default function ChartCard({ config }: Props) {
           containerProps={{ style: { height: '100%', width: '100%' } }}
         />
       </div>
+
+      {/* Compare Modal — rendered as a portal */}
+      {isCompareOpen && (
+        <CompareModal
+          primaryConfig={config}
+          onClose={() => setIsCompareOpen(false)}
+        />
+      )}
     </div>
   );
 }

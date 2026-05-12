@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
-import { Save, Loader2, CheckCircle, AlertCircle, Database, Network, FileJson, Plus, ArrowRight, FolderOpen, Info } from "lucide-react";
+import { Save, Loader2, CheckCircle, AlertCircle, Database, Network, FileJson, Plus, ArrowRight, FolderOpen } from "lucide-react";
 import Link from "next/link";
 import { HostConfigSection } from "@/components/setup/HostConfigSection";
 import { AddDatabaseSection } from "@/components/setup/AddDatabaseSection";
@@ -172,19 +172,24 @@ interface SetupWizardProps {
   companySlug?: string;
 }
 
+interface SavedSetup {
+  setup_id: string;
+  setup_name: string;
+  setup_description?: string;
+}
+
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
   const [config, dispatch] = useReducer(setupReducer, EMPTY_CONFIG);
   const [showJsonPreview, setShowJsonPreview] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedView, setSelectedView] = useState<string>("");
   const [showAddDatabaseModal, setShowAddDatabaseModal] = useState(false);
   const [showSaveAsModal, setShowSaveAsModal] = useState(false);
   const [isSavingAsReusable, setIsSavingAsReusable] = useState(false);
   const [moduleId, setModuleId] = useState<string>("");
-  const [savedSetups, setSavedSetups] = useState<any[]>([]);
+  const [savedSetups, setSavedSetups] = useState<SavedSetup[]>([]);
   const [isLoadingSetups, setIsLoadingSetups] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -252,7 +257,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
     }
   }, [moduleId, fetchSavedSetups]);
 
-  const handleApplySetup = async (setup: any) => {
+  const handleApplySetup = async (setup: SavedSetup) => {
     if (!window.confirm(`Load "${setup.setup_name}"? This will replace your current configuration.`)) {
       return;
     }
@@ -319,9 +324,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
       if (!data.success) throw new Error(data.error || "Failed to save");
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 3000);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to save setup.";
-      setSaveError(message);
+    } catch {
       setSaveStatus("error");
       setTimeout(() => setSaveStatus("idle"), 5000);
     }
@@ -349,19 +352,15 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
       setSaveStatus("saved");
       fetchSavedSetups(); // Refresh list
       setTimeout(() => setSaveStatus("idle"), 3000);
-    } catch (err: any) {
-      setSaveError(err.message);
+    } catch {
       setSaveStatus("error");
-      throw err;
+      throw new Error("Failed to save setup.");
     } finally {
       setIsSavingAsReusable(false);
     }
   };
 
   const tableNames = Object.keys(config.tables);
-
-  // Show a "Continue to Configure" CTA after a successful save
-  const showContinueCTA = saveStatus === "saved" && companySlug && tableNames.length > 0;
 
   return (
     <div className="setup-wizard">
@@ -578,6 +577,19 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           onClose={() => setShowSaveAsModal(false)}
           onSave={handleSaveAsReusable}
           isSaving={isSavingAsReusable}
+        />
+      )}
+
+      {showAddDatabaseModal && (
+        <AddDatabaseSection
+          host={config.host}
+          protocol={config.data_fetching_protocol}
+          tableCount={tableNames.length}
+          existingTableNames={tableNames}
+          onTableAdded={(tableName, tableConfig) => 
+            dispatch({ type: "ADD_TABLE", tableName, tableConfig })
+          }
+          onClose={() => setShowAddDatabaseModal(false)}
         />
       )}
 

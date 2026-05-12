@@ -4,10 +4,16 @@
 The platform uses a **Subdomain-Based Multi-tenant Authentication** strategy.
 
 ### Session Management
-- **Token**: JWT (JSON Web Token) containing `accountId`, `email`, `accountType`, and optionally `companyId`.
+- **Token**: JWT (JSON Web Token) containing `accountId`, `email`, `accountType`, `companyId`, and importantly, `companySlug`.
 - **Storage**: `httpOnly`, `secure` (in production) cookies.
 - **Cookie Name**: `kibiai_session`.
 - **Domain**: In production, cookies are set on the apex domain (e.g., `.kibiai.itsb3.xyz`) to allow the session to persist across different subdomains (e.g., from `kibiai.itsb3.xyz` to `admin.kibiai.itsb3.xyz`).
+
+## Strict Redirection Rules (T-035)
+1. **Rule 1 (Sticky Login):** If a user is already logged in as a platform admin or company user, any hit to the apex domain or an unrelated platform URL will redirect them to their respective workspace dashboard.
+2. **Rule 2 (Company Isolation):** For company-based logins, the session MUST save the `companySlug`. If a logged-in user attempts to access a different company's subdomain/URL, they must be redirected back to their currently authenticated company.
+3. **Rule 3 (Login Page Bypass):** If a valid session exists, accessing any `/login` route must immediately redirect to the user's home page.
+4. **Rule 4 (Logout Redirection):** If logged out, hitting any protected URL (admin or company) must cleanly redirect the user to the respective login page.
 
 ## Key Logic
 
