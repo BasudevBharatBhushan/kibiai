@@ -1,5 +1,6 @@
-// utils/filemaker.ts
 import { requireEnv } from "./utility";
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 var FM_HOST = requireEnv("FM_HOST") || "kibiz.smtech.cloud";
 var FM_VERSION = requireEnv("FM_VERSION") || "vLatest";
