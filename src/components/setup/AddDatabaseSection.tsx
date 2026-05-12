@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Search, Plus, Loader2 } from "lucide-react";
 import { TableConfig, FieldConfig } from "@/components/setup/types";
 import { ODataFieldModal } from "@/components/setup/ODataFieldModal";
+import { Modal } from "@/components/ui/Modal";
 
 interface LayoutEntry {
   name: string;
@@ -62,16 +63,6 @@ export function AddDatabaseSection({
     statusTimer.current = setTimeout(() => setFetchStatus(null), 5000);
   };
   const basicToken = () => btoa(`${username}:${password}`);
-
-  // Credentials modal state
-  const [showCredsModal, setShowCredsModal] = useState(false);
-
-  // Prefill on first render if no credentials
-  useEffect(() => {
-    if (!file && !username && !password) {
-      setShowCredsModal(true);
-    }
-  }, []);
 
   // ── Fetch tables (layouts or OData entities) ──────────────────────────────
   const handleFetchTables = async () => {
@@ -217,154 +208,158 @@ export function AddDatabaseSection({
   const tableLayouts = layouts.filter((l) => l.table === selectedTable);
 
   return (
-    <div className="ads-overlay">
-      <div className="ads-container">
-        <div className="ads-header-compact">
-          <h3 className="ads-title">Add New Database</h3>
-          <div className="ads-header-actions">
-            <div className="ads-note">Max 5 databases</div>
-            <button className="ads-btn-close" onClick={onClose}>×</button>
-          </div>
+    <Modal isOpen={true} onClose={onClose} title="Add New Database">
+      <div className="flex flex-col gap-5">
+        <div className="bg-blue-50/50 text-blue-800 text-xs px-3 py-2 rounded-md border border-blue-100 flex justify-between items-center">
+          <span>Max 5 databases allowed.</span>
+          <span className="font-semibold">{tableCount}/5</span>
         </div>
-      
-      <div className="ads-body">
-        {/* Credentials summary */}
-        <div className="ads-creds-summary">
-          <div className="ads-creds-info">
-            <span className="ads-creds-label">Database:</span>
-            <span className="ads-creds-value">{file || "Not set"}</span>
-            <span className="ads-creds-label" style={{ marginLeft: 16 }}>Username:</span>
-            <span className="ads-creds-value">{username || "Not set"}</span>
+
+        {/* Credentials Form */}
+        <div className="flex flex-col gap-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+          <h4 className="text-sm font-semibold text-slate-700 m-0">Database Credentials</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="ads-file" className="text-xs font-medium text-slate-600">
+                {protocol === "data-api" ? "Database File" : "Database Name"}
+              </label>
+              <input
+                id="ads-file"
+                type="text"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="e.g. KiBiAIDemo"
+                value={file}
+                onChange={(e) => { setFile(e.target.value); setFetchStatus(null); }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="ads-username" className="text-xs font-medium text-slate-600">Username</label>
+              <input
+                id="ads-username"
+                type="text"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="Database username"
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); setFetchStatus(null); }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5 md:col-span-2">
+              <label htmlFor="ads-password" className="text-xs font-medium text-slate-600">Password</label>
+              <input
+                id="ads-password"
+                type="password"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="Database password"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setFetchStatus(null); }}
+              />
+            </div>
           </div>
-          <button 
-            className="ads-btn-outline" 
-            onClick={() => setShowCredsModal(true)}
-          >
-            Configure Credentials
-          </button>
         </div>
 
         {/* Table select + Fetch Tables */}
-        <div className="ads-row-flex">
-          <div className="ads-field" style={{ flex: 1 }}>
-            <div className="ads-field-label-row">
-              <label htmlFor="ads-table-select" className="ads-label">
-                {protocol === "data-api" ? "Select Table" : "Select Entity"}
-              </label>
-              <button
-                id="fetch-tables-btn"
-                className="ads-btn-fetch"
-                onClick={handleFetchTables}
-                disabled={fetchingTables}
-              >
-                {fetchingTables ? (
-                  <>
-                    <Loader2 size={13} className="ads-spin" /> Fetching…
-                  </>
-                ) : (
-                  <>
-                    <Search size={13} /> Fetch Tables
-                  </>
-                )}
-              </button>
-            </div>
-
-            {protocol === "data-api" ? (
-              <select
-                id="ads-table-select"
-                className="ads-select"
-                value={selectedTable}
-                disabled={uniqueTables.length === 0}
-                onChange={(e) => {
-                  setSelectedTable(e.target.value);
-                  setSelectedLayout("");
-                }}
-              >
-                <option value="">
-                  {uniqueTables.length === 0
-                    ? "First enter credentials and fetch tables"
-                    : "Select a table"}
-                </option>
-                {uniqueTables.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <select
-                id="ads-odata-table-select"
-                className="ads-select"
-                value={selectedTable}
-                disabled={odataTables.length === 0}
-                onChange={(e) => handleOdataTableSelect(e.target.value)}
-              >
-                <option value="">
-                  {odataTables.length === 0
-                    ? "First enter credentials and fetch tables"
-                    : "Select an entity"}
-                </option>
-                {odataTables.map((t) => (
-                  <option key={t.table} value={t.table}>
-                    {t.table}
-                  </option>
-                ))}
-              </select>
-            )}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label htmlFor="ads-table-select" className="text-xs font-medium text-slate-600">
+              {protocol === "data-api" ? "Select Table" : "Select Entity"}
+            </label>
+            <button
+              id="fetch-tables-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-md bg-white text-slate-600 text-xs font-semibold cursor-pointer transition-all hover:bg-slate-50 hover:border-slate-400 disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={handleFetchTables}
+              disabled={fetchingTables || !file || !username || !password}
+            >
+              {fetchingTables ? (
+                <><Loader2 size={14} className="animate-spin" /> Fetching…</>
+              ) : (
+                <><Search size={14} /> Fetch Tables</>
+              )}
+            </button>
           </div>
+
+          {protocol === "data-api" ? (
+            <select
+              id="ads-table-select"
+              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+              value={selectedTable}
+              disabled={uniqueTables.length === 0}
+              onChange={(e) => {
+                setSelectedTable(e.target.value);
+                setSelectedLayout("");
+              }}
+            >
+              <option value="">
+                {uniqueTables.length === 0
+                  ? "First enter credentials and fetch tables"
+                  : "Select a table"}
+              </option>
+              {uniqueTables.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          ) : (
+            <select
+              id="ads-odata-table-select"
+              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+              value={selectedTable}
+              disabled={odataTables.length === 0}
+              onChange={(e) => handleOdataTableSelect(e.target.value)}
+            >
+              <option value="">
+                {odataTables.length === 0
+                  ? "First enter credentials and fetch tables"
+                  : "Select an entity"}
+              </option>
+              {odataTables.map((t) => (
+                <option key={t.table} value={t.table}>{t.table}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Layout select (data-api only) */}
         {protocol === "data-api" && selectedTable && (
-          <div className="ads-row-flex">
-            <div className="ads-field" style={{ flex: 1 }}>
-              <label htmlFor="ads-layout-select" className="ads-label">
-                Select Layout
-              </label>
-              <select
-                id="ads-layout-select"
-                className="ads-select"
-                value={selectedLayout}
-                disabled={tableLayouts.length === 0}
-                onChange={(e) => setSelectedLayout(e.target.value)}
-              >
-                <option value="">Select a layout</option>
-                {tableLayouts.map((l) => (
-                  <option key={l.name} value={l.name}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* Add Table button (data-api only) */}
-        {protocol === "data-api" && (
-          <div className="ads-add-row">
-            <button
-              id="add-table-btn"
-              className="ads-btn-add"
-              onClick={handleAddTableDataApi}
-              disabled={addingTable || !selectedLayout}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="ads-layout-select" className="text-xs font-medium text-slate-600">
+              Select Layout
+            </label>
+            <select
+              id="ads-layout-select"
+              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={selectedLayout}
+              disabled={tableLayouts.length === 0}
+              onChange={(e) => setSelectedLayout(e.target.value)}
             >
-              {addingTable ? (
-                <>
-                  <Loader2 size={13} className="ads-spin" /> Adding Table…
-                </>
-              ) : (
-                <>
-                  <Plus size={13} /> Add Table
-                </>
-              )}
-            </button>
+              <option value="">Select a layout</option>
+              {tableLayouts.map((l) => (
+                <option key={l.name} value={l.name}>{l.name}</option>
+              ))}
+            </select>
           </div>
         )}
 
         {/* Status message */}
         {fetchStatus && (
-          <div className={`ads-status ads-status-${fetchStatus.type}`}>
+          <div className={`px-4 py-3 rounded-md text-sm font-medium ${fetchStatus.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
             {fetchStatus.message}
+          </div>
+        )}
+
+        {/* Add Table button (data-api only) */}
+        {protocol === "data-api" && (
+          <div className="flex justify-end mt-2">
+            <button
+              id="add-table-btn"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 text-white border-none rounded-md text-sm font-semibold cursor-pointer transition-colors hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed"
+              onClick={handleAddTableDataApi}
+              disabled={addingTable || !selectedLayout}
+            >
+              {addingTable ? (
+                <><Loader2 size={14} className="animate-spin" /> Adding Table…</>
+              ) : (
+                <><Plus size={14} /> Add Table</>
+              )}
+            </button>
           </div>
         )}
       </div>
@@ -382,400 +377,7 @@ export function AddDatabaseSection({
           }}
         />
       )}
+    </Modal>
 
-      {/* Credentials Modal */}
-      {showCredsModal && (
-        <div className="ads-modal-overlay">
-          <div className="ads-modal">
-            <div className="ads-modal-header">
-              <h4>Database Credentials</h4>
-            </div>
-            <div className="ads-modal-body">
-              <div className="ads-field">
-                <label htmlFor="ads-file" className="ads-label">
-                  {protocol === "data-api" ? "Database File" : "Database Name"}
-                </label>
-                <input
-                  id="ads-file"
-                  type="text"
-                  className="ads-input"
-                  placeholder="e.g. KiBiAIDemo"
-                  value={file}
-                  onChange={(e) => setFile(e.target.value)}
-                />
-              </div>
-              <div className="ads-field">
-                <label htmlFor="ads-username" className="ads-label">Username</label>
-                <input
-                  id="ads-username"
-                  type="text"
-                  className="ads-input"
-                  placeholder="Database username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                />
-              </div>
-              <div className="ads-field">
-                <label htmlFor="ads-password" className="ads-label">Password</label>
-                <input
-                  id="ads-password"
-                  type="password"
-                  className="ads-input"
-                  placeholder="Database password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="ads-modal-footer">
-              <button 
-                className="ads-btn-outline" 
-                onClick={() => setShowCredsModal(false)}
-              >
-                Close
-              </button>
-              <button 
-                className="ads-btn-add" 
-                onClick={() => setShowCredsModal(false)}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style jsx>{`
-        .ads-container {
-          background: #fff;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          padding: 24px;
-        }
-
-        .ads-header-compact {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 24px;
-          border-bottom: 1px solid #e2e8f0;
-          padding-bottom: 16px;
-        }
-
-        .ads-title {
-          font-size: 16px;
-          font-weight: 600;
-          color: #0f172a;
-          margin: 0;
-        }
-
-        .ads-note {
-          background: #f1f5f9;
-          color: #475569;
-          padding: 4px 10px;
-          border-radius: 6px;
-          font-size: 12px;
-          font-weight: 500;
-        }
-
-        .ads-body {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .ads-creds-summary {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 12px 16px;
-          background: #f8fafc;
-          border: 1px dashed #cbd5e1;
-          border-radius: 8px;
-        }
-
-        .ads-creds-info {
-          font-size: 13px;
-        }
-
-        .ads-creds-label {
-          color: #64748b;
-          font-weight: 500;
-          margin-right: 6px;
-        }
-
-        .ads-creds-value {
-          color: #0f172a;
-          font-weight: 600;
-        }
-
-        .ads-row-flex {
-          display: flex;
-          gap: 16px;
-        }
-
-        .ads-field {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .ads-field-label-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-
-        .ads-label {
-          font-size: 13px;
-          font-weight: 500;
-          color: #475569;
-        }
-
-        .ads-input,
-        .ads-select {
-          width: 100%;
-          padding: 10px 14px;
-          border: 1px solid #cbd5e1;
-          border-radius: 8px;
-          font-size: 14px;
-          color: #0f172a;
-          background: #fff;
-          outline: none;
-          transition: all 0.2s ease;
-        }
-
-        .ads-input:focus,
-        .ads-select:focus {
-          border-color: #2563eb;
-          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-
-        .ads-select:disabled {
-          background: #f8fafc;
-          color: #94a3b8;
-        }
-
-        .ads-btn-fetch {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          border: 1px solid #cbd5e1;
-          border-radius: 6px;
-          background: #fff;
-          color: #475569;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: all 0.2s ease;
-        }
-
-        .ads-btn-fetch:hover:not(:disabled) {
-          background: #f8fafc;
-          border-color: #94a3b8;
-        }
-
-        .ads-btn-fetch:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .ads-btn-outline {
-          padding: 6px 12px;
-          border: 1px solid #cbd5e1;
-          border-radius: 6px;
-          background: #fff;
-          color: #475569;
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .ads-btn-outline:hover {
-          background: #f1f5f9;
-        }
-
-        .ads-add-row {
-          display: flex;
-          justify-content: flex-end;
-          margin-top: 8px;
-        }
-
-        .ads-btn-add {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 10px 20px;
-          border: none;
-          border-radius: 8px;
-          background: #2563eb;
-          color: #fff;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .ads-btn-add:hover:not(:disabled) {
-          background: #1d4ed8;
-        }
-
-        .ads-btn-add:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
-        }
-
-        .ads-status {
-          padding: 12px 16px;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 500;
-        }
-
-        .ads-status-success {
-          background: #f0fdf4;
-          color: #166534;
-          border: 1px solid #bbf7d0;
-        }
-
-        .ads-status-error {
-          background: #fef2f2;
-          color: #991b1b;
-          border: 1px solid #fecaca;
-        }
-
-        .ads-spin {
-          animation: ads-spin 0.8s linear infinite;
-        }
-
-        @keyframes ads-spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-
-        /* Modal Styles */
-        .ads-modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(15, 23, 42, 0.5);
-          backdrop-filter: blur(2px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          padding: 24px;
-        }
-
-        .ads-modal {
-          background: #fff;
-          border-radius: 12px;
-          width: 100%;
-          max-width: 400px;
-          box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
-        }
-
-        .ads-modal-header {
-          padding: 16px 20px;
-          border-bottom: 1px solid #e2e8f0;
-          font-size: 15px;
-          font-weight: 600;
-          color: #0f172a;
-        }
-
-        .ads-modal-body {
-          padding: 20px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .ads-modal-footer {
-          padding: 16px 20px;
-          border-top: 1px solid #e2e8f0;
-          display: flex;
-          justify-content: flex-end;
-          gap: 12px;
-          background: #f8fafc;
-          border-radius: 0 0 12px 12px;
-        }
-
-        .ads-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(15, 23, 42, 0.5);
-          backdrop-filter: blur(2px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 900;
-          padding: 24px;
-        }
-
-        .ads-container {
-          background: #fff;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          padding: 24px;
-          width: 100%;
-          max-width: 600px;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
-        }
-
-        .ads-header-compact {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 24px;
-          border-bottom: 1px solid #e2e8f0;
-          padding-bottom: 16px;
-        }
-
-        .ads-header-actions {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .ads-btn-close {
-          background: none;
-          border: none;
-          font-size: 24px;
-          line-height: 1;
-          color: #64748b;
-          cursor: pointer;
-          padding: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 24px;
-          height: 24px;
-          transition: color 0.2s;
-        }
-
-        .ads-btn-close:hover {
-          color: #0f172a;
-        }
-
-        @media (max-width: 640px) {
-          .ads-creds-summary {
-            flex-direction: column;
-            gap: 12px;
-            align-items: flex-start;
-          }
-        }
-      `}</style>
-      </div>
-    </div>
   );
 }
