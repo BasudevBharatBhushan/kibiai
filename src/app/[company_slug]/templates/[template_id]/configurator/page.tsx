@@ -24,24 +24,30 @@ import { sanitizeReportConfig } from "@/lib/utils/sanitizeReportConfig";
 // ── Build predefinedPrompt (DB schema context) ─────────────────────────────────
 // Per REPORTS_SYSTEM_INSTRUCTION TYPE 1/3/4:
 //   predefined_prompt carries schema so user message bubble stays clean.
-function buildPredefinedPrompt(setup: any, config: any): string {
+function hasReportConfig(config: any): boolean {
+  return Boolean(
+    config &&
+      ((config.db_defination && config.db_defination.length > 0) ||
+        Object.keys(config.group_by_fields || {}).length > 0)
+  );
+}
+
+function buildSetupPrompt(setup: any, config: any): string {
   const today = new Date().toLocaleDateString("en-US");
 
   let setupStr = "{}";
   try { setupStr = JSON.stringify(setup || {}).replace(/"/g, "'"); } catch {}
 
-  const hasConfig =
-    config &&
-    ((config.db_defination && config.db_defination.length > 0) ||
-      Object.keys(config.group_by_fields || {}).length > 0);
+  const suffix = hasReportConfig(config) ? "" : " Suggest me prompt related to it.";
+  return `Today's date (reference for date ranges): ${today}. Here is my DB Schema - ${setupStr}.${suffix}`;
+}
 
-  if (hasConfig) {
-    let configStr = "{}";
-    try { configStr = JSON.stringify(config || {}).replace(/"/g, "'"); } catch {}
-    return `Today's date (reference for date ranges): ${today}. Here is my DB Schema - ${setupStr}. Here is my Previous Report Config - ${configStr}.`;
-  }
+function buildConfigPrompt(config: any): string {
+  if (!hasReportConfig(config)) return "";
 
-  return `Today's date (reference for date ranges): ${today}. Here is my DB Schema - ${setupStr}. Suggest me prompt related to it.`;
+  let configStr = "{}";
+  try { configStr = JSON.stringify(config || {}).replace(/"/g, "'"); } catch {}
+  return `Here is my Previous Report Config - ${configStr}.`;
 }
 
 // ── Panel toggle buttons — injected into the global Header via HeaderContext ───
@@ -331,9 +337,14 @@ function ConfiguratorPageContent({
   );
 
   // ── predefinedPrompt — DB schema context (invisible to user bubble) ────────
-  const predefinedPrompt = useMemo(
-    () => buildPredefinedPrompt(state.setup, state.config),
+  const setupPrompt = useMemo(
+    () => buildSetupPrompt(state.setup, state.config),
     [state.setup, state.config]
+  );
+
+  const configPrompt = useMemo(
+    () => buildConfigPrompt(state.config),
+    [state.config]
   );
 
   // ── formatPrompt — just adds .json (user bubble stays clean) ─────────────
@@ -429,7 +440,8 @@ function ConfiguratorPageContent({
             showAiSuggestions={true}
             showSetupCheckbox={true}
             instructionSet={REPORTS_SYSTEM_INSTRUCTION}
-            predefinedPrompt={predefinedPrompt}
+            setupPrompt={setupPrompt}
+            configPrompt={configPrompt}
             formatPrompt={formatPrompt}
             suggestedPrompts={reportPromptOptions}
             initialConversationId={state.conversationId}

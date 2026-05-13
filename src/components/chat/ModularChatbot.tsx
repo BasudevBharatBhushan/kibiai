@@ -44,6 +44,8 @@ export interface ModularChatbotProps {
   instructionSet: string;
   conversationMetadata?: Record<string, any>;
   predefinedPrompt?: string;
+  setupPrompt?: string;
+  configPrompt?: string;
   formatPrompt?: (userText: string) => string;
   botName?: string;
   welcomeMessage?: string;
@@ -63,7 +65,7 @@ export interface ModularChatbotProps {
   autoInitialize?: boolean;
   /** Whether to parse and display AI-generated suggestions (e.g. report_suggestions) in the internal rail */
   showAiSuggestions?: boolean;
-  /** Whether to show the "Send setup with prompt" checkbox */
+  /** Whether to show context checkboxes near the prompt input */
   showSetupCheckbox?: boolean;
 }
 
@@ -71,6 +73,8 @@ export function ModularChatbot({
   instructionSet,
   conversationMetadata,
   predefinedPrompt = "",
+  setupPrompt = "",
+  configPrompt = "",
   formatPrompt,
   botName = "Assistant",
   welcomeMessage = "Hello! How can I help you today?",
@@ -94,16 +98,46 @@ export function ModularChatbot({
   const [loading, setLoading] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
-  const [includeSetup, setIncludeSetup] = useState(false);
+  const [includeLatestSetup, setIncludeLatestSetup] = useState(false);
+  const [includeLatestConfig, setIncludeLatestConfig] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null); 
   const scrollRef = useAutoScroll<HTMLDivElement>([messages, loading]);
   // Always holds the latest predefinedPrompt so async sends never use stale closures
   const predefinedPromptRef = useRef(predefinedPrompt);
+  const setupPromptRef = useRef(setupPrompt);
+  const configPromptRef = useRef(configPrompt);
   useEffect(() => { predefinedPromptRef.current = predefinedPrompt; }, [predefinedPrompt]);
+  useEffect(() => { setupPromptRef.current = setupPrompt; }, [setupPrompt]);
+  useEffect(() => { configPromptRef.current = configPrompt; }, [configPrompt]);
   useEffect(() => {
     if (onLoadingChange) onLoadingChange(loading);
   }, [loading, onLoadingChange]);
+
+  const hasSplitContext = Boolean(setupPrompt || configPrompt);
+  const hasAnyContext = Boolean(predefinedPrompt || setupPrompt || configPrompt);
+
+  const buildPredefinedPrompt = useCallback(
+    ({
+      includeDefault = false,
+      includeSetup = false,
+      includeConfig = false,
+    }: {
+      includeDefault?: boolean;
+      includeSetup?: boolean;
+      includeConfig?: boolean;
+    }) => {
+      if (!hasSplitContext) {
+        return includeDefault ? predefinedPromptRef.current : "";
+      }
+
+      const parts: string[] = [];
+      if (includeSetup && setupPromptRef.current) parts.push(setupPromptRef.current);
+      if (includeConfig && configPromptRef.current) parts.push(configPromptRef.current);
+      return parts.join("\n");
+    },
+    [hasSplitContext]
+  );
 
   /**
    * Returns true when the API error means the stored conversation_id is no
@@ -150,7 +184,7 @@ export function ModularChatbot({
       loading ||
       conversationId ||
       messages.length > 0 ||
-      !predefinedPrompt ||
+      !hasAnyContext ||
       pendingInput ||
       initFiredRef.current
     ) return;
@@ -163,12 +197,16 @@ export function ModularChatbot({
         ? formatPrompt("(Initializing schema)")
         : formatUserPrompt("(Initializing schema)");
 
-      // Always send the current predefinedPrompt (schema + existing config if any)
+      // Always send the current setup/config context once for a new thread.
       // so that a new thread correctly receives full context.
       apiSendMessage({
         conversation_id: null,
         instruction_set: instructionSet,
-        predefined_prompt: predefinedPromptRef.current,
+        predefined_prompt: buildPredefinedPrompt({
+          includeDefault: true,
+          includeSetup: true,
+          includeConfig: true,
+        }),
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
       }).then(res => {
@@ -206,7 +244,7 @@ export function ModularChatbot({
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, messages.length, predefinedPrompt, loading, pendingInput]);
+  }, [conversationId, messages.length, hasAnyContext, loading, pendingInput, buildPredefinedPrompt]);
 
   const refreshSuggestions = useCallback(async () => {
     if (loading) return;
@@ -218,7 +256,9 @@ export function ModularChatbot({
       const res = await apiSendMessage({
         conversation_id: conversationId, // Refresh within same conversation if exists
         instruction_set: instructionSet,
-        predefined_prompt: predefinedPromptRef.current,
+        predefined_prompt: !conversationId
+          ? buildPredefinedPrompt({ includeDefault: true, includeSetup: true, includeConfig: true })
+          : "",
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
       });
@@ -253,7 +293,7 @@ export function ModularChatbot({
     } finally {
       setLoading(false);
     }
-  }, [conversationId, instructionSet, conversationMetadata, formatPrompt, showAiSuggestions, loading, onAssistantResponse, onConversationIdChange]);
+  }, [conversationId, instructionSet, conversationMetadata, formatPrompt, showAiSuggestions, loading, onAssistantResponse, onConversationIdChange, buildPredefinedPrompt]);
 
   const sendMessageToAI = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
@@ -266,11 +306,16 @@ export function ModularChatbot({
     const finalPrompt = formatPrompt ? formatPrompt(userText) : formatUserPrompt(userText);
 
     try {
+      const isNewConversation = !conversationId;
       const payload = {
         conversation_id: conversationId,
         instruction_set: instructionSet,
-        // Only send setup if explicitly requested OR if this is the first message (initialization)
-        predefined_prompt: (!conversationId || includeSetup) ? predefinedPromptRef.current : "",
+        // New threads get context once. Existing threads only get explicit latest setup/config requests.
+        predefined_prompt: buildPredefinedPrompt({
+          includeDefault: isNewConversation || (!hasSplitContext && (includeLatestSetup || includeLatestConfig)),
+          includeSetup: isNewConversation || includeLatestSetup,
+          includeConfig: isNewConversation || includeLatestConfig,
+        }),
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
       };
@@ -312,8 +357,8 @@ export function ModularChatbot({
           onAssistantResponse(displayedText, rawResponseText);
         }
 
-        // Reset checkbox after sending if it was checked
-        if (includeSetup) setIncludeSetup(false);
+        if (includeLatestSetup) setIncludeLatestSetup(false);
+        if (includeLatestConfig) setIncludeLatestConfig(false);
       }
     } catch (error: any) {
       console.error("Failed to send message", error);
@@ -327,7 +372,11 @@ export function ModularChatbot({
           const retryPayload = {
             conversation_id: null,
             instruction_set: instructionSet,
-            predefined_prompt: predefinedPromptRef.current, // Always send on retry/init
+            predefined_prompt: buildPredefinedPrompt({
+              includeDefault: true,
+              includeSetup: true,
+              includeConfig: true,
+            }),
             conversation_metadata: conversationMetadata || {},
             user_prompt: finalPrompt,
           };
@@ -358,7 +407,18 @@ export function ModularChatbot({
     } finally {
       setLoading(false);
     }
-  }, [conversationId, conversationMetadata, formatPrompt, includeSetup, instructionSet, onAssistantResponse, onConversationIdChange]);
+  }, [
+    conversationId,
+    conversationMetadata,
+    formatPrompt,
+    includeLatestSetup,
+    includeLatestConfig,
+    instructionSet,
+    onAssistantResponse,
+    onConversationIdChange,
+    buildPredefinedPrompt,
+    hasSplitContext,
+  ]);
 
   // Auto-send when a suggestion chip is clicked from parent
   useEffect(() => {
@@ -675,23 +735,54 @@ export function ModularChatbot({
             )}
 
             {showSetupCheckbox && (
-              <div className="mx-auto flex w-full max-w-4xl items-center gap-2 mb-2 px-1">
-                <input
-                  type="checkbox"
-                  id="send-setup"
-                  checked={includeSetup}
-                  onChange={(e) => setIncludeSetup(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                />
-                <label 
-                  htmlFor="send-setup" 
-                  className="text-[11px] font-semibold text-slate-500 cursor-pointer hover:text-slate-700 transition-colors flex items-center gap-1.5 select-none"
-                >
-                  Send latest report config with prompt
-                  <span className="text-[9px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                    Includes DB schema and current report structure
-                  </span>
-                </label>
+              <div className="mx-auto mb-2 flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-1 px-1">
+                {hasSplitContext ? (
+                  <>
+                    <label
+                      htmlFor="send-latest-setup"
+                      className="flex cursor-pointer select-none items-center gap-2 text-[11px] font-semibold text-slate-500 transition-colors hover:text-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        id="send-latest-setup"
+                        checked={includeLatestSetup}
+                        onChange={(e) => setIncludeLatestSetup(e.target.checked)}
+                        disabled={!setupPrompt}
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      Send latest setup
+                    </label>
+
+                    <label
+                      htmlFor="send-latest-config"
+                      className="flex cursor-pointer select-none items-center gap-2 text-[11px] font-semibold text-slate-500 transition-colors hover:text-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        id="send-latest-config"
+                        checked={includeLatestConfig}
+                        onChange={(e) => setIncludeLatestConfig(e.target.checked)}
+                        disabled={!configPrompt}
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      Send latest config
+                    </label>
+                  </>
+                ) : (
+                  <label
+                    htmlFor="send-latest-context"
+                    className="flex cursor-pointer select-none items-center gap-2 text-[11px] font-semibold text-slate-500 transition-colors hover:text-slate-700"
+                  >
+                    <input
+                      type="checkbox"
+                      id="send-latest-context"
+                      checked={includeLatestSetup}
+                      onChange={(e) => setIncludeLatestSetup(e.target.checked)}
+                      className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    Send latest context with prompt
+                  </label>
+                )}
               </div>
             )}
 
