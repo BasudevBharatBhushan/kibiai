@@ -63,6 +63,8 @@ export interface ModularChatbotProps {
   autoInitialize?: boolean;
   /** Whether to parse and display AI-generated suggestions (e.g. report_suggestions) in the internal rail */
   showAiSuggestions?: boolean;
+  /** Whether to show the "Send setup with prompt" checkbox */
+  showSetupCheckbox?: boolean;
 }
 
 export function ModularChatbot({
@@ -84,6 +86,7 @@ export function ModularChatbot({
   headerActions,
   autoInitialize = false,
   showAiSuggestions = false,
+  showSetupCheckbox = false,
 }: ModularChatbotProps) {
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -91,6 +94,7 @@ export function ModularChatbot({
   const [loading, setLoading] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [includeSetup, setIncludeSetup] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null); 
   const scrollRef = useAutoScroll<HTMLDivElement>([messages, loading]);
@@ -265,7 +269,8 @@ export function ModularChatbot({
       const payload = {
         conversation_id: conversationId,
         instruction_set: instructionSet,
-        predefined_prompt: predefinedPromptRef.current,
+        // Only send setup if explicitly requested OR if this is the first message (initialization)
+        predefined_prompt: (!conversationId || includeSetup) ? predefinedPromptRef.current : "",
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
       };
@@ -306,6 +311,9 @@ export function ModularChatbot({
         if (onAssistantResponse) {
           onAssistantResponse(displayedText, rawResponseText);
         }
+
+        // Reset checkbox after sending if it was checked
+        if (includeSetup) setIncludeSetup(false);
       }
     } catch (error: any) {
       console.error("Failed to send message", error);
@@ -319,7 +327,7 @@ export function ModularChatbot({
           const retryPayload = {
             conversation_id: null,
             instruction_set: instructionSet,
-            predefined_prompt: predefinedPromptRef.current,
+            predefined_prompt: predefinedPromptRef.current, // Always send on retry/init
             conversation_metadata: conversationMetadata || {},
             user_prompt: finalPrompt,
           };
@@ -663,6 +671,27 @@ export function ModularChatbot({
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {showSetupCheckbox && (
+              <div className="mx-auto flex w-full max-w-4xl items-center gap-2 mb-2 px-1">
+                <input
+                  type="checkbox"
+                  id="send-setup"
+                  checked={includeSetup}
+                  onChange={(e) => setIncludeSetup(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <label 
+                  htmlFor="send-setup" 
+                  className="text-[11px] font-semibold text-slate-500 cursor-pointer hover:text-slate-700 transition-colors flex items-center gap-1.5 select-none"
+                >
+                  Send setup info with prompt
+                  <span className="text-[9px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                    Includes latest DB schema & report structure
+                  </span>
+                </label>
               </div>
             )}
 

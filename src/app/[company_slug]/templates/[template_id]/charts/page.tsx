@@ -560,6 +560,7 @@ function ChartBuilderWorkspace({
                     if (!loading && isAutoGeneratingCharts) setIsAutoGeneratingCharts(false);
                   }}
                   showAiSuggestions={true}
+                  showSetupCheckbox={true}
                   headerActions={
                     <div className="flex items-center gap-1.5 mr-1 bg-slate-100/50 p-1 rounded-lg">
                       <Button
@@ -601,6 +602,7 @@ function ChartBuilderWorkspace({
                 className="h-full w-full flex flex-col bg-white overflow-hidden relative"
                 welcomeMessage={`Hello! I am the Business Insight Assistant. I analyze your report schema and generate structured insights — without ever seeing your actual data.\n\nI have mapped ${fieldSchemas.length} field(s) from your template. Ask me to generate insights!`}
                 showAiSuggestions={true}
+                showSetupCheckbox={true}
                 headerActions={
                   <div className="flex items-center gap-1.5 mr-1 bg-slate-100/50 p-1 rounded-lg">
                     <Button

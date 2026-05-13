@@ -426,6 +426,7 @@ function ConfiguratorPageContent({
             botName="Reports"
             autoInitialize={!hasPreviewData}
             showAiSuggestions={true}
+            showSetupCheckbox={true}
             instructionSet={REPORTS_SYSTEM_INSTRUCTION}
             predefinedPrompt={predefinedPrompt}
             formatPrompt={formatPrompt}
