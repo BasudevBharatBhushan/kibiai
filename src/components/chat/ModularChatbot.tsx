@@ -256,9 +256,11 @@ export function ModularChatbot({
       const res = await apiSendMessage({
         conversation_id: conversationId, // Refresh within same conversation if exists
         instruction_set: instructionSet,
-        predefined_prompt: !conversationId
-          ? buildPredefinedPrompt({ includeDefault: true, includeSetup: true, includeConfig: true })
-          : "",
+        predefined_prompt: hasSplitContext
+          ? (!conversationId
+              ? buildPredefinedPrompt({ includeDefault: true, includeSetup: true, includeConfig: true })
+              : "")
+          : predefinedPromptRef.current,
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
       });
@@ -293,7 +295,7 @@ export function ModularChatbot({
     } finally {
       setLoading(false);
     }
-  }, [conversationId, instructionSet, conversationMetadata, formatPrompt, showAiSuggestions, loading, onAssistantResponse, onConversationIdChange, buildPredefinedPrompt]);
+  }, [conversationId, instructionSet, conversationMetadata, formatPrompt, showAiSuggestions, loading, onAssistantResponse, onConversationIdChange, buildPredefinedPrompt, hasSplitContext]);
 
   const sendMessageToAI = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
