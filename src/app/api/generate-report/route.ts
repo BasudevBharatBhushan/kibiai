@@ -1623,7 +1623,7 @@ export async function OPTIONS() {
   });
 }
 
-export const maxDuration = 800;
+export const maxDuration = 300; // Vercel Pro max; set to 800 only on Enterprise
 
 export async function POST(req: NextRequest) {
   const dataManager = new InMemoryDataManager();

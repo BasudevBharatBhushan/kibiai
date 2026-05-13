@@ -49,8 +49,12 @@ export function ReportFiltersSection() {
   const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
 
   // --- REFS FOR SYNC CONTROL ---
-  const lastDateSyncRef = useRef<string>(JSON.stringify(state.config.date_range_fields || {}));
-  const lastFilterSyncRef = useRef<string>(JSON.stringify(state.config.filters || {}));
+  // lastXSyncRef: tracks the last stringified config pushed IN or OUT, to prevent infinite loops.
+  // isXInitialized: guards Effect 2 (sync-back) so it never fires before Effect 1 has loaded rows.
+  const lastDateSyncRef = useRef<string>("");
+  const lastFilterSyncRef = useRef<string>("");
+  const isDateInitialized = useRef<boolean>(false);
+  const isFilterInitialized = useRef<boolean>(false);
 
   // 1. Load Initial State & React to Copilot Updates
   useEffect(() => {
@@ -73,6 +77,7 @@ export function ReportFiltersSection() {
       });
       setDateRows(loadedDates);
       lastDateSyncRef.current = configDatesStr;
+      isDateInitialized.current = true;
     }
 
     const configFiltersStr = JSON.stringify(state.config.filters || {});
@@ -80,14 +85,16 @@ export function ReportFiltersSection() {
       const loadedFilters: FilterRow[] = [];
       Object.entries(state.config.filters || {}).forEach(([table, fields]) => {
         Object.entries(fields).forEach(([field, rawValue]) => {
+          // Ensure string comparison even if DB stored a number
+          const strVal = String(rawValue ?? "");
           let op = "==";
-          let val = rawValue;
-          if (rawValue === "*" || rawValue === "=") { op = rawValue; val = ""; }
-          else if (rawValue.startsWith(">=")) { op = ">="; val = rawValue.substring(2); }
-          else if (rawValue.startsWith("<=")) { op = "<="; val = rawValue.substring(2); }
-          else if (rawValue.startsWith("==")) { op = "=="; val = rawValue.substring(2); }
-          else if (rawValue.startsWith(">")) { op = ">"; val = rawValue.substring(1); }
-          else if (rawValue.startsWith("<")) { op = "<"; val = rawValue.substring(1); }
+          let val = strVal;
+          if (strVal === "*" || strVal === "=") { op = strVal; val = ""; }
+          else if (strVal.startsWith(">=")) { op = ">="; val = strVal.substring(2); }
+          else if (strVal.startsWith("<=")) { op = "<="; val = strVal.substring(2); }
+          else if (strVal.startsWith("==")) { op = "=="; val = strVal.substring(2); }
+          else if (strVal.startsWith(">")) { op = ">"; val = strVal.substring(1); }
+          else if (strVal.startsWith("<")) { op = "<"; val = strVal.substring(1); }
           
           loadedFilters.push({
             id: Math.random().toString(36),
@@ -100,12 +107,14 @@ export function ReportFiltersSection() {
       });
       setFilterRows(loadedFilters);
       lastFilterSyncRef.current = configFiltersStr;
+      isFilterInitialized.current = true;
     }
   }, [state.config.date_range_fields, state.config.filters]);
 
 
-  // 2. Sync State (Keep existing sync logic)
+  // 2. Sync State back to context — guarded so it never fires before Effect 1 initializes rows
   useEffect(() => {
+    if (!isDateInitialized.current) return; // don't wipe context before first load
     const newConfig: Record<string, Record<string, string>> = {};
     dateRows.forEach(row => {
       if (row.table && row.field && row.startDate && row.endDate) {
@@ -123,6 +132,7 @@ export function ReportFiltersSection() {
   }, [dateRows, dispatch]);
 
   useEffect(() => {
+    if (!isFilterInitialized.current) return; // don't wipe context before first load
     const newConfig: Record<string, Record<string, string>> = {};
     filterRows.forEach(row => {
       if (row.table && row.field) {
@@ -139,6 +149,7 @@ export function ReportFiltersSection() {
       dispatch({ type: "SYNC_FILTERS", payload: newConfig });
     }
   }, [filterRows, dispatch]);
+
 
 
   // --- HANDLERS ---

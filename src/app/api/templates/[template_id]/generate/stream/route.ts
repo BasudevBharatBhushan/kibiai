@@ -3,7 +3,7 @@ import { getSession } from "@/utils/auth";
 import { createAdminClient } from "@/utils/supabase/server";
 import { z } from "zod";
 
-export const maxDuration = 800;
+export const maxDuration = 300; // Vercel Pro max; set to 800 only on Enterprise
 
 // ── Body schema ────────────────────────────────────────────────────────────────
 const streamBodySchema = z.object({
