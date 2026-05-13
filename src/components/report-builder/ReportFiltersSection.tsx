@@ -266,7 +266,7 @@ export function ReportFiltersSection() {
                   disabled={!row.table}
                 >
                   <option value="">Field...</option>
-                  {getFieldOptions(row.table , "date").map(f => (
+                  {getFieldOptions(row.table).map(f => (
                     <option key={f.value} value={f.value}>{f.label}</option>
                   ))}
                 </select>
