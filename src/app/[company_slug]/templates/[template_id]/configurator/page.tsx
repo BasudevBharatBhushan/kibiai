@@ -186,13 +186,13 @@ function ConfiguratorPageContent({
         ]);
         setBackHref(`/${slug}/templates`);
 
-        // Load existing preview if available — otherwise generate a fresh one
+        // Load existing preview if available
         if (data.config_json && data.preview_data_json) {
           setHasPreviewData(true);
           dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
         } else if (data.config_json && data.setup_json) {
           setHasPreviewData(false);
-          fetchLivePreview();
+          // Do not auto-generate report preview on mount
         }
       } catch (err: any) {
         addToast("error", "Load Error", err.message || "Failed to load configurator.");
@@ -205,34 +205,67 @@ function ConfiguratorPageContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
-  // ── Live preview ─────────────────────────────────────────────────────────────
-  const fetchLivePreview = useCallback(
-    async () => {
-      if (!templateId) return;
+  const fetchLivePreview = useCallback(async () => {
+    if (!templateId) return;
 
-      dispatch({ type: "SET_LOADING", payload: true });
-      try {
-        const result = await apiClient.post<{
-          success: boolean;
-          data?: { report_structure_json?: any };
-        }>(
-          `/api/templates/${templateId}/generate`,
-          { persist_to_template: true }
-        );
-        if (result.success && result.data?.report_structure_json) {
-          dispatch({
-            type: "SET_REPORT_PREVIEW",
-            payload: result.data.report_structure_json,
-          });
-        }
-      } catch (e) {
-        console.error("Preview generation failed", e);
-      } finally {
-        dispatch({ type: "SET_LOADING", payload: false });
+    dispatch({ type: "SET_PROCESSING_LOGS", payload: [] });
+    dispatch({ type: "SET_LOADING", payload: true });
+
+    try {
+      const response = await fetch(`/api/templates/${templateId}/generate/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persist_to_template: true }),
+      });
+
+      if (!response.ok || !response.body) {
+        const errJson = await response.json().catch(() => null);
+        throw new Error(errJson?.error || `Server error ${response.status}`);
       }
-    },
-    [dispatch, templateId]
-  );
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const logs: string[] = [];
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+
+        for (const frame of frames) {
+          const line = frame.replace(/^data: /, "").trim();
+          if (!line) continue;
+          let event: any;
+          try {
+            event = JSON.parse(line);
+          } catch {
+            continue;
+          }
+
+          if (event.type === "log") {
+            logs.push(event.message as string);
+            dispatch({ type: "SET_PROCESSING_LOGS", payload: [...logs] });
+          } else if (event.type === "done") {
+            const structured = event.report_structure_json;
+            if (structured) {
+              dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+            }
+          } else if (event.type === "error") {
+            throw new Error(event.message || "Report generation failed.");
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error("Preview generation failed", e);
+      addToast("error", "Generation Failed", e.message || "Failed to generate report preview.");
+    } finally {
+      dispatch({ type: "SET_LOADING", payload: false });
+    }
+  }, [dispatch, templateId, addToast]);
 
   // ── AI response handler ───────────────────────────────────────────────────────
   const handleAssistantResponse = useCallback(
@@ -276,7 +309,7 @@ function ConfiguratorPageContent({
           dispatch({ type: "LOAD_INITIAL_CONFIG", payload: safeConfig });
           await fetchLivePreview();
         }
-      } catch (e) {
+      } catch {
         // Gracefully ignore suggestion-only / non-JSON responses
       }
     },

@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "../../styles/reportConfig.css"
 import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import {FILTER_OPERATORS} from "@/constants/reportOptions";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
-import { Plus, X , SlidersHorizontal } from "lucide-react";
+import { X , SlidersHorizontal } from "lucide-react";
 
 interface FilterRow {
   id: string;
@@ -48,51 +48,61 @@ export function ReportFiltersSection() {
   const [dateRows, setDateRows] = useState<FilterRow[]>([]);
   const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
 
-  // 1. Load Initial State
+  // --- REFS FOR SYNC CONTROL ---
+  const lastDateSyncRef = useRef<string>(JSON.stringify(state.config.date_range_fields || {}));
+  const lastFilterSyncRef = useRef<string>(JSON.stringify(state.config.filters || {}));
+
+  // 1. Load Initial State & React to Copilot Updates
   useEffect(() => {
-    // ... (Keep existing loading logic same as before)
-    const loadedDates: FilterRow[] = [];
-    Object.entries(state.config.date_range_fields || {}).forEach(([table, fields]) => {
-      Object.entries(fields).forEach(([field, value]) => {
-        const [start, end] = value.split("...").map(s => s.trim());
-        loadedDates.push({
-          id: Math.random().toString(36),
-          table,
-          field,
-          operator: "...",
-          value,
-          startDate: toHtmlDate(start),
-          endDate: toHtmlDate(end)
+    const configDatesStr = JSON.stringify(state.config.date_range_fields || {});
+    if (configDatesStr !== lastDateSyncRef.current) {
+      const loadedDates: FilterRow[] = [];
+      Object.entries(state.config.date_range_fields || {}).forEach(([table, fields]) => {
+        Object.entries(fields).forEach(([field, value]) => {
+          const [start, end] = value.split("...").map(s => s.trim());
+          loadedDates.push({
+            id: Math.random().toString(36),
+            table,
+            field,
+            operator: "...",
+            value,
+            startDate: toHtmlDate(start),
+            endDate: toHtmlDate(end)
+          });
         });
       });
-    });
-    if (loadedDates.length > 0) setDateRows(loadedDates);
+      setDateRows(loadedDates);
+      lastDateSyncRef.current = configDatesStr;
+    }
 
-    const loadedFilters: FilterRow[] = [];
-
-    // Parse filters from config
-    Object.entries(state.config.filters || {}).forEach(([table, fields]) => {
-      Object.entries(fields).forEach(([field, rawValue]) => {
-        let op = "==";
-        let val = rawValue;
-        if (rawValue === "*" || rawValue === "=") { op = rawValue; val = ""; }
-        else if (rawValue.startsWith(">=")) { op = ">="; val = rawValue.substring(2); }
-        else if (rawValue.startsWith("<=")) { op = "<="; val = rawValue.substring(2); }
-        else if (rawValue.startsWith("==")) { op = "=="; val = rawValue.substring(2); }
-        else if (rawValue.startsWith(">")) { op = ">"; val = rawValue.substring(1); }
-        else if (rawValue.startsWith("<")) { op = "<"; val = rawValue.substring(1); }
-        
-        loadedFilters.push({
-          id: Math.random().toString(36),
-          table,
-          field,
-          operator: op,
-          value: val
+    const configFiltersStr = JSON.stringify(state.config.filters || {});
+    if (configFiltersStr !== lastFilterSyncRef.current) {
+      const loadedFilters: FilterRow[] = [];
+      Object.entries(state.config.filters || {}).forEach(([table, fields]) => {
+        Object.entries(fields).forEach(([field, rawValue]) => {
+          let op = "==";
+          let val = rawValue;
+          if (rawValue === "*" || rawValue === "=") { op = rawValue; val = ""; }
+          else if (rawValue.startsWith(">=")) { op = ">="; val = rawValue.substring(2); }
+          else if (rawValue.startsWith("<=")) { op = "<="; val = rawValue.substring(2); }
+          else if (rawValue.startsWith("==")) { op = "=="; val = rawValue.substring(2); }
+          else if (rawValue.startsWith(">")) { op = ">"; val = rawValue.substring(1); }
+          else if (rawValue.startsWith("<")) { op = "<"; val = rawValue.substring(1); }
+          
+          loadedFilters.push({
+            id: Math.random().toString(36),
+            table,
+            field,
+            operator: op,
+            value: val
+          });
         });
       });
-    });
-    if (loadedFilters.length > 0) setFilterRows(loadedFilters);
-  }, []); // Run once
+      setFilterRows(loadedFilters);
+      lastFilterSyncRef.current = configFiltersStr;
+    }
+  }, [state.config.date_range_fields, state.config.filters]);
+
 
   // 2. Sync State (Keep existing sync logic)
   useEffect(() => {
@@ -105,7 +115,11 @@ export function ReportFiltersSection() {
         newConfig[row.table][row.field] = `${fmStart}...${fmEnd}`;
       }
     });
-    dispatch({ type: "SYNC_DATE_RANGES", payload: newConfig });
+    const str = JSON.stringify(newConfig);
+    if (str !== lastDateSyncRef.current) {
+      lastDateSyncRef.current = str;
+      dispatch({ type: "SYNC_DATE_RANGES", payload: newConfig });
+    }
   }, [dateRows, dispatch]);
 
   useEffect(() => {
@@ -119,7 +133,11 @@ export function ReportFiltersSection() {
         newConfig[row.table][row.field] = finalVal;
       }
     });
-    dispatch({ type: "SYNC_FILTERS", payload: newConfig });
+    const str = JSON.stringify(newConfig);
+    if (str !== lastFilterSyncRef.current) {
+      lastFilterSyncRef.current = str;
+      dispatch({ type: "SYNC_FILTERS", payload: newConfig });
+    }
   }, [filterRows, dispatch]);
 
 
