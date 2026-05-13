@@ -31,22 +31,5 @@ export const validateConfig = (config: ReportConfig): { isValid: boolean; error?
   
   checkDuplicates(config.summary_fields, (f) => f || null, (k) => `Duplicate Summary Field: ${k}`);
 
-  // 2. Check Overlaps (Groups vs Columns)
-  if (config.report_columns && config.group_by_fields) {
-    const usedInGroups = new Set<string>();
-    Object.values(config.group_by_fields).forEach(group => {
-      if (group.table && group.field) usedInGroups.add(`${group.table}.${group.field}`);
-      group.display?.forEach(d => d.table && d.field && usedInGroups.add(`${d.table}.${d.field}`));
-      group.group_total?.forEach(t => t.table && t.field && usedInGroups.add(`${t.table}.${t.field}`));
-    });
-
-    for (const col of config.report_columns) {
-      if (col.table && col.field && usedInGroups.has(`${col.table}.${col.field}`)) {
-         errors.push(`Field Overlap: "${col.field}" is used in Grouping. Remove from Body.`);
-         break; 
-      }
-    }
-  }
-
   return errors.length > 0 ? { isValid: false, error: errors[0] } : { isValid: true };
 };

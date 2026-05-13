@@ -20,6 +20,18 @@ interface FetchFmDataRequest {
   session_token?: string;
 }
 
+function normalizeFindFilters(filter?: Record<string, any>) {
+  if (!filter) return undefined;
+
+  const normalized: Record<string, any> = {};
+  for (const [field, rawValue] of Object.entries(filter)) {
+    const value = String(rawValue ?? "");
+    normalized[field] = value.startsWith("==") ? `=${value.slice(2)}` : rawValue;
+  }
+
+  return normalized;
+}
+
 export async function GET() {
   return NextResponse.json(
     { message: "FileMaker API endpoint is live" },
@@ -33,7 +45,7 @@ export async function POST(req: NextRequest) {
       raw_dataset,
       p_key_field,
       p_keys,
-      filter,
+      filter: rawFilter,
       table,
       host,
       database,
@@ -41,6 +53,7 @@ export async function POST(req: NextRequest) {
       data_fetching_protocol,
       session_token,
     }: FetchFmDataRequest = await req.json();
+    const filter = normalizeFindFilters(rawFilter);
 
     // Extract Basic token from Authorization header
     const authHeader = req.headers.get("authorization");

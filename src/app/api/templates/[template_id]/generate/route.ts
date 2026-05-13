@@ -14,6 +14,7 @@ const generateBodySchema = z.object({
   report_header: z.string().optional(),
   report_name: z.string().optional(), // kept for backwards-compat
   persist_to_template: z.boolean().optional(),
+  config_json: z.record(z.string(), z.any()).optional(),
 });
 
 // ── POST /api/templates/[template_id]/generate ───────────────────────────────
@@ -40,7 +41,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: parsed.error.message }, { status: 400 });
     }
 
-    const { runtime_filters, report_header } = parsed.data;
+    const { runtime_filters, report_header, config_json } = parsed.data;
 
     // 3. Fetch template config from Supabase (company-scoped)
     const supabase = createAdminClient();
@@ -80,7 +81,9 @@ export async function POST(
       );
     }
 
-    if (!template.report_template_config_json) {
+    const templateConfig = config_json ?? template.report_template_config_json;
+
+    if (!templateConfig) {
       return NextResponse.json(
         { success: false, error: "Template configuration is missing. Please configure the report first." },
         { status: 400 }
@@ -89,7 +92,7 @@ export async function POST(
 
     // 4. Merge runtime filters into config (runtime-only — never persisted)
     const configJson = {
-      ...(template.report_template_config_json as any),
+      ...(templateConfig as any),
       ...(report_header ? { report_header } : {}),
       ...(runtime_filters?.date_range_fields !== undefined
         ? { date_range_fields: runtime_filters.date_range_fields }
@@ -161,6 +164,7 @@ export async function POST(
       const { error: updateError } = await supabase
         .from("report_templates")
         .update({
+          report_template_config_json: configJson,
           report_template_data_json: reportStructureJson,
           updated_on: new Date().toISOString(),
         })

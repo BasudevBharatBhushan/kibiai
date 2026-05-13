@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       methodBody: {
         database: FM_DB,
         layout: FM_LAYOUT,
-        query: [{ "ReportID": `==${reportId}` }],
+        query: [{ "ReportID": `=${reportId}` }],
         limit: 1
       },
       session: { token: "", required: "" }

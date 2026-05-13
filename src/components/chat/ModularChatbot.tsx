@@ -358,7 +358,7 @@ export function ModularChatbot({
     } finally {
       setLoading(false);
     }
-  }, [conversationId, conversationMetadata, formatPrompt, instructionSet, onAssistantResponse, onConversationIdChange]);
+  }, [conversationId, conversationMetadata, formatPrompt, includeSetup, instructionSet, onAssistantResponse, onConversationIdChange]);
 
   // Auto-send when a suggestion chip is clicked from parent
   useEffect(() => {
@@ -687,9 +687,9 @@ export function ModularChatbot({
                   htmlFor="send-setup" 
                   className="text-[11px] font-semibold text-slate-500 cursor-pointer hover:text-slate-700 transition-colors flex items-center gap-1.5 select-none"
                 >
-                  Send setup info with prompt
+                  Send latest report config with prompt
                   <span className="text-[9px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                    Includes latest DB schema & report structure
+                    Includes DB schema and current report structure
                   </span>
                 </label>
               </div>

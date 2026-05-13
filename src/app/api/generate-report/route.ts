@@ -263,6 +263,17 @@ function buildFilters(
   return Object.keys(filters).length > 0 ? filters : {};
 }
 
+function normalizeFindFilters(filters: Record<string, any>) {
+  const normalized: Record<string, any> = {};
+
+  for (const [field, rawValue] of Object.entries(filters ?? {})) {
+    const value = String(rawValue ?? "");
+    normalized[field] = value.startsWith("==") ? `=${value.slice(2)}` : rawValue;
+  }
+
+  return normalized;
+}
+
 function extractPkeysFromData(data: any[], sourceField: string): string[] {
   const pkeys = data
     .map((record) => record[sourceField])
@@ -307,7 +318,7 @@ async function fetchDataFromAPI(
     raw_dataset: "",
     p_key_field: pKeyField ?? "",
     p_keys: Array.isArray(pKeys) ? pKeys : [],
-    filter: filters ?? {},
+    filter: normalizeFindFilters(filters ?? {}),
     table: isDataApi ? tableConfig.layout?.trim() || table : table,
     host: setupJson.host ?? "",
     database: tableConfig.file ?? "",
@@ -1350,7 +1361,6 @@ function generateReportStructure(
                 displayField.table,
                 displayField.field
               );
-              excludeLabelsSet.add(displayLabel);
               displayLabels.push(displayLabel);
             });
           }
@@ -1380,7 +1390,8 @@ function generateReportStructure(
     }
 
     // 3. Body
-    // Filter out fields used in subsummary and subsummary display
+    // Filter out only the main grouping fields from the body.
+    // Display and total fields can intentionally be selected from body columns.
     const filteredBodyFields = bodyFieldOrder.filter(
       (label) => !excludeLabelsSet.has(label)
     );

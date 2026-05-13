@@ -6,7 +6,7 @@ import { useReport } from "@/context/ReportContext";
 import { useSchema } from "@/lib/hooks/useSchema";
 import {SORT_ORDERS} from "@/constants/reportOptions";
 import { Modal } from "@/components/ui/Modal";
-import { Plus, X, GripVertical , ScrollText , Layers} from "lucide-react";
+import { Plus, X, GripVertical, Layers } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard"; 
 
@@ -22,6 +22,45 @@ export function SubSummarySection() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+
+  const getBodyTables = () => {
+    const tables = new Set<string>();
+    (state.config.report_columns || []).forEach((col) => {
+      if (col.table) tables.add(col.table);
+    });
+    return Array.from(tables);
+  };
+
+  const getBodyFieldOptions = (tableName: string, typeFilter?: "number") => {
+    if (!tableName) return [];
+
+    const bodyFields = (state.config.report_columns || [])
+      .filter((col) => col.table === tableName && col.field)
+      .map((col) => col.field);
+
+    if (tableName === "calculated") {
+      return (state.config.custom_calculated_fields || [])
+        .filter((calc) => bodyFields.includes(calc.field_name))
+        .filter((calc) => {
+          if (typeFilter !== "number") return true;
+          return ["number", "currency", "percentage", "plain"].includes(calc.format || "number");
+        })
+        .map((calc) => ({
+          value: calc.field_name,
+          label: calc.label || calc.field_name,
+          type: calc.format || "number",
+        }));
+    }
+
+    const allOptions = getFieldOptions(tableName);
+    return allOptions.filter((option) => {
+      if (!bodyFields.includes(option.value)) return false;
+      if (typeFilter !== "number") return true;
+      return ["number", "currency", "percentage"].includes(option.type);
+    });
+  };
+
+  const bodyTables = getBodyTables();
 
   const handleOpenModal = () => {
     setNewGroupName("");
@@ -151,7 +190,7 @@ export function SubSummarySection() {
                               + Add Display Field
                             </button>
                           </div>
-                          {group.display.map((item, idx) => (
+                          {(group.display || []).map((item, idx) => (
                             <div key={idx} className="flex gap-2 mb-2 items-center">
                               <select 
                                  className="form-input w-1/2"
@@ -159,7 +198,7 @@ export function SubSummarySection() {
                                  onChange={(e) => dispatch({ type: "UPDATE_GROUP_DISPLAY", payload: { groupKey: key, index: idx, field: "table", value: e.target.value } })}
                               >
                                 <option value="">Table...</option>
-                                {getConnectedTables().map(t => <option key={t} value={t}>{t}</option>)}
+                                {bodyTables.map(t => <option key={t} value={t}>{t === "calculated" ? "Calculated Fields" : t}</option>)}
                               </select>
                               <select 
                                  className="form-input w-1/2"
@@ -168,7 +207,7 @@ export function SubSummarySection() {
                                  disabled={!item.table}
                               >
                                  <option value="">Field...</option>
-                                 {getFieldOptions(item.table , "number").map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                 {getBodyFieldOptions(item.table).map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                               </select>
                               <button onClick={() => dispatch({ type: "REMOVE_GROUP_DISPLAY", payload: { groupKey: key, index: idx } })} className="btn-danger-icon">
                                 <X size={14} />
@@ -188,7 +227,7 @@ export function SubSummarySection() {
                               + Add Total Field
                             </button>
                           </div>
-                          {group.group_total.map((item, idx) => (
+                          {(group.group_total || []).map((item, idx) => (
                             <div key={idx} className="flex gap-2 mb-2 items-center">
                                <select 
                                  className="form-input w-1/2"
@@ -196,7 +235,7 @@ export function SubSummarySection() {
                                  onChange={(e) => dispatch({ type: "UPDATE_GROUP_TOTAL", payload: { groupKey: key, index: idx, field: "table", value: e.target.value } })}
                               >
                                 <option value="">Table...</option>
-                                {getConnectedTables().map(t => <option key={t} value={t}>{t}</option>)}
+                                {bodyTables.map(t => <option key={t} value={t}>{t === "calculated" ? "Calculated Fields" : t}</option>)}
                               </select>
                               <select 
                                  className="form-input w-1/2"
@@ -205,7 +244,7 @@ export function SubSummarySection() {
                                  disabled={!item.table}
                               >
                                  <option value="">Field...</option>
-                                 {getFieldOptions(item.table , "number").map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                 {getBodyFieldOptions(item.table, "number").map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                               </select>
                               <button onClick={() => dispatch({ type: "REMOVE_GROUP_TOTAL", payload: { groupKey: key, index: idx } })} className="btn-danger-icon">
                                 <X size={14} />

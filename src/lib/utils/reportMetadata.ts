@@ -30,7 +30,7 @@ function resolveLabel(setupTables: SetupTables | null, table: string, field: str
 }
 
 /**
- * Pretty-print a stored filter value like `==Active`, `>=10`, `*`, `=`
+ * Pretty-print a stored filter value like `=Active`, `>=10`, `*`, `=`
  * into a display sentence: `Status = Active`, `Quantity ≥ 10`, `Status (not empty)`.
  */
 function formatFilter(label: string, savedValue: string): string {
@@ -45,6 +45,7 @@ function formatFilter(label: string, savedValue: string): string {
     ['!=', '≠'],
     ['>=', '≥'],
     ['<=', '≤'],
+    ['=', '='],
     ['>', '>'],
     ['<', '<'],
   ];

@@ -167,6 +167,18 @@ function convertOperator(value: string, key: string) {
   return `contains(${key},'${value.trim()}')`;
 }
 
+function normalizeFindFilters(filter?: Record<string, string>) {
+  if (!filter) return undefined;
+
+  const normalized: Record<string, string> = {};
+  for (const [field, rawValue] of Object.entries(filter)) {
+    const value = String(rawValue ?? "");
+    normalized[field] = value.startsWith("==") ? `=${value.slice(2)}` : value;
+  }
+
+  return normalized;
+}
+
 export async function fetchFmRecord(
   reqBody: FetchFmDataRequest,
   basic_token: string
@@ -174,7 +186,7 @@ export async function fetchFmRecord(
   const {
     p_key_field,
     p_keys,
-    filter,
+    filter: rawFilter,
     table,
     host,
     database,
@@ -182,6 +194,8 @@ export async function fetchFmRecord(
     data_fetching_protocol,
     session_token,
   } = reqBody;
+
+  const filter = normalizeFindFilters(rawFilter);
 
   // console.log(reqBody);
   // --- ODATA API Flow ---

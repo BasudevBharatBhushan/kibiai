@@ -15,6 +15,7 @@ const streamBodySchema = z.object({
     .optional(),
   report_header: z.string().optional(),
   persist_to_template: z.boolean().optional(), // true = admin configurator update
+  config_json: z.record(z.string(), z.any()).optional(),
 });
 
 // ── Helper: encode a single SSE frame ─────────────────────────────────────────
@@ -59,7 +60,7 @@ export async function POST(
     return new Response(JSON.stringify({ error: parsedBody.error.message }), { status: 400 });
   }
 
-  const { runtime_filters, report_header, persist_to_template } = parsedBody.data;
+  const { runtime_filters, report_header, persist_to_template, config_json } = parsedBody.data;
 
   // 3. Fetch template from Supabase (company-scoped)
   const supabase = createAdminClient();
@@ -100,7 +101,9 @@ export async function POST(
     );
   }
 
-  if (!template.report_template_config_json) {
+  const templateConfig = config_json ?? template.report_template_config_json;
+
+  if (!templateConfig) {
     return new Response(
       JSON.stringify({ error: "Template configuration is missing." }),
       { status: 400 }
@@ -108,7 +111,7 @@ export async function POST(
   }
 
   const configJson = {
-    ...(template.report_template_config_json as any),
+    ...(templateConfig as any),
     ...(report_header ? { report_header } : {}),
     ...(runtime_filters?.date_range_fields !== undefined
       ? { date_range_fields: runtime_filters.date_range_fields }
@@ -185,6 +188,7 @@ export async function POST(
           const { error: persistError } = await supabase
             .from("report_templates")
             .update({
+              report_template_config_json: configJson,
               report_template_data_json: report_structure_json,
               updated_on: new Date().toISOString(),
             })

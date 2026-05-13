@@ -65,7 +65,10 @@ export function ReportConfigurator() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ persist_to_template: true }),
+          body: JSON.stringify({
+            persist_to_template: true,
+            config_json: state.config,
+          }),
           signal: controller.signal,
         }
       );

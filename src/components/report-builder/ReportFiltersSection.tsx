@@ -87,12 +87,14 @@ export function ReportFiltersSection() {
         Object.entries(fields).forEach(([field, rawValue]) => {
           // Ensure string comparison even if DB stored a number
           const strVal = String(rawValue ?? "");
-          let op = "==";
+          let op = "=";
           let val = strVal;
-          if (strVal === "*" || strVal === "=") { op = strVal; val = ""; }
+          if (strVal === "*") { op = "*"; val = ""; }
+          else if (strVal === "=") { op = "__empty__"; val = ""; }
           else if (strVal.startsWith(">=")) { op = ">="; val = strVal.substring(2); }
           else if (strVal.startsWith("<=")) { op = "<="; val = strVal.substring(2); }
-          else if (strVal.startsWith("==")) { op = "=="; val = strVal.substring(2); }
+          else if (strVal.startsWith("==")) { op = "="; val = strVal.substring(2); }
+          else if (strVal.startsWith("=")) { op = "="; val = strVal.substring(1); }
           else if (strVal.startsWith(">")) { op = ">"; val = strVal.substring(1); }
           else if (strVal.startsWith("<")) { op = "<"; val = strVal.substring(1); }
           
@@ -138,7 +140,9 @@ export function ReportFiltersSection() {
       if (row.table && row.field) {
         if (!newConfig[row.table]) newConfig[row.table] = {};
         let finalVal = row.value;
-        if (["*", "="].includes(row.operator)) finalVal = row.operator;
+        if (row.operator === "*" || row.operator === "__empty__") {
+          finalVal = row.operator === "__empty__" ? "=" : row.operator;
+        }
         else finalVal = `${row.operator}${row.value}`;
         newConfig[row.table][row.field] = finalVal;
       }
@@ -157,7 +161,7 @@ export function ReportFiltersSection() {
     setDateRows([...dateRows, { id: Math.random().toString(), table: "", field: "", operator: "...", value: "", startDate: "", endDate: "" }]);
   };
   const addFilterRow = () => {
-    setFilterRows([...filterRows, { id: Math.random().toString(), table: "", field: "", operator: "==", value: "" }]);
+    setFilterRows([...filterRows, { id: Math.random().toString(), table: "", field: "", operator: "=", value: "" }]);
   };
   const updateDateRow = (index: number, key: keyof FilterRow, val: string) => {
     const newRows = [...dateRows];
@@ -287,7 +291,7 @@ export function ReportFiltersSection() {
                   placeholder="Value..."
                   value={row.value}
                   onChange={e => updateFilterRow(idx, "value", e.target.value)}
-                  disabled={["*", "="].includes(row.operator)}
+                  disabled={["*", "__empty__"].includes(row.operator)}
                 />
                 <button 
                   onClick={() => setFilterRows(filterRows.filter((_, i) => i !== idx))}

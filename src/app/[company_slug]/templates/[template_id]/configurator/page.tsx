@@ -205,7 +205,7 @@ function ConfiguratorPageContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
-  const fetchLivePreview = useCallback(async () => {
+  const fetchLivePreview = useCallback(async (configOverride?: any) => {
     if (!templateId) return;
 
     dispatch({ type: "SET_PROCESSING_LOGS", payload: [] });
@@ -215,7 +215,10 @@ function ConfiguratorPageContent({
       const response = await fetch(`/api/templates/${templateId}/generate/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ persist_to_template: true }),
+        body: JSON.stringify({
+          persist_to_template: true,
+          ...(configOverride ? { config_json: configOverride } : {}),
+        }),
       });
 
       if (!response.ok || !response.body) {
@@ -301,13 +304,11 @@ function ConfiguratorPageContent({
 
           if (state.templateId) {
             // Save sanitized config (not raw AI output) to DB
-            apiClient
-              .post(`/api/templates/${state.templateId}/config`, { config_json: safeConfig })
-              .catch((e) => console.error("Failed to save AI config:", e));
+            await apiClient.post(`/api/templates/${state.templateId}/config`, { config_json: safeConfig });
           }
 
           dispatch({ type: "LOAD_INITIAL_CONFIG", payload: safeConfig });
-          await fetchLivePreview();
+          await fetchLivePreview(safeConfig);
         }
       } catch {
         // Gracefully ignore suggestion-only / non-JSON responses

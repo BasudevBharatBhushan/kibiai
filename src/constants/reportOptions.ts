@@ -14,9 +14,9 @@ export const SORT_ORDERS = [
 
 // Options for filtering data in reports
 export const FILTER_OPERATORS = [
-  { label: "Equals (==)", value: "==" },
+  { label: "Equals (=)", value: "=" },
   { label: "Not Empty (*)", value: "*" },
-  { label: "Is Empty (=)", value: "=" },
+  { label: "Is Empty (=)", value: "__empty__" },
   { label: "Greater Than (>)", value: ">" },
   { label: "Less Than (<)", value: "<" },
   { label: "Greater/Equal (>=)", value: ">=" },

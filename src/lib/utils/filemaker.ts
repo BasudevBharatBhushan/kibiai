@@ -206,7 +206,7 @@ export async function fmFindOne(
 ): Promise<any | null> {
   const result = await fmFindRecords(
     layout,
-    [{ [field]: `==${value}` }],
+    [{ [field]: `=${value}` }],
     token
   );
   return result?.[0] ?? null;
