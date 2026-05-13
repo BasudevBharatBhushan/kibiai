@@ -29,7 +29,7 @@ export default function CompanyLoginPage() {
       const data = await res.json();
 
       if (data.success) {
-        router.push(`/${company_slug}`);
+        window.location.href = `/${company_slug}`;
       } else {
         setAuthError(data.error || "Login failed");
       }

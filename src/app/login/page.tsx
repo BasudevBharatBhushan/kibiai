@@ -31,7 +31,7 @@ export default function GlobalLoginPage() {
     if (!slug) return;
 
     if (isLocalhost) {
-      router.push(`/${slug}/login`);
+      window.location.href = `/${slug}/login`;
     } else {
       window.location.href = `https://${slug}.${baseDomain}/login`;
     }

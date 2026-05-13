@@ -5,6 +5,7 @@ interface HostConfigSectionProps {
   protocol: "data-api" | "o-data-api";
   onHostChange: (val: string) => void;
   onProtocolChange: (val: "data-api" | "o-data-api") => void;
+  disabled?: boolean;
 }
 
 export function HostConfigSection({
@@ -12,6 +13,7 @@ export function HostConfigSection({
   protocol,
   onHostChange,
   onProtocolChange,
+  disabled = false,
 }: HostConfigSectionProps) {
   return (
     <div className="hcs-section">
@@ -63,6 +65,7 @@ export function HostConfigSection({
             placeholder="Host address (e.g. kibiz.smtech.cloud)"
             value={host}
             onChange={(e) => onHostChange(e.target.value)}
+            disabled={disabled}
           />
         </div>
 
@@ -72,6 +75,7 @@ export function HostConfigSection({
             className="hcs-select"
             value={protocol}
             onChange={(e) => onProtocolChange(e.target.value as "data-api" | "o-data-api")}
+            disabled={disabled}
           >
             <option value="data-api">Data API</option>
             <option value="o-data-api">OData API</option>

@@ -11,6 +11,7 @@ interface TableCardProps {
   onUpdateProperty: (property: keyof Omit<TableConfig, "fields">, value: string) => void;
   onUpdateField: (fieldName: string, property: keyof FieldConfig, value: string) => void;
   onDeleteField: (fieldName: string) => void;
+  onManageFields: () => void;
 }
 
 export function TableCard({
@@ -21,6 +22,7 @@ export function TableCard({
   onUpdateProperty,
   onUpdateField,
   onDeleteField,
+  onManageFields,
 }: TableCardProps) {
   const handleDelete = () => {
     if (confirm(`Delete table '${tableName}' and all its fields?`)) {
@@ -114,6 +116,9 @@ export function TableCard({
         {/* Fields table */}
         <div className="tc-fields-header">
           <strong>Fields ({Object.keys(tableConfig.fields).length})</strong>
+          <button className="tc-manage-btn" onClick={onManageFields} title="Update or sync fields from database">
+            Update Fields
+          </button>
         </div>
         <div className="tc-table-wrapper">
           <table className="tc-table">
@@ -298,6 +303,26 @@ export function TableCard({
           margin: 12px 0 16px;
           padding-top: 12px;
           border-top: 1px dashed #e2e8f0;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .tc-manage-btn {
+          padding: 6px 12px;
+          border-radius: 6px;
+          background: #eef2ff;
+          color: #4f46e5;
+          border: 1px solid #c7d2fe;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .tc-manage-btn:hover {
+          background: #e0e7ff;
+          border-color: #a5b4fc;
         }
 
         .tc-table-wrapper {

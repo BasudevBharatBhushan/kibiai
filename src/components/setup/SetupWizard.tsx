@@ -10,6 +10,7 @@ import { TableCard } from "@/components/setup/TableCard";
 import { RelationshipsPanel } from "@/components/setup/RelationshipsPanel";
 import { SetupJsonPreview } from "@/components/setup/SetupJsonPreview";
 import { SaveSetupModal } from "@/components/setup/SaveSetupModal";
+import { UpdateFieldsModal } from "@/components/setup/UpdateFieldsModal";
 import { 
   FieldConfig, 
   TableConfig, 
@@ -27,6 +28,7 @@ type Action =
   | { type: "DELETE_TABLE"; tableName: string }
   | { type: "RENAME_TABLE"; oldName: string; newName: string }
   | { type: "UPDATE_TABLE_PROPERTY"; tableName: string; property: keyof Omit<TableConfig, "fields">; value: string }
+  | { type: "UPDATE_TABLE_FIELDS"; tableName: string; newFields: Record<string, FieldConfig> }
   | { type: "UPDATE_FIELD_PROPERTY"; tableName: string; fieldName: string; property: keyof FieldConfig; value: string }
   | { type: "DELETE_FIELD"; tableName: string; fieldName: string }
   | { type: "ADD_RELATIONSHIP"; rel: Relationship }
@@ -84,6 +86,21 @@ function setupReducer(state: SetupConfig, action: Action): SetupConfig {
           [action.tableName]: {
             ...state.tables[action.tableName],
             [action.property]: action.value,
+          },
+        },
+      };
+    }
+
+    case "UPDATE_TABLE_FIELDS": {
+      const table = state.tables[action.tableName];
+      if (!table) return state;
+      return {
+        ...state,
+        tables: {
+          ...state.tables,
+          [action.tableName]: {
+            ...table,
+            fields: action.newFields,
           },
         },
       };
@@ -189,16 +206,15 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
   const [showAddDatabaseModal, setShowAddDatabaseModal] = useState(false);
   const [showSaveAsModal, setShowSaveAsModal] = useState(false);
   const [isSavingAsReusable, setIsSavingAsReusable] = useState(false);
+  const [managingFieldsForTable, setManagingFieldsForTable] = useState<string | null>(null);
   const [moduleId, setModuleId] = useState<string>("");
   const [savedSetups, setSavedSetups] = useState<SavedSetup[]>([]);
   const [isLoadingSetups, setIsLoadingSetups] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // Default to showing add database modal if no tables exist initially
+  // Modal no longer opens by default on mount
   useEffect(() => {
-    if (mounted && Object.keys(config.tables).length === 0) {
-      setShowAddDatabaseModal(true);
-    }
+    // Mount logic if needed
   }, [mounted, config.tables]);
 
   useEffect(() => {
@@ -489,6 +505,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
             protocol={config.data_fetching_protocol}
             onHostChange={(val) => dispatch({ type: "SET_HOST", payload: val })}
             onProtocolChange={(val) => dispatch({ type: "SET_PROTOCOL", payload: val })}
+            disabled={tableNames.length > 0}
           />
 
           {/* Dynamic detail view */}
@@ -542,6 +559,9 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
                 onDeleteField={(fieldName) =>
                   dispatch({ type: "DELETE_FIELD", tableName: selectedView.replace("table:", ""), fieldName })
                 }
+                onManageFields={() =>
+                  setManagingFieldsForTable(selectedView.replace("table:", ""))
+                }
               />
             )}
 
@@ -591,7 +611,27 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           onTableAdded={(tableName, tableConfig) => 
             dispatch({ type: "ADD_TABLE", tableName, tableConfig })
           }
+          onHostChange={(val) => dispatch({ type: "SET_HOST", payload: val })}
+          onProtocolChange={(val) => dispatch({ type: "SET_PROTOCOL", payload: val })}
           onClose={() => setShowAddDatabaseModal(false)}
+        />
+      )}
+
+      {managingFieldsForTable && config.tables[managingFieldsForTable] && (
+        <UpdateFieldsModal
+          tableName={managingFieldsForTable}
+          host={config.host}
+          protocol={config.data_fetching_protocol}
+          file={config.tables[managingFieldsForTable].file}
+          layout={config.tables[managingFieldsForTable].layout}
+          username={config.tables[managingFieldsForTable].username}
+          password={config.tables[managingFieldsForTable].password}
+          existingFields={config.tables[managingFieldsForTable].fields}
+          onConfirm={(mergedFields) => {
+            dispatch({ type: "UPDATE_TABLE_FIELDS", tableName: managingFieldsForTable, newFields: mergedFields });
+            setManagingFieldsForTable(null);
+          }}
+          onCancel={() => setManagingFieldsForTable(null)}
         />
       )}
 
