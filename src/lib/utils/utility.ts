@@ -364,7 +364,11 @@ export async function fetchFmRecord(
           errBody?.messages?.[0]?.code ||
           errBody?.response?.messages?.[0]?.code ||
           null;
+          
+        console.log(`[DEBUG] caught FM 500 error. Code: ${fmErrorCode}`);
+
         if (fmErrorCode === "401" || fmErrorCode === 401) {
+          console.log(`[DEBUG] Treating FM 500/401 as empty dataset.`);
           // FM error 401 = "No records match the request" — treat as empty result
           return {
             token,
@@ -372,8 +376,8 @@ export async function fetchFmRecord(
             recordCount: 0,
           };
         }
-      } catch {
-        // If we can't parse the error body, fall through to the generic throw
+      } catch (err) {
+        console.log(`[DEBUG] Failed to parse FM 500 error body:`, err);
       }
     }
 
