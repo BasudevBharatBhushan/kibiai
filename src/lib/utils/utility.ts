@@ -352,6 +352,31 @@ export async function fetchFmRecord(
         recordCount: 0,
       };
     }
+
+    // FileMaker Data API returns HTTP 500 with errorCode "401" when a _find
+    // request yields zero matching records. This is a known FileMaker quirk —
+    // it is NOT a real server error. Detect this and return an empty dataset
+    // gracefully instead of crashing the entire report generation pipeline.
+    if (dataRes.status === 500) {
+      try {
+        const errBody = await dataRes.json();
+        const fmErrorCode =
+          errBody?.messages?.[0]?.code ||
+          errBody?.response?.messages?.[0]?.code ||
+          null;
+        if (fmErrorCode === "401" || fmErrorCode === 401) {
+          // FM error 401 = "No records match the request" — treat as empty result
+          return {
+            token,
+            data: [],
+            recordCount: 0,
+          };
+        }
+      } catch {
+        // If we can't parse the error body, fall through to the generic throw
+      }
+    }
+
     throw new Error(`Failed to fetch data from FileMaker: ${dataRes.status}`);
   }
 
