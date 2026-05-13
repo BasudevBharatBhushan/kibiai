@@ -192,8 +192,8 @@ function ConfiguratorPageContent({
         ]);
         setBackHref(`/${slug}/templates`);
 
-        // Load existing preview if available
-        if (data.config_json && data.preview_data_json) {
+        // Load existing preview directly from report_template_data_json when available.
+        if (data.preview_data_json) {
           setHasPreviewData(true);
           dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
         } else if (data.config_json && data.setup_json) {
@@ -261,6 +261,7 @@ function ConfiguratorPageContent({
           } else if (event.type === "done") {
             const structured = event.report_structure_json;
             if (structured) {
+              setHasPreviewData(true);
               dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
             }
           } else if (event.type === "error") {

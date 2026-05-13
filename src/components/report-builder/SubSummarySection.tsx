@@ -31,6 +31,12 @@ export function SubSummarySection() {
     return Array.from(tables);
   };
 
+  const getBodyTablesForSelection = (selectedTable: string) => {
+    const tables = new Set(bodyTables);
+    if (selectedTable) tables.add(selectedTable);
+    return Array.from(tables);
+  };
+
   const getBodyFieldOptions = (tableName: string, typeFilter?: "number") => {
     if (!tableName) return [];
 
@@ -39,7 +45,7 @@ export function SubSummarySection() {
       .map((col) => col.field);
 
     if (tableName === "calculated") {
-      return (state.config.custom_calculated_fields || [])
+      const calcOptions = (state.config.custom_calculated_fields || [])
         .filter((calc) => bodyFields.includes(calc.field_name))
         .filter((calc) => {
           if (typeFilter !== "number") return true;
@@ -50,14 +56,29 @@ export function SubSummarySection() {
           label: calc.label || calc.field_name,
           type: calc.format || "number",
         }));
+
+      const knownCalcFields = new Set(calcOptions.map((option) => option.value));
+      const fallbackBodyCalcOptions = bodyFields
+        .filter((field) => !knownCalcFields.has(field))
+        .map((field) => ({
+          value: field,
+          label: field,
+          type: "number",
+        }));
+
+      return [...calcOptions, ...fallbackBodyCalcOptions];
     }
 
     const allOptions = getFieldOptions(tableName);
-    return allOptions.filter((option) => {
+    const options = allOptions.filter((option) => {
       if (!bodyFields.includes(option.value)) return false;
       if (typeFilter !== "number") return true;
       return ["number", "currency", "percentage"].includes(option.type);
     });
+
+    if (typeFilter === "number") return options;
+
+    return options;
   };
 
   const bodyTables = getBodyTables();
@@ -198,7 +219,7 @@ export function SubSummarySection() {
                                  onChange={(e) => dispatch({ type: "UPDATE_GROUP_DISPLAY", payload: { groupKey: key, index: idx, field: "table", value: e.target.value } })}
                               >
                                 <option value="">Table...</option>
-                                {bodyTables.map(t => <option key={t} value={t}>{t === "calculated" ? "Calculated Fields" : t}</option>)}
+                                {getBodyTablesForSelection(item.table).map(t => <option key={t} value={t}>{t === "calculated" ? "Calculated Fields" : t}</option>)}
                               </select>
                               <select 
                                  className="form-input w-1/2"
@@ -235,7 +256,7 @@ export function SubSummarySection() {
                                  onChange={(e) => dispatch({ type: "UPDATE_GROUP_TOTAL", payload: { groupKey: key, index: idx, field: "table", value: e.target.value } })}
                               >
                                 <option value="">Table...</option>
-                                {bodyTables.map(t => <option key={t} value={t}>{t === "calculated" ? "Calculated Fields" : t}</option>)}
+                                {getBodyTablesForSelection(item.table).map(t => <option key={t} value={t}>{t === "calculated" ? "Calculated Fields" : t}</option>)}
                               </select>
                               <select 
                                  className="form-input w-1/2"

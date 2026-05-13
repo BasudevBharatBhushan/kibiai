@@ -52,7 +52,7 @@ export interface GroupByField {
 export interface CustomCalcField {
   field_name: string;
   label: string;
-  format: 'number' | 'currency' | 'percentage';
+  format: 'number' | 'currency' | 'percentage' | 'plain';
   formula: string;
   dependencies: string[];
 }

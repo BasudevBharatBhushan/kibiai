@@ -64,7 +64,7 @@ type Action =
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "LOAD_FULL_REPORT"; payload: { config: ReportConfig; setup: ReportSetup; templateId: string; conversationId?: string | null } }
   | { type: "SET_CONVERSATION_ID"; payload: string | null }
-  | { type: "SET_REPORT_PREVIEW"; payload: any[] }
+  | { type: "SET_REPORT_PREVIEW"; payload: any }
   | { type: "SET_PROCESSING_LOGS"; payload: string[] };
 
 

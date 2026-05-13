@@ -161,7 +161,7 @@ export async function POST(
 
     if (persist_to_template) {
       // ── ADMIN CONFIGURATOR: persist preview + create a template version ──────
-      const { error: updateError } = await supabase
+      const { data: updatedTemplate, error: updateError } = await supabase
         .from("report_templates")
         .update({
           report_template_config_json: configJson,
@@ -169,10 +169,16 @@ export async function POST(
           updated_on: new Date().toISOString(),
         })
         .eq("report_template_id", template_id)
-        .eq("company_id", session.companyId);
+        .eq("company_id", session.companyId)
+        .select("report_template_id")
+        .single();
 
-      if (updateError) {
+      if (updateError || !updatedTemplate) {
         console.error("[generate] persist error:", updateError);
+        return NextResponse.json(
+          { success: false, error: updateError?.message || "Failed to save generated report preview to template." },
+          { status: 500 }
+        );
       }
 
       // Get next version number
@@ -206,6 +212,25 @@ export async function POST(
       }
     } else {
       // ── USER GENERATE: create a reports record (history) ───────────────────
+      const { data: updatedTemplate, error: updateTemplateError } = await supabase
+        .from("report_templates")
+        .update({
+          report_template_data_json: reportStructureJson,
+          updated_on: new Date().toISOString(),
+        })
+        .eq("report_template_id", template_id)
+        .eq("company_id", session.companyId)
+        .select("report_template_id")
+        .single();
+
+      if (updateTemplateError || !updatedTemplate) {
+        console.error("[generate] template data persist error:", updateTemplateError);
+        return NextResponse.json(
+          { success: false, error: updateTemplateError?.message || "Failed to save generated report data to template." },
+          { status: 500 }
+        );
+      }
+
       const { data: saved, error: saveError } = await supabase
         .from("reports")
         .insert({

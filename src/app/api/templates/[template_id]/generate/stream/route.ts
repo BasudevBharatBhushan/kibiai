@@ -185,7 +185,7 @@ export async function POST(
         if (persist_to_template) {
           // ── ADMIN CONFIGURATOR: persist preview + create a template version ──
           // 1. Update the template preview data
-          const { error: persistError } = await supabase
+          const { data: persistedTemplate, error: persistError } = await supabase
             .from("report_templates")
             .update({
               report_template_config_json: configJson,
@@ -193,10 +193,13 @@ export async function POST(
               updated_on: new Date().toISOString(),
             })
             .eq("report_template_id", template_id)
-            .eq("company_id", session.companyId);
+            .eq("company_id", session.companyId)
+            .select("report_template_id")
+            .single();
 
-          if (persistError) {
+          if (persistError || !persistedTemplate) {
             console.error("[stream] persist error:", persistError);
+            throw new Error(persistError?.message || "Failed to save generated report preview to template.");
           }
 
           // 2. Get the current max version number for this template
@@ -238,6 +241,22 @@ export async function POST(
           }));
         } else {
           // ── USER GENERATE: create a reports record ──────────────────────────
+          const { data: persistedTemplate, error: persistTemplateError } = await supabase
+            .from("report_templates")
+            .update({
+              report_template_data_json: report_structure_json,
+              updated_on: new Date().toISOString(),
+            })
+            .eq("report_template_id", template_id)
+            .eq("company_id", session.companyId)
+            .select("report_template_id")
+            .single();
+
+          if (persistTemplateError || !persistedTemplate) {
+            console.error("[stream] template data persist error:", persistTemplateError);
+            throw new Error(persistTemplateError?.message || "Failed to save generated report data to template.");
+          }
+
           const { data: saved, error: saveError } = await supabase
             .from("reports")
             .insert({

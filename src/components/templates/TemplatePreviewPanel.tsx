@@ -17,6 +17,29 @@ interface TemplatePreviewPanelProps {
   } | null;
 }
 
+function normalizePreviewData(rawData: any): any[] | null {
+  if (!rawData) return null;
+  if (Array.isArray(rawData)) return rawData;
+
+  if (Array.isArray(rawData.report_structure_json)) {
+    return rawData.report_structure_json;
+  }
+
+  if (rawData.ReportStructuredData) {
+    try {
+      const parsed =
+        typeof rawData.ReportStructuredData === "string"
+          ? JSON.parse(rawData.ReportStructuredData)
+          : rawData.ReportStructuredData;
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 /**
  * TemplatePreviewPanel
  * Clean preview panel — no toolbar, no pagination controls, no header strip.
@@ -48,7 +71,7 @@ export function TemplatePreviewPanel({ template }: TemplatePreviewPanelProps) {
           `/api/templates/${template.report_template_id}/config`
         );
         if (res.success && res.data?.preview_data_json) {
-          setPreviewData(res.data.preview_data_json);
+          setPreviewData(normalizePreviewData(res.data.preview_data_json));
         } else {
           setPreviewData(null);
         }

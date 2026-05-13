@@ -8,7 +8,7 @@ const postBodySchema = z.object({
   config_json: z.record(z.string(), z.any()).optional(),
   conversation_id: z.string().optional(),
   bump_version: z.boolean().optional(),
-  preview_data_json: z.record(z.string(), z.any()).optional(),
+  preview_data_json: z.any().optional(),
 });
 
 // ── GET /api/templates/[template_id]/config ──────────────────────────────────
