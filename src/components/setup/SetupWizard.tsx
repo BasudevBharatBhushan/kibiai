@@ -608,6 +608,8 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           protocol={config.data_fetching_protocol}
           tableCount={tableNames.length}
           existingTableNames={tableNames}
+          initialFile={tableNames.length > 0 ? config.tables[tableNames[tableNames.length - 1]].file : ""}
+          initialUsername={tableNames.length > 0 ? config.tables[tableNames[tableNames.length - 1]].username : ""}
           onTableAdded={(tableName, tableConfig) => 
             dispatch({ type: "ADD_TABLE", tableName, tableConfig })
           }
@@ -690,6 +692,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
         .setup-wizard {
           position: relative;
           min-height: calc(100vh - 200px);
+          width: 100%;
         }
 
         .sw-layout {
@@ -697,6 +700,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           gap: 32px;
           align-items: flex-start;
           margin-bottom: 100px;
+          width: 100%;
         }
 
         /* SIDEBAR */
@@ -993,11 +997,13 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           min-width: 0;
           display: flex;
           flex-direction: column;
+          width: 100%;
         }
 
         .sw-detail-view {
           display: flex;
           flex-direction: column;
+          width: 100%;
         }
 
         .sw-empty-state {

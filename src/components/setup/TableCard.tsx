@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Trash2 } from "lucide-react";
 import { TableConfig, FieldConfig } from "@/components/setup/types";
 
@@ -24,6 +26,9 @@ export function TableCard({
   onDeleteField,
   onManageFields,
 }: TableCardProps) {
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
+  const [tempPassword, setTempPassword] = useState("");
+
   const handleDelete = () => {
     if (confirm(`Delete table '${tableName}' and all its fields?`)) {
       onDelete();
@@ -33,6 +38,18 @@ export function TableCard({
   const handleDeleteField = (fieldName: string) => {
     if (confirm(`Delete field '${fieldName}' from '${tableName}'?`)) {
       onDeleteField(fieldName);
+    }
+  };
+
+  const handlePasswordFocus = () => {
+    setIsEditingPassword(true);
+    setTempPassword("");
+  };
+
+  const handlePasswordBlur = () => {
+    setIsEditingPassword(false);
+    if (tempPassword) {
+      onUpdateProperty("password", tempPassword);
     }
   };
 
@@ -106,8 +123,12 @@ export function TableCard({
             <input
               type="password"
               className="tc-input"
-              value={tableConfig.password}
-              onChange={(e) => onUpdateProperty("password", e.target.value)}
+              value={isEditingPassword ? tempPassword : (tableConfig.password ? "••••••••" : "")}
+              onFocus={handlePasswordFocus}
+              onBlur={handlePasswordBlur}
+              onChange={(e) => setTempPassword(e.target.value)}
+              placeholder={isEditingPassword ? "Type new to change" : "Password"}
+              autoComplete="new-password"
             />
           </div>
           <div className="tc-field-group" />{/* spacer */}

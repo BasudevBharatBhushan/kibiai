@@ -17,7 +17,16 @@ export function SetupJsonPreview({ config, show, onToggle, onSave }: SetupJsonPr
 
   useEffect(() => {
     if (show) {
-      setJsonText(JSON.stringify(config, null, 2));
+      // Deep clone to mask passwords
+      const maskedConfig = JSON.parse(JSON.stringify(config));
+      if (maskedConfig.tables) {
+        Object.keys(maskedConfig.tables).forEach((key) => {
+          if (maskedConfig.tables[key].password) {
+            maskedConfig.tables[key].password = "••••••••";
+          }
+        });
+      }
+      setJsonText(JSON.stringify(maskedConfig, null, 2));
       setError(null);
     }
   }, [show, config]);
@@ -30,6 +39,15 @@ export function SetupJsonPreview({ config, show, onToggle, onSave }: SetupJsonPr
       if (typeof parsed.tables !== "object") throw new Error("Missing 'tables' object");
       if (!Array.isArray(parsed.relationships)) throw new Error("Missing 'relationships' array");
       
+      // Restore masked passwords if they weren't explicitly changed
+      if (parsed.tables) {
+        Object.keys(parsed.tables).forEach((key) => {
+          if (parsed.tables[key].password === "••••••••" && config.tables[key]) {
+            parsed.tables[key].password = config.tables[key].password;
+          }
+        });
+      }
+
       onSave(parsed);
       setError(null);
       onToggle(); // close modal

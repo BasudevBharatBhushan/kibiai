@@ -77,12 +77,21 @@ export function UpdateFieldsModal({
       const data = await res.json();
       if (!data.success) throw new Error(data.error || "Failed to fetch fields.");
 
+      const deduplicateFields = (rawFields: FieldEntry[]) => {
+        const seen = new Set<string>();
+        return rawFields.filter((f) => {
+          if (seen.has(f.name)) return false;
+          seen.add(f.name);
+          return true;
+        });
+      };
+
       if (protocol === "data-api") {
-        setFields(data.fields || []);
+        setFields(deduplicateFields(data.fields || []));
       } else {
         const tableData = data.tables?.find((t: any) => t.table === tableName);
         if (!tableData) throw new Error("Table not found in OData source.");
-        setFields(tableData.fields || []);
+        setFields(deduplicateFields(tableData.fields || []));
       }
     } catch (err: any) {
       setError(err.message || "An error occurred while fetching fields.");
@@ -199,12 +208,12 @@ export function UpdateFieldsModal({
           <>
             {/* Toolbar */}
             <div className="ufm-toolbar">
-              <div className="ufm-search-wrap">
-                <Search size={14} className="ufm-search-icon" />
+              <div className="relative flex-1 flex items-center">
+                <Search size={14} className="absolute left-3 text-slate-400" />
                 <input
                   ref={searchRef}
                   type="text"
-                  className="ufm-search"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   placeholder="Search fields…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -362,33 +371,6 @@ export function UpdateFieldsModal({
           border-bottom: 1px solid #f1f5f9;
           background: #f8fafc;
           flex-shrink: 0;
-        }
-
-        .ufm-search-wrap {
-          position: relative;
-          flex: 1;
-        }
-
-        .ufm-search-icon {
-          position: absolute;
-          left: 10px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #94a3b8;
-        }
-
-        .ufm-search {
-          width: 100%;
-          padding: 8px 12px 8px 32px;
-          border: 1.5px solid #d1d5db;
-          border-radius: 7px;
-          font-size: 13px;
-          outline: none;
-          transition: border-color 0.15s;
-        }
-
-        .ufm-search:focus {
-          border-color: #636ae8;
         }
 
         .ufm-select-all-btn {

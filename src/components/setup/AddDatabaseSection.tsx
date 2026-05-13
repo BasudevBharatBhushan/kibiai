@@ -25,6 +25,8 @@ interface AddDatabaseSectionProps {
   onHostChange: (val: string) => void;
   onProtocolChange: (val: "data-api" | "o-data-api") => void;
   onClose: () => void;
+  initialFile?: string;
+  initialUsername?: string;
 }
 
 type FetchStatus = { type: "success" | "error"; message: string } | null;
@@ -38,10 +40,12 @@ export function AddDatabaseSection({
   onHostChange,
   onProtocolChange,
   onClose,
+  initialFile = "",
+  initialUsername = "",
 }: AddDatabaseSectionProps) {
   // Credential fields
-  const [file, setFile] = useState("");
-  const [username, setUsername] = useState("");
+  const [file, setFile] = useState(initialFile);
+  const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState("");
 
   // Fetch state
@@ -141,8 +145,13 @@ export function AddDatabaseSection({
       if (!data.success) throw new Error(data.error || "Failed to fetch fields.");
 
       const fields: Record<string, FieldConfig> = {};
+      const seen = new Set<string>();
+      
       (data.fields as { name: string; type: string }[]).forEach((f) => {
-        fields[f.name] = { type: f.type as FieldConfig["type"], label: f.name };
+        if (!seen.has(f.name)) {
+          seen.add(f.name);
+          fields[f.name] = { type: f.type as FieldConfig["type"], label: f.name };
+        }
       });
 
       onTableAdded(selectedTable, {
@@ -184,10 +193,15 @@ export function AddDatabaseSection({
       return;
     }
     const fields: Record<string, FieldConfig> = {};
+    const seen = new Set<string>();
+    
     tableMeta.fields
       .filter((f) => selectedFields.includes(f.name))
       .forEach((f) => {
-        fields[f.name] = { type: f.type as FieldConfig["type"], label: f.name };
+        if (!seen.has(f.name)) {
+          seen.add(f.name);
+          fields[f.name] = { type: f.type as FieldConfig["type"], label: f.name };
+        }
       });
 
     onTableAdded(tableMeta.table, {
