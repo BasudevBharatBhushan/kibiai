@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/utils/auth";
 import { createAdminClient } from "@/utils/supabase/server";
 import { z } from "zod";
+import { sanitizeJsonForPostgres } from "@/lib/utils/sanitizeJsonForPostgres";
 
 // POST body schema — all fields optional for partial updates
 const postBodySchema = z.object({
@@ -121,13 +122,13 @@ export async function POST(
     };
 
     if (config_json !== undefined) {
-      updatePayload.report_template_config_json = config_json;
+      updatePayload.report_template_config_json = sanitizeJsonForPostgres(config_json);
     }
     if (conversation_id !== undefined) {
       updatePayload.conversation_id = conversation_id;
     }
     if (preview_data_json !== undefined) {
-      updatePayload.report_template_data_json = preview_data_json;
+      updatePayload.report_template_data_json = sanitizeJsonForPostgres(preview_data_json);
     }
     if (bump_version) {
       updatePayload.version_number = (existing.version_number ?? 1) + 1;

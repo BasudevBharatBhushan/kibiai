@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/utils/auth";
 import { createAdminClient } from "@/utils/supabase/server";
+import { sanitizeJsonForPostgres } from "@/lib/utils/sanitizeJsonForPostgres";
 import { z } from "zod";
 
 // ── Zod Schema ────────────────────────────────────────────────────────────────
@@ -130,7 +131,8 @@ export async function POST(
       );
     }
 
-    const reportStructureJson = engineResult.report_structure_json;
+    const reportStructureJson = sanitizeJsonForPostgres(engineResult.report_structure_json);
+    const persistedConfigJson = sanitizeJsonForPostgres(configJson);
 
     // 6. Extract report heading from TitleHeader for use as report name
     const titleHeaderItem = Array.isArray(reportStructureJson)
@@ -164,7 +166,7 @@ export async function POST(
       const { data: updatedTemplate, error: updateError } = await supabase
         .from("report_templates")
         .update({
-          report_template_config_json: configJson,
+          report_template_config_json: persistedConfigJson,
           report_template_data_json: reportStructureJson,
           updated_on: new Date().toISOString(),
         })
@@ -198,7 +200,7 @@ export async function POST(
           report_template_id: template_id,
           company_id: session.companyId,
           version_number: nextVersion,
-          config_json: configJson,
+          config_json: persistedConfigJson,
           preview_data_json: reportStructureJson,
           changed_by_user_id: generatedByUserId,
         })
@@ -237,7 +239,7 @@ export async function POST(
           company_id: session.companyId,
           report_template_id: template_id,
           report_name: reportHeading,
-          report_config_json: configJson,
+          report_config_json: persistedConfigJson,
           report_data_json: reportStructureJson,
           generated_by_user_id: generatedByUserId,
         })

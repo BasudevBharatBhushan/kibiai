@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession } from "@/utils/auth";
 import { createAdminClient } from "@/utils/supabase/server";
+import { sanitizeJsonForPostgres } from "@/lib/utils/sanitizeJsonForPostgres";
 import { z } from "zod";
 
 export const maxDuration = 300; // Vercel Pro max; set to 800 only on Enterprise
@@ -162,7 +163,9 @@ export async function POST(
           throw new Error(engineResult.detail || engineResult.error || "Engine returned no report data.");
         }
 
-        const { report_structure_json, processing_logs = [] } = engineResult;
+        const { processing_logs = [] } = engineResult;
+        const report_structure_json = sanitizeJsonForPostgres(engineResult.report_structure_json);
+        const persistedConfigJson = sanitizeJsonForPostgres(configJson);
 
         // Replay the processing_logs progressively
         const logDelay = Math.max(60, Math.min(200, 1500 / Math.max(processing_logs.length, 1)));
@@ -188,7 +191,7 @@ export async function POST(
           const { data: persistedTemplate, error: persistError } = await supabase
             .from("report_templates")
             .update({
-              report_template_config_json: configJson,
+              report_template_config_json: persistedConfigJson,
               report_template_data_json: report_structure_json,
               updated_on: new Date().toISOString(),
             })
@@ -220,7 +223,7 @@ export async function POST(
               report_template_id: template_id,
               company_id: session.companyId,
               version_number: nextVersion,
-              config_json: configJson,
+              config_json: persistedConfigJson,
               preview_data_json: report_structure_json,
               changed_by_user_id: generatedByUserId,
             })
@@ -263,7 +266,7 @@ export async function POST(
               company_id: session.companyId,
               report_template_id: template_id,
               report_name: reportHeading,
-              report_config_json: configJson,
+              report_config_json: persistedConfigJson,
               report_data_json: report_structure_json,
               generated_by_user_id: generatedByUserId,
             })
