@@ -4,6 +4,7 @@ import type { ChartConfig } from '@/lib/charts/ChartTypes';
 // Build Highcharts Options from ChartConfig
 export function buildOptions(config: ChartConfig): Highcharts.Options {
   const isPie = config.kind === 'pie' || config.kind === 'donut';
+  const isLargeData = config.series.some(s => s.data && s.data.length > 1000);
 
   // Pie charts configuration
   if (isPie) {
@@ -53,6 +54,10 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
       type: config.kind, 
       reflow: true
     },
+    boost: {
+      useGPUTranslations: true,
+      seriesThreshold: 1, 
+    },
     colors: config.colors,
     title: { text: config.title },
 
@@ -66,6 +71,20 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
       visible: true,
       title: { text: 'Value' },
       min: 0,
+    },
+
+    plotOptions: {
+      series: {
+        animation: !isLargeData,
+        marker: {
+          enabled: !isLargeData,
+          radius: 2
+        },
+        shadow: false,
+        dataLabels: {
+          enabled: false
+        }
+      }
     },
 
     series: config.series.map(s => ({

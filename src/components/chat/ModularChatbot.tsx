@@ -34,6 +34,45 @@ export type Message = {
   text: string;
 };
 
+function stripJSONPrefix(str: string): string {
+  const trimmed = str.trim();
+  if (!trimmed.startsWith("{")) {
+    return str;
+  }
+
+  let openBraces = 0;
+  let inString = false;
+  let escape = false;
+  
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (char === '\\') {
+      escape = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{') {
+        openBraces++;
+      } else if (char === '}') {
+        openBraces--;
+        if (openBraces === 0) {
+          // Found matching root closing brace
+          return str.substring(i + 1).trim();
+        }
+      }
+    }
+  }
+  return str;
+}
+
 export interface PromptOption {
   title: string;
   description: string;
@@ -443,32 +482,24 @@ export function ModularChatbot({
             if (item.role === "assistant") {
               text = parseAssistantResponse(text);
             } else if (item.role === "user") {
+              const chartEndStr = "Please use these fields and their exact labels or names when creating chart configurations. You must prefer labels for titles but names or labels for actual grouped/numerical fields.";
+              const chartEndIdx = text.indexOf(chartEndStr);
+              
               const isInsightPredefined = text.includes('"module":') && text.includes('"fields":');
-              const hasPredefined =
-                text.includes("Today's date") ||
-                text.includes("Here is my DB Schema") ||
-                text.includes("Here is my Previous Report Config") ||
-                text.includes("FieldName:") ||
-                text.includes("Report Insight:") ||
-                isInsightPredefined;
+              
+              if (chartEndIdx !== -1) {
+                text = text.substring(chartEndIdx + chartEndStr.length).trim();
+              } else if (isInsightPredefined) {
+                text = stripJSONPrefix(text);
+              } else {
+                const hasPredefined =
+                  text.includes("Today's date") ||
+                  text.includes("Here is my DB Schema") ||
+                  text.includes("Here is my Previous Report Config") ||
+                  text.includes("FieldName:") ||
+                  text.includes("Report Insight:");
 
-              if (hasPredefined) {
-                if (isInsightPredefined) {
-                  const splitIdx = text.lastIndexOf("}\n");
-                  if (splitIdx !== -1) {
-                    text = text.substring(splitIdx + 2).trim();
-                  } else {
-                    const userPromptStart = text.indexOf('"user_prompt": "');
-                    if (userPromptStart !== -1) {
-                      const endQuote = text.lastIndexOf('"');
-                      text = text.substring(userPromptStart + 16, endQuote).trim();
-                    } else {
-                      const lastNewline = text.lastIndexOf("\n");
-                      if (lastNewline !== -1) text = text.substring(lastNewline + 1).trim();
-                      else text = "";
-                    }
-                  }
-                } else {
+                if (hasPredefined) {
                   const lastNewline = text.lastIndexOf("\n");
                   if (lastNewline !== -1) {
                     text = text.substring(lastNewline + 1).trim();
@@ -480,6 +511,13 @@ export function ModularChatbot({
 
               if (text.endsWith(".json")) {
                 text = text.slice(0, -5).trim();
+              }
+
+              if (
+                text === "(Initializing schema)" ||
+                text === "(Refreshing suggestions)"
+              ) {
+                text = "";
               }
             }
 

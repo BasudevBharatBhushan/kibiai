@@ -4,6 +4,11 @@ import React, { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { FiMinus, FiMove, FiGitMerge } from 'react-icons/fi';
 import * as Highcharts from 'highcharts';
+import HC_boost from 'highcharts/modules/boost';
+
+if (typeof window !== 'undefined') {
+  (HC_boost as any)(Highcharts);
+}
 
 import { useDashboard } from '@/context/DashboardContext';
 import { buildOptions } from '@/lib/utils/chartsUtils';
