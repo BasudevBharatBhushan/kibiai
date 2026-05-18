@@ -203,7 +203,8 @@ export function SubSummarySection() {
                                  onChange={(e) => dispatch({ type: "UPDATE_GROUP_DISPLAY", payload: { groupKey: key, index: idx, field: "table", value: e.target.value } })}
                               >
                                 <option value="">Table...</option>
-                                {getBodyTablesForSelection(item.table).map(t => <option key={t} value={t}>{t === "calculated" ? "Calculated Fields" : t}</option>)}
+                                {getConnectedTables().map(t => <option key={t} value={t}>{t}</option>)}
+                                <option value="calculated">Calculated Fields</option>
                               </select>
                               <select 
                                  className="form-input w-1/2"
@@ -212,7 +213,7 @@ export function SubSummarySection() {
                                  disabled={!item.table}
                               >
                                  <option value="">Field...</option>
-                                 {getBodyFieldOptions(item.table).map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                 {getFieldOptions(item.table).map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                               </select>
                               <button onClick={() => dispatch({ type: "REMOVE_GROUP_DISPLAY", payload: { groupKey: key, index: idx } })} className="btn-danger-icon">
                                 <X size={14} />

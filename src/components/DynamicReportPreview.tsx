@@ -11,7 +11,8 @@ import {
   FileSpreadsheet,
   Maximize,
   Minimize,
-  X
+  X,
+  Loader2
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import type { ReportMetadata } from "@/lib/utils/reportMetadata";
@@ -559,7 +560,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
               
               <span className="text-xs font-semibold text-slate-700 min-w-[90px] text-center flex items-center justify-center gap-1.5 uppercase tracking-wide">
                 {isCalculating ? (
-                    <><RefreshCw size={12} className="animate-spin"/> Calc...</>
+                    <><Loader2 size={12} className="animate-spin"/> Calc...</>
                 ) : (
                     `Page ${currentPage} / ${totalPages}`
                 )}
@@ -615,7 +616,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
               
               <span className="text-xs font-semibold text-slate-700 min-w-[90px] text-center flex items-center justify-center gap-1.5 uppercase tracking-wide">
                 {isCalculating ? (
-                    <><RefreshCw size={12} className="animate-spin"/> Calc...</>
+                    <><Loader2 size={12} className="animate-spin"/> Calc...</>
                 ) : (
                     `Page ${currentPage} / ${totalPages}`
                 )}

@@ -16,14 +16,16 @@ export function ReportPreview({ metadata: metadataProp }: ReportPreviewProps = {
 
   // Fallback: derive metadata from the current config in ReportContext so
   // admin previews stay in sync with date_range_fields / filters edits.
+  const configToUse = state.lastGeneratedConfig || state.config;
+  
   const derivedMetadata = useMemo<ReportMetadata | undefined>(() => {
     if (metadataProp) return metadataProp;
-    if (!state.config) return undefined;
+    if (!configToUse) return undefined;
     return buildReportMetadata(
-      state.config as unknown as Record<string, unknown>,
+      configToUse as unknown as Record<string, unknown>,
       (state.setup as unknown as Record<string, unknown>) ?? null
     );
-  }, [metadataProp, state.config, state.setup]);
+  }, [metadataProp, configToUse, state.setup]);
 
   if (!rawData) {
     return (
