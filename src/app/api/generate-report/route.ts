@@ -809,7 +809,7 @@ function calculateCustomFields(
       hfInstance.setSheetContent(sheetId, sheetData);
 
       // Pre-process formula (replace field names with column references)
-      let processedFormula = formula.trim();
+      let processedFormula = formula.trim().replace(/`/g, "");
       if (processedFormula.startsWith("=")) {
         processedFormula = processedFormula.substring(1);
       }
