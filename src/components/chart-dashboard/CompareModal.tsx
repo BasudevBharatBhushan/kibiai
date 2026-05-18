@@ -103,6 +103,33 @@ function extractFilterEntries(
   return entries;
 }
 
+function toIsoDateLocal(dStr: string): string {
+  if (!dStr) return '';
+  const d = new Date(dStr);
+  if (isNaN(d.getTime())) return dStr;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function toUSDate(isoStr: string): string {
+  if (!isoStr || !isoStr.includes('-')) return isoStr;
+  const [y, m, d] = isoStr.split('-');
+  if (!y || !m || !d) return isoStr;
+  return `${m}/${d}/${y}`;
+}
+
+function displayFilterValue(val: string) {
+  if (val === '*') return 'not empty';
+  if (val === '=') return 'empty';
+  return val;
+}
+
+function parseFilterValue(val: string) {
+  const v = val.toLowerCase().trim();
+  if (v === 'not empty' || v === '(not empty)') return '*';
+  if (v === 'empty' || v === '(empty)') return '=';
+  return val;
+}
+
 // ── Inline filter form (dates + other filters) ─────────────────────────────────
 
 function InlineReportFilterForm({
@@ -130,7 +157,7 @@ function InlineReportFilterForm({
   const [dateValues, setDateValues] = useState<Record<string, { start: string; end: string }>>(
     () =>
       Object.fromEntries(
-        dateRangeEntries.map((e) => [`${e.table}.${e.field}`, { start: e.start, end: e.end }])
+        dateRangeEntries.map((e) => [`${e.table}.${e.field}`, { start: toIsoDateLocal(e.start), end: toIsoDateLocal(e.end) }])
       )
   );
 
@@ -151,7 +178,7 @@ function InlineReportFilterForm({
   );
 
   const [filterValues, setFilterValues] = useState<Record<string, string>>(
-    () => Object.fromEntries(filterEntries.map((e) => [`${e.table}.${e.field}`, e.value]))
+    () => Object.fromEntries(filterEntries.map((e) => [`${e.table}.${e.field}`, displayFilterValue(e.value)]))
   );
 
   const handleFilterChange = useCallback((key: string, value: string) => {
@@ -166,14 +193,14 @@ function InlineReportFilterForm({
       const key = `${entry.table}.${entry.field}`;
       const { start, end } = dateValues[key] ?? { start: entry.start, end: entry.end };
       if (!updatedDateRangeFields[entry.table]) updatedDateRangeFields[entry.table] = {};
-      updatedDateRangeFields[entry.table][entry.field] = `${start}...${end}`;
+      updatedDateRangeFields[entry.table][entry.field] = `${toUSDate(start)}...${toUSDate(end)}`;
     }
 
     // Build filters object
     const updatedFilters: Record<string, Record<string, string>> = {};
     for (const entry of filterEntries) {
       const key = `${entry.table}.${entry.field}`;
-      const val = filterValues[key] ?? '';
+      const val = parseFilterValue(filterValues[key] ?? '');
       if (val === '') continue; // skip blanked-out filters
       if (!updatedFilters[entry.table]) updatedFilters[entry.table] = {};
       updatedFilters[entry.table][entry.field] = val;
@@ -276,7 +303,7 @@ function InlineReportFilterForm({
                       type="text"
                       className="compare-filter-form-input"
                       value={val}
-                      placeholder={`e.g. =Active, >=10, *`}
+                      placeholder={`e.g. =Active, >=10, not empty`}
                       onChange={(e) => handleFilterChange(key, e.target.value)}
                     />
                   </div>
