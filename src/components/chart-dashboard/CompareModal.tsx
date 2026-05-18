@@ -39,15 +39,71 @@ interface TemplatePayload {
   report_template_setup_json: Record<string, unknown> | null;
 }
 
-// ── Inline date-range form for "New Filter" ────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-interface DateRangeEntry {
-  table: string;
-  field: string;
-  start: string;
-  end: string;
-  label: string;
+/** Extract all date-range entries from config, resolved against setup labels */
+function extractDateRangeEntries(
+  configJson: Record<string, unknown> | null,
+  setupJson: Record<string, unknown> | null
+) {
+  const fields = (configJson?.date_range_fields ?? null) as Record<
+    string,
+    Record<string, string>
+  > | null;
+  if (!fields) return [];
+
+  const setupTables = (setupJson?.tables ?? null) as Record<
+    string,
+    { fields?: Record<string, { label?: string }> }
+  > | null;
+
+  const entries: { table: string; field: string; start: string; end: string; label: string }[] = [];
+  for (const [table, tableFields] of Object.entries(fields)) {
+    for (const [field, rangeStr] of Object.entries(tableFields)) {
+      const parts = rangeStr.split('...');
+      entries.push({
+        table,
+        field,
+        start: parts[0] ?? '',
+        end: parts[1] ?? '',
+        label: setupTables?.[table]?.fields?.[field]?.label ?? `${table} — ${field}`,
+      });
+    }
+  }
+  return entries;
 }
+
+/** Extract all non-date filter entries from config */
+function extractFilterEntries(
+  configJson: Record<string, unknown> | null,
+  setupJson: Record<string, unknown> | null
+) {
+  const filterMap = (configJson?.filters ?? null) as Record<
+    string,
+    Record<string, unknown>
+  > | null;
+  if (!filterMap) return [];
+
+  const setupTables = (setupJson?.tables ?? null) as Record<
+    string,
+    { fields?: Record<string, { label?: string }> }
+  > | null;
+
+  const entries: { table: string; field: string; value: string; label: string }[] = [];
+  for (const [table, tableFields] of Object.entries(filterMap)) {
+    for (const [field, val] of Object.entries(tableFields)) {
+      entries.push({
+        table,
+        field,
+        value: val !== undefined && val !== null ? String(val) : '',
+        label: setupTables?.[table]?.fields?.[field]?.label ?? `${table} — ${field}`,
+      });
+    }
+  }
+  return entries;
+}
+
+// ── Inline filter form (dates + other filters) ─────────────────────────────────
 
 function InlineReportFilterForm({
   templateId,
@@ -65,32 +121,11 @@ function InlineReportFilterForm({
   const { addToast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Extract date-range fields from config
-  const dateRangeEntries = useMemo<DateRangeEntry[]>(() => {
-    const fields = (templateConfigJson?.date_range_fields ?? null) as Record<
-      string,
-      Record<string, string>
-    > | null;
-    if (!fields) return [];
-
-    const setupTables = (templateSetupJson?.tables ?? null) as Record<
-      string,
-      { fields?: Record<string, { label?: string }> }
-    > | null;
-
-    const entries: DateRangeEntry[] = [];
-    for (const [table, tableFields] of Object.entries(fields)) {
-      for (const [field, rangeStr] of Object.entries(tableFields)) {
-        const parts = rangeStr.split('...');
-        const defaultStart = parts[0] ?? '';
-        const defaultEnd = parts[1] ?? '';
-        const label =
-          setupTables?.[table]?.fields?.[field]?.label ?? `${table}.${field}`;
-        entries.push({ table, field, start: defaultStart, end: defaultEnd, label });
-      }
-    }
-    return entries;
-  }, [templateConfigJson, templateSetupJson]);
+  // ── Date-range fields ──
+  const dateRangeEntries = useMemo(
+    () => extractDateRangeEntries(templateConfigJson, templateSetupJson),
+    [templateConfigJson, templateSetupJson]
+  );
 
   const [dateValues, setDateValues] = useState<Record<string, { start: string; end: string }>>(
     () =>
@@ -109,12 +144,23 @@ function InlineReportFilterForm({
     []
   );
 
-  const handleSubmit = useCallback(async () => {
-    // Build updated config_json with new date ranges
-    const updatedConfigJson: Record<string, unknown> = {
-      ...(templateConfigJson ?? {}),
-    };
+  // ── Other filter fields ──
+  const filterEntries = useMemo(
+    () => extractFilterEntries(templateConfigJson, templateSetupJson),
+    [templateConfigJson, templateSetupJson]
+  );
 
+  const [filterValues, setFilterValues] = useState<Record<string, string>>(
+    () => Object.fromEntries(filterEntries.map((e) => [`${e.table}.${e.field}`, e.value]))
+  );
+
+  const handleFilterChange = useCallback((key: string, value: string) => {
+    setFilterValues((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  // ── Submit → POST /api/templates/[id]/generate ──
+  const handleSubmit = useCallback(async () => {
+    // Build date_range_fields
     const updatedDateRangeFields: Record<string, Record<string, string>> = {};
     for (const entry of dateRangeEntries) {
       const key = `${entry.table}.${entry.field}`;
@@ -122,21 +168,35 @@ function InlineReportFilterForm({
       if (!updatedDateRangeFields[entry.table]) updatedDateRangeFields[entry.table] = {};
       updatedDateRangeFields[entry.table][entry.field] = `${start}...${end}`;
     }
-    updatedConfigJson.date_range_fields = updatedDateRangeFields;
+
+    // Build filters object
+    const updatedFilters: Record<string, Record<string, string>> = {};
+    for (const entry of filterEntries) {
+      const key = `${entry.table}.${entry.field}`;
+      const val = filterValues[key] ?? '';
+      if (val === '') continue; // skip blanked-out filters
+      if (!updatedFilters[entry.table]) updatedFilters[entry.table] = {};
+      updatedFilters[entry.table][entry.field] = val;
+    }
+
+    const runtime_filters: Record<string, unknown> = {};
+    if (Object.keys(updatedDateRangeFields).length > 0) {
+      runtime_filters.date_range_fields = updatedDateRangeFields;
+    }
+    if (Object.keys(updatedFilters).length > 0) {
+      runtime_filters.filters = updatedFilters;
+    }
 
     setIsGenerating(true);
     try {
+      // Use the template-scoped generate endpoint — it handles setup/config merging server-side
       const res = await apiClient.post<{ success: boolean; data: { report_id: string } }>(
-        '/api/generate-report',
-        {
-          template_id: templateId,
-          config_json: updatedConfigJson,
-          setup_json: templateSetupJson,
-        }
+        `/api/templates/${templateId}/generate`,
+        { runtime_filters }
       );
 
       if (!res.success || !res.data?.report_id) {
-        throw new Error('Report generation did not return a report ID.');
+        throw new Error((res as any).error ?? 'Report generation did not return a report ID.');
       }
       onSubmit(res.data.report_id);
     } catch (err: unknown) {
@@ -147,55 +207,90 @@ function InlineReportFilterForm({
       );
       setIsGenerating(false);
     }
-  }, [addToast, dateRangeEntries, dateValues, onSubmit, templateConfigJson, templateId, templateSetupJson]);
+  }, [
+    addToast,
+    dateRangeEntries,
+    dateValues,
+    filterEntries,
+    filterValues,
+    onSubmit,
+    templateId,
+  ]);
+
+  const hasNoFilters = dateRangeEntries.length === 0 && filterEntries.length === 0;
 
   return (
     <div className="compare-filter-form">
       <p className="compare-filter-form-heading">Generate with New Filter</p>
 
-      {dateRangeEntries.length === 0 ? (
+      {hasNoFilters ? (
         <p style={{ fontSize: 12, color: '#64748b' }}>
-          No configurable date ranges found for this template.
+          No configurable filters found for this template.
         </p>
       ) : (
-        dateRangeEntries.map((entry) => {
-          const key = `${entry.table}.${entry.field}`;
-          const values = dateValues[key] ?? { start: entry.start, end: entry.end };
-          return (
-            <div key={key}>
-              <p
-                className="compare-filter-form-label"
-                style={{ marginBottom: 8 }}
-              >
-                {entry.label}
-              </p>
-              <div className="compare-filter-form-group">
-                <label className="compare-filter-form-label">Start Date</label>
-                <input
-                  type="date"
-                  className="compare-filter-form-input"
-                  value={values.start}
-                  onChange={(e) => handleDateChange(key, 'start', e.target.value)}
-                />
+        <>
+          {/* ── Date-range fields ── */}
+          {dateRangeEntries.map((entry) => {
+            const key = `${entry.table}.${entry.field}`;
+            const values = dateValues[key] ?? { start: entry.start, end: entry.end };
+            return (
+              <div key={key}>
+                <p className="compare-filter-form-label" style={{ marginBottom: 8 }}>
+                  {entry.label}
+                </p>
+                <div className="compare-filter-form-group">
+                  <label className="compare-filter-form-label">Start Date</label>
+                  <input
+                    type="date"
+                    className="compare-filter-form-input"
+                    value={values.start}
+                    onChange={(e) => handleDateChange(key, 'start', e.target.value)}
+                  />
+                </div>
+                <div className="compare-filter-form-group" style={{ marginTop: 8 }}>
+                  <label className="compare-filter-form-label">End Date</label>
+                  <input
+                    type="date"
+                    className="compare-filter-form-input"
+                    value={values.end}
+                    onChange={(e) => handleDateChange(key, 'end', e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="compare-filter-form-group" style={{ marginTop: 8 }}>
-                <label className="compare-filter-form-label">End Date</label>
-                <input
-                  type="date"
-                  className="compare-filter-form-input"
-                  value={values.end}
-                  onChange={(e) => handleDateChange(key, 'end', e.target.value)}
-                />
-              </div>
-            </div>
-          );
-        })
+            );
+          })}
+
+          {/* ── Other filter fields ── */}
+          {filterEntries.length > 0 && (
+            <>
+              {dateRangeEntries.length > 0 && (
+                <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: 0 }} />
+              )}
+              {filterEntries.map((entry) => {
+                const key = `${entry.table}.${entry.field}`;
+                const val = filterValues[key] ?? '';
+                return (
+                  <div key={key} className="compare-filter-form-group">
+                    <label className="compare-filter-form-label">{entry.label}</label>
+                    <input
+                      type="text"
+                      className="compare-filter-form-input"
+                      value={val}
+                      placeholder={`e.g. =Active, >=10, *`}
+                      onChange={(e) => handleFilterChange(key, e.target.value)}
+                    />
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </>
       )}
 
       <div className="compare-filter-form-actions">
         <button
           onClick={handleSubmit}
-          disabled={isGenerating}
+          disabled={isGenerating || hasNoFilters}
           className="compare-filter-submit-btn"
         >
           {isGenerating ? (
@@ -335,7 +430,6 @@ export default function CompareModal({
           }
         } else {
           // primarySourceMeta already provided; still need template config for new filter form
-          // Fetch from the reports endpoint if we have a report_id
           if (primarySourceMeta.report_id) {
             const res = await apiClient.get<{
               success: boolean;
@@ -463,9 +557,11 @@ export default function CompareModal({
     [handleSelectReport, templateId]
   );
 
-  // ── Primary chart: re-process from primary dataset using the same schema ──
-  // (The config passed in from ChartCard is already processed — use as-is for the left panel)
-  const leftConfig = primaryConfig;
+  // ── Labels ──
+  // User mode: "Current Report" / "Comparison"
+  // Admin mode: "Current Template" / "Comparison"
+  const leftLabel = isViewerMode ? 'Current Report' : 'Current Template';
+  const leftFallbackName = isViewerMode ? 'Current Report' : 'Template Preview';
 
   // ── Render ──
   const modalContent = (
@@ -499,14 +595,14 @@ export default function CompareModal({
         <div className="compare-modal-body">
           {/* ── LEFT: Primary ── */}
           <CompareChartPanel
-            config={leftConfig}
+            config={primaryConfig}
             sourceMeta={
               resolvedPrimaryMeta ?? {
-                report_name: isViewerMode ? 'Current Report' : 'Template Preview',
+                report_name: leftFallbackName,
                 isTemplate: !isViewerMode,
               }
             }
-            label={isViewerMode ? 'Primary' : 'Template'}
+            label={leftLabel}
             labelColor="blue"
           />
 
@@ -522,6 +618,7 @@ export default function CompareModal({
                 reports={availableReports}
                 isLoading={isLoadingReports}
                 currentReportId={reportId}
+                templateSetupJson={templateSetupJson}
                 onSelectReport={handleSelectReport}
                 onNewFilter={() => setRightPanelState('NEW_FILTER')}
               />

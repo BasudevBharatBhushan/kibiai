@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
-import { FileText, ChevronRight, Plus, Inbox } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { FileText, ChevronRight, Plus, Inbox, Calendar, Filter } from 'lucide-react';
+import { buildReportMetadata, formatDisplayDate } from '@/lib/utils/reportMetadata';
 import '@/styles/dashboard.css';
 
 export interface ReportListItem {
@@ -17,6 +18,8 @@ interface ReportHistoryPickerProps {
   isLoading: boolean;
   /** ID of the currently-viewed report (to exclude from the list) */
   currentReportId?: string;
+  /** Template setup JSON to resolve field labels in metadata */
+  templateSetupJson?: Record<string, unknown> | null;
   onSelectReport: (report: ReportListItem) => void;
   onNewFilter: () => void;
 }
@@ -24,9 +27,43 @@ interface ReportHistoryPickerProps {
 function PickerSkeleton() {
   return (
     <div className="compare-loading-skeleton">
-      <div className="compare-skeleton-bar" style={{ height: 52 }} />
-      <div className="compare-skeleton-bar" style={{ height: 52 }} />
-      <div className="compare-skeleton-bar" style={{ height: 52 }} />
+      <div className="compare-skeleton-bar" style={{ height: 60 }} />
+      <div className="compare-skeleton-bar" style={{ height: 60 }} />
+      <div className="compare-skeleton-bar" style={{ height: 60 }} />
+    </div>
+  );
+}
+
+/** Renders the date-range + filter chips for a single report row */
+function ReportMetaBadges({
+  configJson,
+  setupJson,
+}: {
+  configJson: Record<string, unknown> | null | undefined;
+  setupJson: Record<string, unknown> | null | undefined;
+}) {
+  const meta = useMemo(
+    () => buildReportMetadata(configJson ?? null, setupJson ?? null),
+    [configJson, setupJson]
+  );
+
+  if (!meta) return null;
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+      {meta.dateRange && (
+        <span className="compare-picker-meta-badge compare-picker-meta-date">
+          <Calendar size={10} strokeWidth={2} />
+          {formatDisplayDate(meta.dateRange.start)} — {formatDisplayDate(meta.dateRange.end)}
+          {meta.dateRange.field ? ` (${meta.dateRange.field})` : ''}
+        </span>
+      )}
+      {meta.filters?.map((f, i) => (
+        <span key={i} className="compare-picker-meta-badge compare-picker-meta-filter">
+          <Filter size={10} strokeWidth={2} />
+          {f}
+        </span>
+      ))}
     </div>
   );
 }
@@ -35,6 +72,7 @@ export default function ReportHistoryPicker({
   reports,
   isLoading,
   currentReportId,
+  templateSetupJson,
   onSelectReport,
   onNewFilter,
 }: ReportHistoryPickerProps) {
@@ -73,17 +111,14 @@ export default function ReportHistoryPicker({
               <FileText
                 size={16}
                 strokeWidth={1.5}
-                style={{ color: '#64748b', flexShrink: 0 }}
+                style={{ color: '#64748b', flexShrink: 0, marginTop: 2 }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p className="compare-picker-item-name">{r.report_name}</p>
-                <p className="compare-picker-item-date">
-                  {new Date(r.created_on).toLocaleDateString(undefined, {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </p>
+                <ReportMetaBadges
+                  configJson={r.report_config_json}
+                  setupJson={templateSetupJson}
+                />
               </div>
               <ChevronRight
                 size={14}

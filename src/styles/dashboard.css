@@ -271,11 +271,34 @@
   white-space: nowrap;
 }
 
-.compare-picker-item-date {
+.compare-picker-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.compare-picker-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 10px;
-  color: #94a3b8;
   font-weight: 500;
-  margin: 0;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.compare-picker-meta-date {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.compare-picker-meta-filter {
+  background: #faf5ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
 }
 
 .compare-picker-footer {
