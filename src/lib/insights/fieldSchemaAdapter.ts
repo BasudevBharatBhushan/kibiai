@@ -98,8 +98,6 @@ export function deriveFieldSchemas(
   // Helper to add a field safely
   const addField = (fieldName: string, tableName?: string) => {
     if (!fieldName) return;
-    const safeName = toSafeIdentifier(fieldName);
-    if (seen.has(safeName)) return;
 
     let fieldMeta = null;
 
@@ -115,12 +113,17 @@ export function deriveFieldSchemas(
       }
     }
 
+    if (!fieldMeta) return;
+
+    const safeName = toSafeIdentifier(fieldName);
+    if (seen.has(safeName)) return;
+
     seen.add(safeName);
     schemas.push({
       name: safeName,
       originalName: fieldName,
-      type: fieldMeta ? mapFieldType(fieldMeta.type) : "dimension", // fallback to dimension
-      meaning: fieldMeta?.label ?? fieldName,
+      type: mapFieldType(fieldMeta.type),
+      meaning: fieldMeta.label ?? fieldName,
     });
   };
 
@@ -164,23 +167,38 @@ export function deriveFieldSchemas(
   // 4. Extract from custom_calculated_fields
   const calcFields = (
     configJson.custom_calculated_fields as Array<{
-      field: string;
+      field_name?: string;
+      field?: string; // support legacy 'field' fallback
       type?: string;
+      format?: string;
       label?: string;
     }> | undefined
   ) ?? [];
 
   for (const cf of calcFields) {
-    if (!cf.field) continue;
-    const safeName = toSafeIdentifier(cf.field);
+    const rawFieldName = cf.field_name || cf.field;
+    if (!rawFieldName) continue;
+    const safeName = toSafeIdentifier(rawFieldName);
     if (seen.has(safeName)) continue;
     
     seen.add(safeName);
+    
+    const rawType = cf.type ?? cf.format ?? "number";
+    let derivedType: FieldSchema["type"] = "number";
+    const typeLower = rawType.toLowerCase();
+    if (typeLower === "date") {
+      derivedType = "date";
+    } else if (typeLower === "boolean") {
+      derivedType = "boolean";
+    } else if (typeLower === "text" || typeLower === "dimension") {
+      derivedType = "dimension";
+    }
+    
     schemas.push({
       name: safeName,
-      originalName: cf.field,
-      type: mapFieldType(cf.type ?? "number"),
-      meaning: cf.label ?? cf.field,
+      originalName: rawFieldName,
+      type: derivedType,
+      meaning: cf.label ?? rawFieldName,
     });
   }
 
