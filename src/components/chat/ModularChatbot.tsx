@@ -614,8 +614,8 @@ export function ModularChatbot({
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 p-0 overflow-hidden relative bg-slate-50 flex flex-col">
-          <ScrollArea className="flex-1">
+        <CardContent className="flex-1 p-0 overflow-hidden relative bg-slate-50 flex flex-col min-h-0">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 px-5 pb-40 pt-6">
               {!hasMessages && (
                 <div className="flex w-full justify-start">
