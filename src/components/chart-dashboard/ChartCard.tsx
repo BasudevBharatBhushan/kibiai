@@ -1,13 +1,9 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { FiMinus, FiMove, FiGitMerge } from 'react-icons/fi';
 import * as Highcharts from 'highcharts';
-
-if (typeof window !== 'undefined') {
-  require('highcharts/modules/boost')(Highcharts);
-}
 
 import { useDashboard } from '@/context/DashboardContext';
 import { buildOptions } from '@/lib/utils/chartsUtils';
@@ -17,11 +13,13 @@ import { CardScopeMeta } from './CardScopeMeta';
 import CompareModal from './CompareModal';
 import '@/styles/dashboard.css';
 
-
 const HighchartsReact = dynamic(
   () => import('highcharts-react-official').then(m => m.default),
   { ssr: false }
 );
+
+// Tracks whether boost has been initialized for this Highcharts instance
+let boostInitialized = false;
 
 // Props Type
 type Props = {
@@ -29,11 +27,26 @@ type Props = {
 };
 
 export default function ChartCard({ config }: Props) {
-  // Use Context hook
   const { removeChart, updateChartKind, isViewerMode } = useDashboard();
-
-  // Compare modal state
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [boostReady, setBoostReady] = useState(boostInitialized);
+
+  // Dynamically import and apply the boost module once per app session
+  useEffect(() => {
+    if (boostInitialized) return;
+    import('highcharts/modules/boost').then((mod: any) => {
+      const initBoost = mod.default ?? mod;
+      if (typeof initBoost === 'function') {
+        (initBoost as (h: typeof Highcharts) => void)(Highcharts);
+      }
+      boostInitialized = true;
+      setBoostReady(true);
+    }).catch(() => {
+      // Boost failed to load; still allow charts to render without it
+      boostInitialized = true;
+      setBoostReady(true);
+    });
+  }, []);
 
   const opts = useMemo(() => {
     const base = buildOptions(config);
@@ -115,11 +128,13 @@ export default function ChartCard({ config }: Props) {
       </div>
 
       <div className="flex-1 p-2 w-full min-h-0 overflow-y-auto scrollbar-minimal relative">
-        <HighchartsReact
-          highcharts={Highcharts}
-          options={opts}
-          containerProps={{ style: { height: '100%', width: '100%' } }}
-        />
+        {boostReady && (
+          <HighchartsReact
+            highcharts={Highcharts}
+            options={opts}
+            containerProps={{ style: { height: '100%', width: '100%' } }}
+          />
+        )}
       </div>
 
       {/* Compare Modal — rendered as a portal */}
