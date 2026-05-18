@@ -7,7 +7,7 @@ import type { FieldSchema } from "@/lib/insights/fieldSchemaAdapter";
  * Sends SCHEMA ONLY — no data, no values, no rows.
  *
  * Output matches the AI's expected INPUT FORMAT exactly:
- *   { "module": "...", "fields": { "fieldName": { "type": "...", "meaning": "..." } } }
+ *   { "module": "...", "fields": { "fieldName": { "type": "...", "meaning": "...", "original_name": "..." } } }
  *
  * This is prepended to every user message (same pattern as buildChartPredefinedPrompt).
  */
@@ -29,9 +29,9 @@ export function buildInsightPredefinedPrompt(
     );
   }
 
-  const fieldMap: Record<string, { type: string; meaning: string }> = {};
+  const fieldMap: Record<string, { type: string; meaning: string; original_name: string }> = {};
   for (const f of fields) {
-    fieldMap[f.name] = { type: f.type, meaning: f.meaning };
+    fieldMap[f.name] = { type: f.type, meaning: f.meaning, original_name: f.originalName };
   }
 
   return JSON.stringify(

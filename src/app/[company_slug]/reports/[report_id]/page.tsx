@@ -84,7 +84,10 @@ function ReportDetailContent({
       report.report_config_json ?? null,
       (report.report_template_setup_json ?? null) as Record<string, unknown> | null
     );
-  }, [report]);
+  // Use report_id (stable string) instead of the whole report object so
+  // metadata is only recomputed when a different report is loaded.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report?.report_id]);
 
   // Load report
   useEffect(() => {

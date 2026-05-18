@@ -211,11 +211,15 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
     }
   }, []);
 
-  // 1. Generate HTML
+  // 1. Generate HTML — deferred to post-paint so the loading state renders first
   useEffect(() => {
     if (jsonData?.length > 0) {
-      const html = generateDynamicReport(jsonData, metadata);
-      setReportHtml(DOMPurify.sanitize(html));
+      setIsCalculating(true); // show spinner immediately before any CPU work
+      const id = setTimeout(() => {
+        const html = generateDynamicReport(jsonData, metadata);
+        setReportHtml(DOMPurify.sanitize(html));
+      }, 0);
+      return () => clearTimeout(id);
     }
   }, [jsonData, metadata]);
 
@@ -259,73 +263,88 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
 
     setIsCalculating(true);
 
-    // RESET
-    const hidden = reportNode.querySelectorAll('[style*="display: none"]');
-    hidden.forEach(el => (el as HTMLElement).style.display = '');
-    const marked = reportNode.querySelectorAll('[data-page]');
-    marked.forEach(el => el.removeAttribute('data-page'));
+    // RESET — writes only, no reads, no reflow
+    reportNode.querySelectorAll('[style*="display: none"]').forEach(
+      el => (el as HTMLElement).style.display = ''
+    );
+    reportNode.querySelectorAll('[data-page]').forEach(
+      el => el.removeAttribute('data-page')
+    );
 
+    // ─── PASS 1: collect all atomic elements ───────────────────────────────────
+    // We build a flat list of every element that needs a page number, then read
+    // ALL their offsetHeights in one tight loop. The browser performs a single
+    // layout calculation for the batch instead of one per element.
+    const atomicElements: HTMLElement[] = [];
+    const isHeader: boolean[] = []; // parallel flag array
+
+    const headers = Array.from(
+      reportNode.querySelectorAll('.title-header, .current-date')
+    ) as HTMLElement[];
+    headers.forEach(el => { atomicElements.push(el); isHeader.push(true); });
+
+    const topSubsummaries = Array.from(
+      reportNode.querySelectorAll('.subsummary.level-0')
+    ) as HTMLElement[];
+
+    if (topSubsummaries.length === 0) {
+      // Flat table — add each body row
+      reportNode.querySelectorAll('table.body-table tbody tr').forEach(r => {
+        atomicElements.push(r as HTMLElement);
+        isHeader.push(false);
+      });
+    } else {
+      topSubsummaries.forEach(sub => {
+        const head = sub.querySelector('.subsummary-header');
+        const disp = sub.querySelector('.subsummary-display');
+        if (head) { atomicElements.push(head as HTMLElement); isHeader.push(false); }
+        if (disp) { atomicElements.push(disp as HTMLElement); isHeader.push(false); }
+
+        const content = sub.querySelector('.subsummary-content');
+        if (content) {
+          Array.from(content.querySelectorAll(
+            'tr, .subsummary-header, .subsummary-display, .section-totals'
+          )).filter(el => {
+            if (el.tagName === 'TR') return el.parentElement?.tagName === 'TBODY';
+            return true;
+          }).forEach(el => {
+            atomicElements.push(el as HTMLElement);
+            isHeader.push(false);
+          });
+        }
+      });
+    }
+
+    const trailing = reportNode.querySelector('.trailing-summary') as HTMLElement | null;
+    if (trailing) { atomicElements.push(trailing); isHeader.push(false); }
+
+    // Single batch read — ONE browser layout flush for the entire report
+    const heights = atomicElements.map(el => el.offsetHeight);
+
+    // ─── PASS 2: assign pages using pre-read heights (writes only) ─────────────
     let pageIndex = 1;
     let currentHeight = 0;
 
-    const checkFit = (height: number) => {
-        if (currentHeight + height > CONTENT_HEIGHT && currentHeight > 50) {
-            pageIndex++;
-            currentHeight = 0;
-        }
-        currentHeight += height;
-        return pageIndex;
-    };
+    for (let i = 0; i < atomicElements.length; i++) {
+      const el = atomicElements[i];
+      const h = heights[i];
 
-    const assignPage = (el: HTMLElement) => {
-        const h = el.offsetHeight;
-        if (h === 0) return;
-        const p = checkFit(h);
-        el.setAttribute('data-page', p.toString());
-    };
-
-    const headers = Array.from(reportNode.querySelectorAll('.title-header, .current-date'));
-    headers.forEach(el => {
+      if (isHeader[i]) {
+        // Headers always go on page 1
         el.setAttribute('data-page', '1');
-        // Count BOTH title-header and current-date heights so page breaks are accurate
-        currentHeight += (el as HTMLElement).offsetHeight;
-    });
+        currentHeight += h;
+        continue;
+      }
 
-    const topSubsummaries = Array.from(reportNode.querySelectorAll('.subsummary.level-0'));
+      if (h === 0) continue;
 
-    if (topSubsummaries.length === 0) {
-        const tables = Array.from(reportNode.querySelectorAll('table.body-table'));
-        tables.forEach(table => {
-            const rows = Array.from(table.querySelectorAll('tbody tr'));
-            rows.forEach(r => assignPage(r as HTMLElement));
-        });
-    } else {
-        topSubsummaries.forEach(sub => {
-            const head = sub.querySelector('.subsummary-header');
-            if (head) assignPage(head as HTMLElement);
-            
-            const disp = sub.querySelector('.subsummary-display');
-            if (disp) assignPage(disp as HTMLElement);
-
-            const content = sub.querySelector('.subsummary-content');
-            if (content) {
-                const children = Array.from(content.querySelectorAll('*'));
-                const atomic = children.filter(el => {
-                    const tag = el.tagName;
-                    const cls = el.classList;
-                    if (tag === 'TR' && el.parentElement?.tagName === 'TBODY') return true;
-                    if (cls.contains('subsummary-header')) return true;
-                    if (cls.contains('subsummary-display')) return true;
-                    if (cls.contains('section-totals')) return true;
-                    return false;
-                });
-                atomic.forEach(block => assignPage(block as HTMLElement));
-            }
-        });
+      if (currentHeight + h > CONTENT_HEIGHT && currentHeight > 50) {
+        pageIndex++;
+        currentHeight = 0;
+      }
+      currentHeight += h;
+      el.setAttribute('data-page', pageIndex.toString());
     }
-
-    const trailing = reportNode.querySelector('.trailing-summary');
-    if (trailing) assignPage(trailing as HTMLElement);
 
     setTotalPages(pageIndex);
     setIsCalculating(false);
@@ -645,7 +664,18 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
       >
         {previewMode ? (
           // Preview mode: natural-flow layout, fills panel width, no A4 constraints
-          <div className="w-full bg-white">
+          <div className="w-full bg-white relative">
+            {/* Preview mode loading overlay */}
+            {isCalculating && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/80 backdrop-blur-[2px] gap-3">
+                <div className="w-48 h-1 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 rounded-full animate-pulse w-3/4" />
+                </div>
+                <p className="text-[11px] text-slate-400 font-medium tracking-wide uppercase">
+                  Rendering…
+                </p>
+              </div>
+            )}
             <div
               id="dynamic-report-container"
               ref={containerRef}
@@ -654,25 +684,44 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
           </div>
         ) : (
           // Full report mode: A4 paper rendering
-          <div 
-              className="bg-white shadow-xl transition-all duration-300 relative"
-              style={{ 
-                  width: '210mm', 
-                  minHeight: '297mm', 
-                  padding: '5mm 10mm', 
-                  boxSizing: 'border-box',
-                  opacity: isCalculating ? 0.5 : 1
-              }}
+          <div
+            className="bg-white shadow-xl transition-opacity duration-300 relative"
+            style={{
+              width: '210mm',
+              minHeight: '297mm',
+              padding: '5mm 10mm',
+              boxSizing: 'border-box',
+              opacity: isCalculating ? 0.4 : 1,
+            }}
           >
-             <div 
-               id="dynamic-report-container"
-               ref={containerRef} 
-               className="h-full"
-             >
-                {/* HTML Injected Here */}
-             </div>
+            {/* Progress overlay — replaces the plain opacity fade */}
+            {isCalculating && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 pointer-events-none">
+                <div className="bg-white/90 backdrop-blur-sm border border-slate-100 rounded-2xl shadow-xl px-8 py-5 flex flex-col items-center gap-3">
+                  <div className="w-52 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-500 rounded-full"
+                      style={{
+                        animation: 'reportProgress 1.4s ease-in-out infinite',
+                      }}
+                    />
+                  </div>
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">
+                    Rendering report…
+                  </p>
+                </div>
+              </div>
+            )}
+            <div
+              id="dynamic-report-container"
+              ref={containerRef}
+              className="h-full"
+            >
+              {/* HTML Injected Here */}
+            </div>
           </div>
         )}
+
       </div>
 
       {/* --- EXPANDED MODAL (Iframe) --- */}

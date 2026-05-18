@@ -15,6 +15,7 @@
 
 export interface FieldSchema {
   name: string;
+  originalName: string;
   type: "number" | "date" | "dimension" | "text" | "boolean";
   meaning: string;
 }
@@ -61,10 +62,10 @@ export function toSafeIdentifier(name: string): string {
 
   // Ensure it doesn't start with a digit
   if (/^[0-9]/.test(result)) {
-    result = "f" + result;
+    result = "f_" + result;
   }
 
-  return result || "field";
+  return result || "unknownField";
 }
 
 /**
@@ -82,9 +83,8 @@ export function deriveFieldSchemas(
 ): FieldSchema[] {
   if (!configJson || !setupJson) return [];
 
-  const reportColumns = (
-    configJson.report_columns as Array<{ field: string; table: string }> | undefined
-  ) ?? [];
+  const schemas: FieldSchema[] = [];
+  const seen = new Set<string>(); // avoid duplicates
 
   const tables = (
     setupJson.tables as Record<
@@ -95,32 +95,73 @@ export function deriveFieldSchemas(
     > | undefined
   ) ?? {};
 
-  const schemas: FieldSchema[] = [];
-  const seen = new Set<string>(); // avoid duplicates
+  // Helper to add a field safely
+  const addField = (fieldName: string, tableName?: string) => {
+    if (!fieldName) return;
+    const safeName = toSafeIdentifier(fieldName);
+    if (seen.has(safeName)) return;
 
-  for (const col of reportColumns) {
-    if (!col.field || !col.table) continue;
-    
-    // Use safe name for AI, but keep original if possible for mapping?
-    // Actually, AI only sees 'name'.
-    const safeName = toSafeIdentifier(col.field);
-    if (seen.has(safeName)) continue;
+    let fieldMeta = null;
 
-    const tableFields = tables[col.table]?.fields;
-    if (!tableFields) continue;
-
-    const fieldMeta = tableFields[col.field];
-    if (!fieldMeta) continue;
+    if (tableName && tables[tableName]?.fields?.[fieldName]) {
+      fieldMeta = tables[tableName].fields[fieldName];
+    } else {
+      // Fallback: search all tables if table is unknown
+      for (const t of Object.values(tables)) {
+        if (t.fields?.[fieldName]) {
+          fieldMeta = t.fields[fieldName];
+          break;
+        }
+      }
+    }
 
     seen.add(safeName);
     schemas.push({
       name: safeName,
-      type: mapFieldType(fieldMeta.type),
-      meaning: fieldMeta.label ?? col.field,
+      originalName: fieldName,
+      type: fieldMeta ? mapFieldType(fieldMeta.type) : "dimension", // fallback to dimension
+      meaning: fieldMeta?.label ?? fieldName,
     });
+  };
+
+  // 1. Extract from report_columns (body fields)
+  const reportColumns = (
+    configJson.report_columns as Array<{ field: string; table: string }> | undefined
+  ) ?? [];
+  for (const col of reportColumns) {
+    addField(col.field, col.table);
   }
 
-  // Also include custom calculated fields defined in the configurator
+  // 2. Extract from group_by_fields
+  const groupByFields = (
+    configJson.group_by_fields as Record<
+      string,
+      {
+        table: string;
+        field: string;
+        display?: Array<{ table: string; field: string }>;
+        group_total?: Array<{ table: string; field: string }>;
+      }
+    > | undefined
+  ) ?? {};
+
+  for (const group of Object.values(groupByFields)) {
+    addField(group.field, group.table);
+    if (group.display) {
+      for (const d of group.display) addField(d.field, d.table);
+    }
+    if (group.group_total) {
+      for (const t of group.group_total) addField(t.field, t.table);
+    }
+  }
+
+  // 3. Extract from summary_fields (grand summary)
+  const summaryFields = (configJson.summary_fields as string[] | undefined) ?? [];
+  for (const field of summaryFields) {
+    addField(field); // table is unknown, addField will search
+  }
+
+  // 4. Extract from custom_calculated_fields
   const calcFields = (
     configJson.custom_calculated_fields as Array<{
       field: string;
@@ -137,6 +178,7 @@ export function deriveFieldSchemas(
     seen.add(safeName);
     schemas.push({
       name: safeName,
+      originalName: cf.field,
       type: mapFieldType(cf.type ?? "number"),
       meaning: cf.label ?? cf.field,
     });

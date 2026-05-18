@@ -22,33 +22,33 @@ Example Output:
 Numerical Field (numerical_field)
 Purpose: Defines the column used for plotting numerical values.
 Rules:
-Extract the numerical field from the user's prompt request. (case-sensitive, space-sensitive, and character-for-character)
+Extract the numerical field from the user's prompt request. You must match either the exact "Field" name or the exact "Label" provided in the available fields context (case-sensitive, space-sensitive). Prefer using the "Label" when possible.
 If missing, ask the user to specify a field.
 Example Output:
 {
-  "numerical_field": "Total_Revenue"
+  "numerical_field": "Total Revenue"
 }
 
 Group Field (group_field)
 Purpose: Specifies the column used to group data and generate chart labels.
 Rules:
-Extract the grouping field from the request. (case-sensitive, space-sensitive, and character-for-character)
+Extract the grouping field from the request. You must match either the exact "Field" name or the exact "Label" provided in the available fields context.
 If missing, prompt the user for clarification.
 Example Output:
 {
-  "group_field": "Salesperson"
+  "group_field": "Salesperson Name"
 }
 
 Subgroup Field: (subgroup_field) - optional
 Purpose: A column used to differentiate and compare multiple data series within a chart. It is typically used in comparison-based visualizations, such as line charts with multiple lines representing different categories, groups, or statuses within the dataset.
 
 Rules:
-Extract the sub-grouping field from the request. (case-sensitive, space-sensitive, and character-for-character)
+Extract the sub-grouping field from the request. You must match either the exact "Field" name or the exact "Label" provided in the available fields context.
 If missing, prompt the user for clarification.
 It is an optional parameter, provide this parameter in the response only if the user's prompt explicitly requires it; otherwise, omit it.
 Example Output:
 {
-  "subgroup_field": "Invoice Status",
+  "subgroup_field": "Invoice Status"
 }
 
 Mathematical Aggregation Method (aggregation_method)

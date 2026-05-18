@@ -232,14 +232,15 @@ function ChartBuilderWorkspace({
   useEffect(() => { setInsightConversationId(initialInsightConversationId); }, [initialInsightConversationId]);
 
   const formatPrompt = useCallback((userText: string) => formatChartPrompt(userText), []);
-  const predefinedPrompt = useMemo(
-    () => buildChartPredefinedPrompt(fieldNames, setupJson, configJson),
-    [fieldNames, setupJson, configJson]
-  );
 
   const fieldSchemas = useMemo(
     () => deriveFieldSchemas(configJson, setupJson),
     [configJson, setupJson]
+  );
+
+  const predefinedPrompt = useMemo(
+    () => buildChartPredefinedPrompt(fieldSchemas),
+    [fieldSchemas]
   );
   const insightPredefinedPrompt = useMemo(
     () => buildInsightPredefinedPrompt(templateName, fieldSchemas),

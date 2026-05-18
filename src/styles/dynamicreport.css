@@ -62,7 +62,17 @@
     page-break-inside: auto;
   }
 
-  .subsummary.level-0 { @apply ml-0; }
+  .subsummary.level-0 {
+    @apply ml-0;
+    /*
+     * Perf: Browser skips layout+paint for off-screen groups.
+     * contain-intrinsic-size prevents scroll-height collapsing — adjust
+     * the 300px estimate up/down based on your typical group size.
+     * Excluded from @media print so all groups render in PDF exports.
+     */
+    content-visibility: auto;
+    contain-intrinsic-size: 0 300px;
+  }
   .subsummary.level-1 { @apply ml-[20px] mt-[10px]; }
   .subsummary.level-2 { @apply ml-[40px] mt-[8px]; }
 
@@ -172,3 +182,19 @@
     @apply text-right font-normal text-black;
   }
 }
+
+/* --- Print override: disable content-visibility so all groups render in PDF --- */
+@media print {
+  .subsummary.level-0 {
+    content-visibility: visible;
+    contain-intrinsic-size: unset;
+  }
+}
+
+/* --- Progress bar animation for the rendering overlay --- */
+@keyframes reportProgress {
+  0%   { width: 5%;  margin-left: 0; }
+  50%  { width: 60%; margin-left: 20%; }
+  100% { width: 5%;  margin-left: 95%; }
+}
+
