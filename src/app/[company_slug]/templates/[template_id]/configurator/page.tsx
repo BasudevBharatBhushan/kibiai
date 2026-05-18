@@ -195,7 +195,15 @@ function ConfiguratorPageContent({
         // Load existing preview directly from report_template_data_json when available.
         if (data.preview_data_json) {
           setHasPreviewData(true);
-          dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
+          // Check if it's the new wrapped format with stitch_result
+          if (data.preview_data_json.report_structure_json) {
+            dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json.report_structure_json });
+            if (data.preview_data_json.stitch_result) {
+              dispatch({ type: "SET_STITCH_RESULT", payload: data.preview_data_json.stitch_result });
+            }
+          } else {
+            dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
+          }
         } else if (data.config_json && data.setup_json) {
           setHasPreviewData(false);
           // Do not auto-generate report preview on mount
@@ -263,6 +271,10 @@ function ConfiguratorPageContent({
             if (structured) {
               setHasPreviewData(true);
               dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+              // Cache raw stitch rows so soft-reloads can re-run generateReportStructure client-side
+              if (event.stitch_result) {
+                dispatch({ type: "SET_STITCH_RESULT", payload: event.stitch_result });
+              }
             }
           } else if (event.type === "error") {
             throw new Error(event.message || "Report generation failed.");
@@ -338,14 +350,19 @@ function ConfiguratorPageContent({
   );
 
   // ── predefinedPrompt — DB schema context (invisible to user bubble) ────────
+  // Intentionally NOT including state.config here — only structural fields that
+  // actually change the DB schema context should trigger a chatbot re-init.
+  // Cosmetic edits (labels, sort order, grouping) should not rebuild this.
   const setupPrompt = useMemo(
     () => buildSetupPrompt(state.setup, state.config),
-    [state.setup, state.config]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.setup, state.config.db_defination, state.config.report_columns]
   );
 
   const configPrompt = useMemo(
     () => buildConfigPrompt(state.config),
-    [state.config]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.config.db_defination, state.config.report_columns, state.config.filters]
   );
 
   // ── formatPrompt — just adds .json (user bubble stays clean) ─────────────
@@ -460,83 +477,67 @@ function ConfiguratorPageContent({
           !isChatOpen && !isConfigOpen ? "flex-1" : "flex-1 min-w-[600px]"
         }`}
       >
-        {state.isLoading ? (
-          <div className="w-full h-full flex justify-center py-8">
-            {/* A4 paper skeleton — log overlay floats on top */}
-            <div className="relative w-full max-w-[210mm] aspect-[1/1.414] bg-white shadow-sm rounded-sm p-12 space-y-8 animate-pulse overflow-hidden">
-              <div className="flex justify-between items-center">
-                <div className="h-6 w-32 bg-slate-100 rounded" />
-                <div className="h-10 w-48 bg-slate-100 rounded" />
-              </div>
-              <div className="space-y-4">
-                <div className="h-4 w-full bg-slate-100 rounded" />
-                <div className="h-4 w-full bg-slate-100 rounded" />
-                <div className="h-4 w-2/3 bg-slate-100 rounded" />
-              </div>
-              <div className="border-t border-slate-100 pt-8 space-y-4">
-                <div className="h-32 w-full bg-slate-50 rounded" />
-                <div className="h-32 w-full bg-slate-50 rounded" />
-              </div>
+        {/* Report preview is ALWAYS mounted — loading indicator overlays on top */}
+        <div className="w-full max-w-full flex justify-center">
+          <ReportPreview />
+        </div>
 
-              {/* Log overlay */}
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center px-6 pointer-events-none">
-                <div className="w-full max-w-lg pointer-events-auto bg-white/[0.01] backdrop-blur-[1px] rounded-xl border border-white/5 shadow-none overflow-hidden min-h-[280px] flex flex-col justify-center">
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <div className="relative flex h-6 w-6 items-center justify-center shrink-0">
-                      <Loader2 size={16} className="animate-spin text-blue-600" />
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
+        {/* SSE loading overlay — floats above the existing report, never replaces it */}
+        {state.isLoading && (
+          <div className="absolute inset-0 z-20 flex justify-center items-start pt-8 pointer-events-none">
+            <div className="pointer-events-auto w-full max-w-md mx-4">
+              <div className="bg-white/95 backdrop-blur-sm border border-slate-200 shadow-2xl rounded-2xl overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
+                  <div className="relative flex h-6 w-6 items-center justify-center shrink-0">
+                    <Loader2 size={16} className="animate-spin text-blue-600" />
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-20" />
+                  </div>
+                  <p className="text-sm font-extrabold text-slate-900 flex-1">Generating Preview…</p>
+                  <span className="text-[11px] text-slate-500 tabular-nums font-bold bg-slate-100/50 px-2 py-0.5 rounded-full border border-slate-200/50">
+                    {state.processingLogs.length} steps
+                  </span>
+                </div>
+                <div
+                  className="overflow-y-auto px-4 py-2 space-y-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+                  style={{ maxHeight: "220px" }}
+                  ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+                >
+                  {state.processingLogs.length === 0 ? (
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                      <p className="text-[11px] text-slate-400 italic">Initialising engine…</p>
                     </div>
-                    <p className="text-sm font-extrabold text-slate-900 flex-1">Generating Preview…</p>
-                    <span className="text-[11px] text-slate-500 tabular-nums font-bold bg-slate-100/50 px-2 py-0.5 rounded-full border border-slate-200/50">
-                      {state.processingLogs.length} steps
-                    </span>
-                  </div>
+                  ) : (
+                    state.processingLogs.map((line, i) => {
+                      const isSuccess = line.startsWith("✅");
+                      const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
+                      const isError = line.startsWith("❌");
+                      const isLast = i === state.processingLogs.length - 1;
+                      return (
+                        <div key={i} className="flex items-start gap-2 animate-in fade-in duration-150">
+                          <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
+                            isSuccess ? "bg-emerald-500" : isWarning ? "bg-amber-400" :
+                            isError ? "bg-red-500" : isLast ? "bg-blue-500 animate-pulse" : "bg-slate-300"
+                          }`} />
+                          <span className={`text-[12px] leading-relaxed ${
+                            isSuccess ? "text-emerald-800 font-semibold" : isWarning ? "text-amber-800" :
+                            isError ? "text-red-800 font-semibold" : isLast ? "text-slate-900 font-bold" : "text-slate-700"
+                          }`}>
+                            {line.replace(/^[✅❌⚠️]\s*/, "")}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <div className="h-1 bg-slate-100">
                   <div
-                    className="overflow-y-auto px-4 py-2 space-y-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-                    style={{ maxHeight: "240px" }}
-                    ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
-                  >
-                    {state.processingLogs.length === 0 ? (
-                      <div className="flex items-center gap-2 py-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                        <p className="text-[11px] text-slate-400 italic">Initialising engine…</p>
-                      </div>
-                    ) : (
-                      state.processingLogs.map((line, i) => {
-                        const isSuccess = line.startsWith("✅");
-                        const isWarning = line.toLowerCase().includes("warning") || line.startsWith("⚠");
-                        const isError = line.startsWith("❌");
-                        const isLast = i === state.processingLogs.length - 1;
-                        return (
-                          <div key={i} className="flex items-start gap-2 animate-in fade-in duration-150">
-                            <div className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${
-                              isSuccess ? "bg-emerald-500" : isWarning ? "bg-amber-400" :
-                              isError ? "bg-red-500" : isLast ? "bg-blue-500 animate-pulse" : "bg-slate-300"
-                            }`} />
-                            <span className={`text-[12px] leading-relaxed ${
-                              isSuccess ? "text-emerald-800 font-semibold" : isWarning ? "text-amber-800" :
-                              isError ? "text-red-800 font-semibold" : isLast ? "text-slate-900 font-bold" : "text-slate-700"
-                            }`}>
-                              {line.replace(/^[✅❌⚠️]\s*/, "")}
-                            </span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                  <div className="h-1 bg-slate-100/30 mt-auto">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all duration-500 shadow-[0_0_8px_rgba(37,99,235,0.4)]"
-                      style={{ width: state.processingLogs.length === 0 ? "5%" : `${Math.min(95, (state.processingLogs.length / 15) * 100)}%` }}
-                    />
-                  </div>
+                    className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all duration-500"
+                    style={{ width: state.processingLogs.length === 0 ? "5%" : `${Math.min(95, (state.processingLogs.length / 15) * 100)}%` }}
+                  />
                 </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="w-full transition-all duration-300 max-w-full flex justify-center">
-            <ReportPreview />
           </div>
         )}
       </div>

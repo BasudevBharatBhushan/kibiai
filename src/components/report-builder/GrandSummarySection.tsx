@@ -7,48 +7,42 @@ import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Plus, X, GripVertical , Newspaper, Sigma } from "lucide-react";
 import { useSchema } from "@/lib/hooks/useSchema";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { TableDef, FieldDef } from "@/lib/reportConfigTypes"; // Import Types
+
 
 export function GrandSummarySection() {
   const { state, dispatch } = useReport();
   const summaryFields = state.config.summary_fields;
-  const { getConnectedTables, getFieldOptions } = useSchema();
+  const { getFieldOptions } = useSchema();
   
-  // FIX 1: Cast tables to the correct Record type to avoid 'unknown' errors
-  const tables = (state.setup?.tables || {}) as Record<string, TableDef>;
   const calcs = state.config.custom_calculated_fields || [];
 
-  // Helper: Get ONLY Number fields (from Schema + Custom Calcs)
-const getNumberOptions = () => {
+
+  // Helper: Get ONLY Number fields that are actually in the report
+  // (body columns + all custom calcs). This ensures that option values
+  // exactly match what summary_fields stores (raw field names), preventing
+  // blank selects when loading a saved config.
+  const getNumberOptions = () => {
     const options: { key: string; value: string; label: string }[] = [];
-    
-    // 1. Schema Number Fields (REFINED LOGIC)
-    // Instead of looping all tables, we ask: "Which tables are actually connected?"
-    const connectedTables = getConnectedTables(); // Returns ["Sales", "SalesLines"] etc.
 
-    connectedTables.forEach(tableName => {
-        // reuse our smart hook logic! 
-        // getFieldOptions(tableName, "number") returns correctly filtered fields
-        const numberFields = getFieldOptions(tableName, "number");
-        
-        numberFields.forEach(field => {
-            options.push({
-                key: `${tableName}-${field.value}`,
-                value: field.value,
-                label: `${tableName} : ${field.label}`
-            });
+    (state.config.report_columns || []).forEach((col, idx) => {
+      if (!col.table || !col.field) return;
+      
+      if (col.table === "calculated") {
+        const c = calcs.find((calc) => calc.field_name === col.field);
+        options.push({
+          key: `calc-${idx}-${col.field}`,
+          value: col.field,
+          label: `(Calc) ${c?.label || col.field}`,
         });
-    });
-
-    // 2. Calculated Number Fields
-    calcs.forEach((c, idx) => {
-        if (c.field_name) { 
-             options.push({ 
-                key: `calc-${idx}-${c.field_name}`, 
-                value: c.field_name, 
-                label: `(Calc) ${c.label || c.field_name}` 
-            });
-        }
+      } else {
+        const allFields = getFieldOptions(col.table);
+        const match = allFields.find((f) => f.value === col.field);
+        options.push({
+          key: `${col.table}-${idx}-${col.field}`,
+          value: col.field,
+          label: `${col.table} : ${match ? match.label : col.field}`,
+        });
+      }
     });
 
     return options;

@@ -1832,7 +1832,7 @@ export async function POST(req: NextRequest) {
       {
         status: "ok",
         report_structure_json: reportStructureJson,
-        // stitch_result: stitchResult,
+        stitch_result: stitchResult, // included for client-side soft reloads
         processing_logs: dataManager.getLogs(),
       },
       {

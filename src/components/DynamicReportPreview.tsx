@@ -685,13 +685,12 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
         ) : (
           // Full report mode: A4 paper rendering
           <div
-            className="bg-white shadow-xl transition-opacity duration-300 relative"
+            className="bg-white shadow-xl relative"
             style={{
               width: '210mm',
               minHeight: '297mm',
               padding: '5mm 10mm',
               boxSizing: 'border-box',
-              opacity: isCalculating ? 0.4 : 1,
             }}
           >
             {/* Progress overlay — replaces the plain opacity fade */}

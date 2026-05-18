@@ -124,6 +124,7 @@ export function CustomCalcsSection() {
                 <option value="number">Number</option>
                 <option value="currency">Currency ($)</option>
                 <option value="percentage">Percentage (%)</option>
+                <option value="plain">Plain</option>
               </select>
             </div>
 

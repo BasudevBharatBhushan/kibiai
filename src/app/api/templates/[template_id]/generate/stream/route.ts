@@ -165,6 +165,7 @@ export async function POST(
 
         const { processing_logs = [] } = engineResult;
         const report_structure_json = sanitizeJsonForPostgres(engineResult.report_structure_json);
+        const stitch_result = engineResult.stitch_result ?? null; // cached for client-side soft reloads
         const persistedConfigJson = sanitizeJsonForPostgres(configJson);
 
         // Replay the processing_logs progressively
@@ -238,6 +239,7 @@ export async function POST(
 
           enqueue(sseEvent("done", {
             report_structure_json,
+            stitch_result,
             report_name: reportHeading,
             version_id: savedRecordId,
             report_id: null,
@@ -247,7 +249,10 @@ export async function POST(
           const { data: persistedTemplate, error: persistTemplateError } = await supabase
             .from("report_templates")
             .update({
-              report_template_data_json: report_structure_json,
+              report_template_data_json: {
+                report_structure_json,
+                stitch_result,
+              },
               updated_on: new Date().toISOString(),
             })
             .eq("report_template_id", template_id)
@@ -281,6 +286,7 @@ export async function POST(
 
           enqueue(sseEvent("done", {
             report_structure_json,
+            stitch_result,
             report_name: reportHeading,
             report_id: savedRecordId,
             version_id: null,

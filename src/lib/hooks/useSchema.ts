@@ -55,7 +55,7 @@ export function useSchema() {
     if (typeFilter) {
       if (typeFilter === "number") {
          // Include currency and percentage as "number"
-         options = options.filter(f => ["number", "currency", "percentage"].includes(f.type));
+         options = options.filter(f => ["number", "currency", "percentage", "integer", "numeric", "decimal", "float"].includes(f.type));
       } else {
          options = options.filter(f => f.type === typeFilter);
       }

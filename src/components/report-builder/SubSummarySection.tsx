@@ -37,48 +37,32 @@ export function SubSummarySection() {
     return Array.from(tables);
   };
 
-  const getBodyFieldOptions = (tableName: string, typeFilter?: "number") => {
+  const getBodyFieldOptions = (tableName: string) => {
     if (!tableName) return [];
 
-    const bodyFields = (state.config.report_columns || [])
-      .filter((col) => col.table === tableName && col.field)
-      .map((col) => col.field);
-
     if (tableName === "calculated") {
-      const calcOptions = (state.config.custom_calculated_fields || [])
-        .filter((calc) => bodyFields.includes(calc.field_name))
-        .filter((calc) => {
-          if (typeFilter !== "number") return true;
-          return ["number", "currency", "percentage", "plain"].includes(calc.format || "number");
-        })
-        .map((calc) => ({
-          value: calc.field_name,
-          label: calc.label || calc.field_name,
-          type: calc.format || "number",
-        }));
-
-      const knownCalcFields = new Set(calcOptions.map((option) => option.value));
-      const fallbackBodyCalcOptions = bodyFields
-        .filter((field) => !knownCalcFields.has(field))
-        .map((field) => ({
-          value: field,
-          label: field,
-          type: "number",
-        }));
-
-      return [...calcOptions, ...fallbackBodyCalcOptions];
+      return (state.config.report_columns || [])
+        .filter((col) => col.table === "calculated" && col.field)
+        .map((col) => {
+          const calc = (state.config.custom_calculated_fields || []).find((c) => c.field_name === col.field);
+          return {
+            value: col.field,
+            label: calc?.label || col.field,
+            type: calc?.format || "number",
+          };
+        });
     }
 
     const allOptions = getFieldOptions(tableName);
-    const options = allOptions.filter((option) => {
-      if (!bodyFields.includes(option.value)) return false;
-      if (typeFilter !== "number") return true;
-      return ["number", "currency", "percentage"].includes(option.type);
-    });
-
-    if (typeFilter === "number") return options;
-
-    return options;
+    return (state.config.report_columns || [])
+      .filter((col) => col.table === tableName && col.field)
+      .map((col) => {
+        const match = allOptions.find((opt) => opt.value === col.field);
+        return {
+          value: col.field,
+          label: match ? match.label : col.field,
+        };
+      });
   };
 
   const bodyTables = getBodyTables();
@@ -265,7 +249,7 @@ export function SubSummarySection() {
                                  disabled={!item.table}
                               >
                                  <option value="">Field...</option>
-                                 {getBodyFieldOptions(item.table, "number").map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                 {getBodyFieldOptions(item.table).map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                               </select>
                               <button onClick={() => dispatch({ type: "REMOVE_GROUP_TOTAL", payload: { groupKey: key, index: idx } })} className="btn-danger-icon">
                                 <X size={14} />

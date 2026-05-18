@@ -8,7 +8,8 @@ import { validateConfig } from "@/lib/utils/reportValidation";
 import { apiClient } from "@/utils/apiClient";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Loader2, BarChart3, Info, Zap } from "lucide-react";
+import { Loader2, BarChart3, Info, Zap, RefreshCw } from "lucide-react";
+import { classifyReload, applySoftReload } from "@/lib/utils/reportReloadClassifier";
 
 // Components
 import { HeaderSection } from "@/components/report-builder/HeaderSection";
@@ -32,14 +33,10 @@ export function ReportConfigurator() {
   const templateId = params?.template_id as string | undefined;
   const abortRef = useRef<AbortController | null>(null);
 
-  const handleUpdate = useCallback(async () => {
-    // Validate Config Before Saving
-    const validation = validateConfig(state.config);
-    if (!validation.isValid) {
-      addToast("error", "Validation Error", validation.error || "Invalid Config");
-      return;
-    }
-
+  // ---------------------------------------------------------------------------
+  // Hard reload: saves config to DB then re-fetches via SSE stream
+  // ---------------------------------------------------------------------------
+  const hardReload = useCallback(async () => {
     if (!state.templateId) return;
 
     // Cancel any previous in-flight stream
@@ -48,7 +45,6 @@ export function ReportConfigurator() {
     abortRef.current = controller;
 
     setIsSaving(true);
-    // Clear logs and signal loading in context so configurator page shows overlay
     dispatch({ type: "SET_PROCESSING_LOGS", payload: [] });
     dispatch({ type: "SET_LOADING", payload: true });
 
@@ -100,13 +96,14 @@ export function ReportConfigurator() {
 
           if (event.type === "log") {
             logs.push(event.message as string);
-            // Push every new log line to context so overlay updates live
             dispatch({ type: "SET_PROCESSING_LOGS", payload: [...logs] });
           } else if (event.type === "done") {
             const structured = event.report_structure_json;
             if (structured) {
               dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
             }
+            // Snapshot the config so future soft reloads have a baseline
+            dispatch({ type: "SET_LAST_GENERATED_CONFIG", payload: state.config });
             addToast("success", "Updated", "Configuration saved and preview updated.");
           } else if (event.type === "error") {
             throw new Error(event.message || "Report generation failed.");
@@ -115,7 +112,7 @@ export function ReportConfigurator() {
       }
     } catch (err: any) {
       if (err.name !== "AbortError") {
-        console.error("[ReportConfigurator] handleUpdate error:", err);
+        console.error("[ReportConfigurator] hardReload error:", err);
         addToast("error", "Error", err.message || "Failed to update configuration.");
       }
     } finally {
@@ -123,6 +120,65 @@ export function ReportConfigurator() {
       dispatch({ type: "SET_LOADING", payload: false });
     }
   }, [state.templateId, state.config, dispatch, addToast]);
+
+  // ---------------------------------------------------------------------------
+  // Soft reload: re-renders preview client-side without hitting the backend
+  // ---------------------------------------------------------------------------
+  const softReload = useCallback(async () => {
+    if (!state.templateId) return;
+
+    setIsSaving(true);
+    try {
+      // Persist the cosmetic-only config change to DB (cheap, no stream)
+      await apiClient.post(`/api/templates/${state.templateId}/config`, {
+        config_json: state.config,
+        bump_version: false,
+      });
+
+      // Re-apply generateReportStructure locally using cached raw rows
+      const updated = applySoftReload(state.stitchResult, state.config, state.setup);
+      if (updated) {
+        dispatch({ type: "SET_REPORT_PREVIEW", payload: updated });
+        addToast("success", "Updated", "Preview refreshed instantly.");
+      } else {
+        // No cached stitch data — fall back to a hard reload
+        await hardReload();
+      }
+    } catch (err: any) {
+      console.error("[ReportConfigurator] softReload error:", err);
+      addToast("error", "Error", err.message || "Failed to update configuration.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [state.templateId, state.config, state.stitchResult, state.setup, dispatch, addToast, hardReload]);
+
+  // ---------------------------------------------------------------------------
+  // Smart entry point: decides hard vs soft automatically
+  // ---------------------------------------------------------------------------
+  const handleUpdate = useCallback(async () => {
+    const validation = validateConfig(state.config);
+    if (!validation.isValid) {
+      addToast("error", "Validation Error", validation.error || "Invalid Config");
+      return;
+    }
+
+    const reloadType = classifyReload(state.config, state.lastGeneratedConfig);
+    if (reloadType === "soft") {
+      await softReload();
+    } else {
+      await hardReload();
+    }
+  }, [state.config, state.lastGeneratedConfig, addToast, softReload, hardReload]);
+
+  // Force Refresh: always triggers a hard reload regardless of classification
+  const handleForceRefresh = useCallback(async () => {
+    const validation = validateConfig(state.config);
+    if (!validation.isValid) {
+      addToast("error", "Validation Error", validation.error || "Invalid Config");
+      return;
+    }
+    await hardReload();
+  }, [state.config, addToast, hardReload]);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200 shadow-xl">
@@ -138,6 +194,16 @@ export function ReportConfigurator() {
             {isSaving
               ? <><Loader2 size={11} className="animate-spin" />Saving…</>
               : "Update"}
+          </button>
+
+          {/* Force Refresh — always hard-reloads from the backend */}
+          <button
+            onClick={handleForceRefresh}
+            disabled={isSaving}
+            title="Force a full data refresh from the server"
+            className="text-slate-500 border border-slate-200 hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50 bg-white transition-colors p-2 rounded-lg disabled:opacity-40"
+          >
+            <RefreshCw size={13} className={isSaving ? "animate-spin" : ""} />
           </button>
 
           {slug && templateId && (

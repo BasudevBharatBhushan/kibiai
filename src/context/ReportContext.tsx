@@ -65,7 +65,11 @@ type Action =
   | { type: "LOAD_FULL_REPORT"; payload: { config: ReportConfig; setup: ReportSetup; templateId: string; conversationId?: string | null } }
   | { type: "SET_CONVERSATION_ID"; payload: string | null }
   | { type: "SET_REPORT_PREVIEW"; payload: any }
-  | { type: "SET_PROCESSING_LOGS"; payload: string[] };
+  | { type: "SET_PROCESSING_LOGS"; payload: string[] }
+  // Smart reload — snapshot of config at last hard-reload time
+  | { type: "SET_LAST_GENERATED_CONFIG"; payload: ReportConfig }
+  // Raw stitch rows — cached for client-side soft reloads
+  | { type: "SET_STITCH_RESULT"; payload: any };
 
 
 
@@ -77,7 +81,11 @@ interface ReportState {
   conversationId: string | null; // OpenAI thread ID
   isLoading: boolean;
   processingLogs: string[];
-  reportPreview: any | null; 
+  reportPreview: any | null;
+  // Snapshot of config at last successful hard-reload — used by classifyReload()
+  lastGeneratedConfig: ReportConfig | null;
+  // Raw stitch result from the engine — cached for client-side soft reloads
+  stitchResult: any | null;
 }
 
 // 3. Initial Default State (Empty)
@@ -88,6 +96,8 @@ const initialState: ReportState = {
   isLoading: false,
   processingLogs: [],
   reportPreview: null,
+  lastGeneratedConfig: null,
+  stitchResult: null,
   config: {
     report_header: "",
     response_to_user: "",
@@ -525,35 +535,45 @@ case "SYNC_DATE_RANGES":
     case "SET_LOADING":
       return { ...state, isLoading: action.payload };
 
-    case "LOAD_FULL_REPORT":
+    case "LOAD_FULL_REPORT": {
+      const loadedConfig: ReportConfig = {
+        ...initialState.config,
+        ...action.payload.config,
+        db_defination: action.payload.config.db_defination || [],
+        report_columns: action.payload.config.report_columns || [],
+        body_sort_order: action.payload.config.body_sort_order || [],
+        summary_fields: action.payload.config.summary_fields || [],
+        custom_calculated_fields: action.payload.config.custom_calculated_fields || [],
+        group_by_fields: action.payload.config.group_by_fields || {},
+        filters: action.payload.config.filters || {},
+        date_range_fields: action.payload.config.date_range_fields || {}
+      };
       return {
         ...state,
-        config: {
-          ...initialState.config,
-          ...action.payload.config,
-          db_defination: action.payload.config.db_defination || [],
-          report_columns: action.payload.config.report_columns || [],
-          body_sort_order: action.payload.config.body_sort_order || [],
-          summary_fields: action.payload.config.summary_fields || [],
-          custom_calculated_fields: action.payload.config.custom_calculated_fields || [],
-          group_by_fields: action.payload.config.group_by_fields || {},
-          filters: action.payload.config.filters || {},
-          date_range_fields: action.payload.config.date_range_fields || {}
-        },
+        config: loadedConfig,
+        // Seed the snapshot so the first soft-reload comparison has a baseline
+        lastGeneratedConfig: loadedConfig,
         setup: action.payload.setup,
         templateId: action.payload.templateId,
         conversationId: action.payload.conversationId ?? null,
         isLoading: false
       };
+    }
     
     case "SET_CONVERSATION_ID":
       return { ...state, conversationId: action.payload };
 
     case "SET_REPORT_PREVIEW":
-      return { ...state, reportPreview: action.payload };  
+      return { ...state, reportPreview: action.payload };
 
     case "SET_PROCESSING_LOGS":
       return { ...state, processingLogs: action.payload };
+
+    case "SET_LAST_GENERATED_CONFIG":
+      return { ...state, lastGeneratedConfig: action.payload };
+
+    case "SET_STITCH_RESULT":
+      return { ...state, stitchResult: action.payload };
 
     default:
       return state;
