@@ -110,27 +110,9 @@ function toIsoDateLocal(dStr: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function toUSDate(isoStr: string): string {
-  if (!isoStr || !isoStr.includes('-')) return isoStr;
-  const [y, m, d] = isoStr.split('-');
-  if (!y || !m || !d) return isoStr;
-  return `${m}/${d}/${y}`;
-}
-
-function displayFilterValue(val: string) {
-  if (val === '*') return 'not empty';
-  if (val === '=') return 'empty';
-  return val;
-}
-
-function parseFilterValue(val: string) {
-  const v = val.toLowerCase().trim();
-  if (v === 'not empty' || v === '(not empty)') return '*';
-  if (v === 'empty' || v === '(empty)') return '=';
-  return val;
-}
-
-// ── Inline filter form (dates + other filters) ─────────────────────────────────
+import { AdHocFilterBuilder, AdHocDateRangeBuilder, CollapsibleSection, type AdHocFilter, type AdHocDateRange, parseSavedFilterValue } from "@/components/report-configurator/ReportFiltersUI";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
+import { Plus, SlidersHorizontal, Clock, RefreshCw } from "lucide-react";
 
 function InlineReportFilterForm({
   templateId,
@@ -148,78 +130,107 @@ function InlineReportFilterForm({
   const { addToast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // ── Date-range fields ──
-  const dateRangeEntries = useMemo(
-    () => extractDateRangeEntries(templateConfigJson, templateSetupJson),
-    [templateConfigJson, templateSetupJson]
-  );
+  // ── Available Fields ──
+  const availableFields = useMemo<{ table: string; field: string; label: string; type: string }[]>(() => {
+    if (!templateConfigJson || !templateSetupJson) return [];
+    
+    const fieldMap = new Map<string, { table: string; field: string; label: string; type: string }>();
 
-  const [dateValues, setDateValues] = useState<Record<string, { start: string; end: string }>>(
-    () =>
-      Object.fromEntries(
-        dateRangeEntries.map((e) => [`${e.table}.${e.field}`, { start: toIsoDateLocal(e.start), end: toIsoDateLocal(e.end) }])
-      )
-  );
+    // 1. Fields from Columns
+    const columns = (templateConfigJson.report_columns as any[]) || [];
+    columns.forEach((col) => {
+      if (!col.table || !col.field || col.table === "calculated") return;
+      const key = `${col.table}.${col.field}`;
+      if (!fieldMap.has(key)) {
+        const fieldDef = (templateSetupJson.tables as any)?.[col.table]?.fields?.[col.field];
+        fieldMap.set(key, { 
+          table: col.table, 
+          field: col.field, 
+          label: fieldDef?.label || col.field, 
+          type: fieldDef?.type || "text" 
+        });
+      }
+    });
 
-  const handleDateChange = useCallback(
-    (key: string, part: 'start' | 'end', value: string) => {
-      setDateValues((prev) => ({
-        ...prev,
-        [key]: { ...prev[key], [part]: value },
-      }));
-    },
-    []
-  );
+    // 2. Fields from Grouping
+    const groups = (templateConfigJson.group_by_fields as Record<string, any>) || {};
+    Object.values(groups).forEach((group) => {
+      if (!group.table || !group.field) return;
+      const key = `${group.table}.${group.field}`;
+      if (!fieldMap.has(key)) {
+        const fieldDef = (templateSetupJson.tables as any)?.[group.table]?.fields?.[group.field];
+        fieldMap.set(key, { 
+          table: group.table, 
+          field: group.field, 
+          label: fieldDef?.label || group.field, 
+          type: fieldDef?.type || "text" 
+        });
+      }
+    });
 
-  // ── Other filter fields ──
-  const filterEntries = useMemo(
-    () => extractFilterEntries(templateConfigJson, templateSetupJson),
-    [templateConfigJson, templateSetupJson]
-  );
+    return Array.from(fieldMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [templateConfigJson, templateSetupJson]);
 
-  const [filterValues, setFilterValues] = useState<Record<string, string>>(
-    () => Object.fromEntries(filterEntries.map((e) => [`${e.table}.${e.field}`, displayFilterValue(e.value)]))
-  );
+  // ── State ──
+  const [dateRanges, setDateRanges] = useState<Record<string, Record<string, { from: string; to: string }>>>({});
+  const [adHocDateRanges, setAdHocDateRanges] = useState<AdHocDateRange[]>([]);
+  
+  const [configFilters, setConfigFilters] = useState<Record<string, Record<string, string>>>({});
+  const [adHocFilters, setAdHocFilters] = useState<AdHocFilter[]>([]);
 
-  const handleFilterChange = useCallback((key: string, value: string) => {
-    setFilterValues((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  // ── Template Base Fields ──
+  const dateRangeFields: Record<string, Record<string, string>> = (templateConfigJson?.date_range_fields as any) || {};
+  const filterFields: Record<string, Record<string, any>> = (templateConfigJson?.filters as any) || {};
 
   // ── Submit → POST /api/templates/[id]/generate ──
   const handleSubmit = useCallback(async () => {
-    // Build date_range_fields
-    const updatedDateRangeFields: Record<string, Record<string, string>> = {};
-    for (const entry of dateRangeEntries) {
-      const key = `${entry.table}.${entry.field}`;
-      const { start, end } = dateValues[key] ?? { start: entry.start, end: entry.end };
-      if (!updatedDateRangeFields[entry.table]) updatedDateRangeFields[entry.table] = {};
-      updatedDateRangeFields[entry.table][entry.field] = `${toUSDate(start)}...${toUSDate(end)}`;
-    }
+    const payload: any = {};
 
-    // Build filters object
-    const updatedFilters: Record<string, Record<string, string>> = {};
-    for (const entry of filterEntries) {
-      const key = `${entry.table}.${entry.field}`;
-      const val = parseFilterValue(filterValues[key] ?? '');
-      if (val === '') continue; // skip blanked-out filters
-      if (!updatedFilters[entry.table]) updatedFilters[entry.table] = {};
-      updatedFilters[entry.table][entry.field] = val;
-    }
+    const drPayload: any = {};
+    Object.entries(dateRanges).forEach(([table, fields]) => {
+      Object.entries(fields).forEach(([field, { from, to }]) => {
+        if (from && to) {
+          if (!drPayload[table]) drPayload[table] = {};
+          drPayload[table][field] = `${from}...${to}`;
+        }
+      });
+    });
 
-    const runtime_filters: Record<string, unknown> = {};
-    if (Object.keys(updatedDateRangeFields).length > 0) {
-      runtime_filters.date_range_fields = updatedDateRangeFields;
-    }
-    if (Object.keys(updatedFilters).length > 0) {
-      runtime_filters.filters = updatedFilters;
-    }
+    adHocDateRanges.forEach(r => {
+      if (r.table && r.field && r.from && r.to) {
+        if (!drPayload[r.table]) drPayload[r.table] = {};
+        drPayload[r.table][r.field] = `${r.from}...${r.to}`;
+      }
+    });
+
+    if (Object.keys(drPayload).length) payload.date_range_fields = drPayload;
+
+    const cfPayload: any = {};
+    Object.entries(configFilters).forEach(([table, fields]) => {
+      Object.entries(fields).forEach(([field, val]) => {
+        if (val) { if (!cfPayload[table]) cfPayload[table] = {}; cfPayload[table][field] = val; }
+      });
+    });
+
+    adHocFilters.forEach(f => {
+      if (f.table && f.field) {
+        const finalVal = ["*", "="].includes(f.operator)
+          ? f.operator
+          : `${f.operator}${f.value}`;
+        if (finalVal && finalVal !== "==") {
+          if (!cfPayload[f.table]) cfPayload[f.table] = {};
+          cfPayload[f.table][f.field] = finalVal;
+        }
+      }
+    });
+
+    if (Object.keys(cfPayload).length) payload.filters = cfPayload;
 
     setIsGenerating(true);
     try {
-      // Use the template-scoped generate endpoint — it handles setup/config merging server-side
       const res = await apiClient.post<{ success: boolean; data: { report_id: string } }>(
         `/api/templates/${templateId}/generate`,
-        { runtime_filters }
+        { runtime_filters: payload }
       );
 
       if (!res.success || !res.data?.report_id) {
@@ -232,104 +243,111 @@ function InlineReportFilterForm({
         'Generation Failed',
         err instanceof Error ? err.message : 'Failed to generate the comparison report.'
       );
+    } finally {
       setIsGenerating(false);
     }
-  }, [
-    addToast,
-    dateRangeEntries,
-    dateValues,
-    filterEntries,
-    filterValues,
-    onSubmit,
-    templateId,
-  ]);
-
-  const hasNoFilters = dateRangeEntries.length === 0 && filterEntries.length === 0;
+  }, [dateRanges, adHocDateRanges, configFilters, adHocFilters, templateId, onSubmit, addToast]);
 
   return (
-    <div className="compare-filter-form">
-      <p className="compare-filter-form-heading">Generate with New Filter</p>
+    <div className="flex flex-col space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+      <div className="flex justify-between items-center mb-2">
+        <p className="compare-filter-form-heading m-0">Generate with New Filter</p>
+        <button
+          onClick={() => { 
+            setDateRanges({}); 
+            setConfigFilters({}); 
+            setAdHocFilters([]); 
+            setAdHocDateRanges([]);
+          }}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          title="Reset filters"
+        >
+          <RefreshCw size={14} />
+        </button>
+      </div>
 
-      {hasNoFilters ? (
-        <p style={{ fontSize: 12, color: '#64748b' }}>
-          No configurable filters found for this template.
-        </p>
-      ) : (
-        <>
-          {/* ── Date-range fields ── */}
-          {dateRangeEntries.map((entry) => {
-            const key = `${entry.table}.${entry.field}`;
-            const values = dateValues[key] ?? { start: entry.start, end: entry.end };
-            return (
-              <div key={key}>
-                <p className="compare-filter-form-label" style={{ marginBottom: 8 }}>
-                  {entry.label}
-                </p>
-                <div className="compare-filter-form-group">
-                  <label className="compare-filter-form-label">Start Date</label>
-                  <input
-                    type="date"
-                    className="compare-filter-form-input"
-                    value={values.start}
-                    onChange={(e) => handleDateChange(key, 'start', e.target.value)}
-                  />
-                </div>
-                <div className="compare-filter-form-group" style={{ marginTop: 8 }}>
-                  <label className="compare-filter-form-label">End Date</label>
-                  <input
-                    type="date"
-                    className="compare-filter-form-input"
-                    value={values.end}
-                    onChange={(e) => handleDateChange(key, 'end', e.target.value)}
-                  />
-                </div>
-              </div>
-            );
-          })}
-
-          {/* ── Other filter fields ── */}
-          {filterEntries.length > 0 && (
-            <>
-              {dateRangeEntries.length > 0 && (
-                <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: 0 }} />
-              )}
-              {filterEntries.map((entry) => {
-                const key = `${entry.table}.${entry.field}`;
-                const val = filterValues[key] ?? '';
-                return (
-                  <div key={key} className="compare-filter-form-group">
-                    <label className="compare-filter-form-label">{entry.label}</label>
-                    <input
-                      type="text"
-                      className="compare-filter-form-input"
-                      value={val}
-                      placeholder={`e.g. =Active, >=10, not empty`}
-                      onChange={(e) => handleFilterChange(key, e.target.value)}
-                    />
-                  </div>
-                );
-              })}
-            </>
+      {/* Date Ranges */}
+      {(Object.keys(dateRangeFields).length > 0 || availableFields.some(f => f.type === "date")) && (
+        <CollapsibleSection title="Date Ranges" icon={<Clock size={13} />}>
+          {Object.entries(dateRangeFields).map(([table, fields]) =>
+            Object.keys(fields).map(field => (
+              <DateRangePicker
+                key={`${table}.${field}`}
+                label={`${field.replace(/([A-Z])/g, ' $1').trim()} (${table})`}
+                value={dateRanges[table]?.[field] ?? { from: "", to: "" }}
+                onChange={v => setDateRanges(prev => ({
+                  ...prev, [table]: { ...(prev[table] || {}), [field]: v },
+                }))}
+              />
+            ))
           )}
-        </>
+
+          <div className={Object.keys(dateRangeFields).length > 0 ? "pt-2 border-t border-slate-100 mt-2" : ""}>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mb-2">Additional Date Ranges</p>
+            <AdHocDateRangeBuilder 
+              ranges={adHocDateRanges} 
+              onChange={setAdHocDateRanges} 
+              options={availableFields}
+            />
+          </div>
+        </CollapsibleSection>
       )}
 
-      <div className="compare-filter-form-actions">
+      {/* Template Filters */}
+      {Object.keys(filterFields).length > 0 && (
+        <CollapsibleSection title="Template Filters" icon={<SlidersHorizontal size={13} />}>
+          {Object.entries(filterFields).map(([table, fields]) =>
+            Object.entries(fields).map(([field, defaultVal]) => (
+              <div key={`${table}.${field}`}>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                  {field.replace(/([A-Z])/g, ' $1').trim()} <span className="text-slate-300 ml-1">({table})</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder={String(defaultVal) || "Filter value"}
+                  value={configFilters[table]?.[field] ?? ""}
+                  onChange={e => setConfigFilters(prev => ({
+                    ...prev, [table]: { ...(prev[table] || {}), [field]: e.target.value },
+                  }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                />
+              </div>
+            ))
+          )}
+        </CollapsibleSection>
+      )}
+
+      {/* Ad-hoc Filters */}
+      <CollapsibleSection
+        title="Add Filters"
+        icon={<Plus size={13} />}
+        defaultOpen={Object.keys(filterFields).length === 0}
+      >
+        <AdHocFilterBuilder 
+          filters={adHocFilters} 
+          onChange={setAdHocFilters} 
+          options={availableFields}
+        />
+      </CollapsibleSection>
+
+      <div className="flex gap-2 pt-2">
         <button
           onClick={handleSubmit}
-          disabled={isGenerating || hasNoFilters}
-          className="compare-filter-submit-btn"
+          disabled={isGenerating}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-60 hover:opacity-90"
+          style={{ background: "#2563eb" }}
         >
           {isGenerating ? (
-            <>
-              <Loader2 size={14} className="animate-spin" />
-              Generating…
-            </>
+            <><Loader2 size={14} className="animate-spin" /> Generating…</>
           ) : (
             'Generate Report'
           )}
         </button>
-        <button onClick={onCancel} className="compare-filter-cancel-btn" disabled={isGenerating}>
+        <button 
+          onClick={onCancel} 
+          disabled={isGenerating}
+          className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all"
+        >
           Cancel
         </button>
       </div>

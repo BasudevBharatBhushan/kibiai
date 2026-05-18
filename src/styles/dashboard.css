@@ -162,6 +162,14 @@
   position: relative;
 }
 
+/* Insight view inside comparison panel — scrollable, fills available space */
+.compare-panel-insight-scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+
 .compare-panel-empty {
   display: flex;
   flex-direction: column;
