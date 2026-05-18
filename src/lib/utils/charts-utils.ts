@@ -56,7 +56,7 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
     },
     boost: {
       useGPUTranslations: true,
-      seriesThreshold: 1, 
+      seriesThreshold: isLargeData ? 1 : 50, 
     },
     colors: config.colors,
     title: { text: config.title },

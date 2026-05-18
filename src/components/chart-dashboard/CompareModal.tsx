@@ -10,6 +10,7 @@ import { useToast } from '@/context/ToastContext';
 import { processData } from '@/lib/charts/DataProcessor';
 import { buildInsightContextFromReportConfig } from '@/lib/charts/insightContextBuilder';
 import type { ChartConfig, ReportChartSchema, InsightContext } from '@/lib/charts/ChartTypes';
+import { COLOR_PALETTES } from '@/lib/charts/ChartTypes';
 import { apiClient } from '@/utils/apiClient';
 
 import CompareChartPanel, { type ComparePanelSourceMeta } from './CompareChartPanel';
@@ -562,6 +563,9 @@ export default function CompareModal({
           setRightPanelState('VIEWING');
           return;
         }
+
+        // Assign matching colors from primary chart or fall back to standard palette
+        chartConfig.colors = primaryConfig.colors || COLOR_PALETTES[0];
 
         setComparisonChartConfig(chartConfig);
         setComparisonSourceMeta({

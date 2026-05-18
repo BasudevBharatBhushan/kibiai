@@ -16,7 +16,7 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
 
     return {
       chart: { type: 'pie', reflow: true },
-      colors: config.colors,
+      ...(config.colors && config.colors.length > 0 ? { colors: config.colors } : {}),
       title: { text: config.title, align: 'center' },
 
       credits: { enabled: false },
@@ -56,9 +56,9 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
     },
     boost: {
       useGPUTranslations: true,
-      seriesThreshold: 1, 
+      seriesThreshold: isLargeData ? 1 : 50, 
     },
-    colors: config.colors,
+    ...(config.colors && config.colors.length > 0 ? { colors: config.colors } : {}),
     title: { text: config.title },
 
     xAxis: {
