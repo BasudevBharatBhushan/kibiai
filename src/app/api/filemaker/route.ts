@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import {
   parseODataBatchResponse,
   flattenFileMakerRecords,
-} from "@/app/utils/utility";
+} from "@/lib/utils/utility";
+import { url } from "inspector";
 
 interface FetchFmDataRequest {
   raw_dataset: string;
@@ -15,6 +18,18 @@ interface FetchFmDataRequest {
   version: string; // e.g., "vLatest" or "v2"
   data_fetching_protocol: "dataapi" | "odataapi" | "o-data-api" | "data-api"; // currently only dataapi
   session_token?: string;
+}
+
+function normalizeFindFilters(filter?: Record<string, any>) {
+  if (!filter) return undefined;
+
+  const normalized: Record<string, any> = {};
+  for (const [field, rawValue] of Object.entries(filter)) {
+    const value = String(rawValue ?? "");
+    normalized[field] = value.startsWith("==") ? `=${value.slice(2)}` : rawValue;
+  }
+
+  return normalized;
 }
 
 export async function GET() {
@@ -30,7 +45,7 @@ export async function POST(req: NextRequest) {
       raw_dataset,
       p_key_field,
       p_keys,
-      filter,
+      filter: rawFilter,
       table,
       host,
       database,
@@ -38,6 +53,7 @@ export async function POST(req: NextRequest) {
       data_fetching_protocol,
       session_token,
     }: FetchFmDataRequest = await req.json();
+    const filter = normalizeFindFilters(rawFilter);
 
     // Extract Basic token from Authorization header
     const authHeader = req.headers.get("authorization");
@@ -57,6 +73,7 @@ export async function POST(req: NextRequest) {
         const [d1, d2] = value.split("...").map((v) => v.trim());
         return `ge '${d1}' and ${key} le '${d2}'`;
       }
+      if (value.startsWith("!=")) return `ne '${value.slice(2).trim()}'`;
       if (value.startsWith(">=")) return `ge ${value.slice(2).trim()}`;
       if (value.startsWith(">")) return `gt ${value.slice(1).trim()}`;
       if (value.startsWith("<=")) return `le ${value.slice(2).trim()}`;
@@ -66,6 +83,43 @@ export async function POST(req: NextRequest) {
       if (value === "*") return `ne null`;
       if (value === "") return `eq null`;
       return `contains(${key},'${value.trim()}')`;
+    }
+
+    function buildFileMakerQueries(
+      filter: Record<string, string>,
+      p_key_field?: string,
+      p_keys?: string[]
+    ): Record<string, any>[] {
+      const normalFilter: Record<string, string> = {};
+      const notEqualEntries: Array<{ field: string; value: string }> = [];
+
+      for (const [field, val] of Object.entries(filter)) {
+        if (String(val).startsWith("!=")) {
+          notEqualEntries.push({ field, value: String(val).slice(2).trim() });
+        } else {
+          normalFilter[field] = val;
+        }
+      }
+
+      const queries: Record<string, any>[] = [];
+
+      if (p_keys && p_keys.length > 0 && p_key_field) {
+        p_keys.forEach(pk => queries.push({ [p_key_field]: pk, ...normalFilter }));
+        if (notEqualEntries.length > 0) {
+          p_keys.forEach(pk =>
+            notEqualEntries.forEach(({ field, value }) =>
+              queries.push({ [p_key_field]: pk, ...normalFilter, [field]: value, omit: "true" })
+            )
+          );
+        }
+      } else {
+        queries.push(normalFilter);
+        notEqualEntries.forEach(({ field, value }) =>
+          queries.push({ ...normalFilter, [field]: value, omit: "true" })
+        );
+      }
+
+      return queries;
     }
 
     /**
@@ -211,11 +265,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 3: Prepare find or get request
-    let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records`;
+    let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records?_offset=1&_limit=5000`;
     let method = "GET";
     let body: any = undefined;
 
-    if (filter || (p_keys && p_keys.length > 0)) {
+    if (
+      (filter && Object.keys(filter).length > 0) ||
+      (p_keys && p_keys.length > 0)
+    ) {
       fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/_find`;
       method = "POST";
 
@@ -226,15 +283,15 @@ export async function POST(req: NextRequest) {
             { status: 400 }
           );
         }
-        const queries = p_keys.map((pk) => ({
-          [p_key_field]: pk,
-          ...(filter || {}),
-        }));
-        body = JSON.stringify({ query: queries });
+        const queries = buildFileMakerQueries(filter || {}, p_key_field, p_keys);
+        body = JSON.stringify({ query: queries, offset: 1, limit: 5000 });
       } else {
-        body = JSON.stringify({ query: [filter || {}] });
+        const queries = buildFileMakerQueries(filter || {});
+        body = JSON.stringify({ query: queries, offset: 1, limit: 5000 });
       }
     }
+
+    // console.log(fetchUrl);
 
     // Step 4: Fetch data
     const dataRes = await fetch(fetchUrl, {

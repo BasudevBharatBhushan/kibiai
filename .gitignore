@@ -39,3 +39,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.codex/
+openspec/
+# Added by code-review-graph
+.code-review-graph/
+
+# Temporary Scripts
+/tmp
+/temp
+tests/
+test-results/
+graphify-out/
+html_designs/
+agent-code/
+.agents/
+scratch/
+.vscode/

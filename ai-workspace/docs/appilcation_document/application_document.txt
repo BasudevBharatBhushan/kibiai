@@ -1,0 +1,405 @@
+KIBIAI — APPLICATION ARCHITECTURE DOCUMENT
+AI-Powered Multi-Tenant Report & Chart Intelligence Platform
+Version 1.0 | Confidential
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+KiBiAI is a multi-tenant BI platform where organizations generate professional
+reports and charts from existing databases using AI-assisted configuration.
+Reusable versioned templates let companies standardize reporting, reduce manual
+effort, and enable non-technical staff to produce insights.
+
+CORE LIFECYCLE (enforced — no shortcuts):
+  Database Source -> Report Template -> Generated Report -> Charts -> Decisions
+
+Why charts come from reports, not databases directly:
+- Report data is already validated and filtered
+- Business logic is applied once, reused everywhere
+- Charts and reports always show the same numbers
+- Groupings, joins, and calculated fields are trusted
+
+================================================================================
+2. PLATFORM LAYERS
+================================================================================
+
+Layer              Route               Who               Purpose
+-------------------------------------------------------------------------------
+Platform Admin     /admin              KiBiAI team       Manage tenants, licenses
+Company Workspace  /company_name       Client users      Templates, reports, charts
+
+Future: each tenant migrates to company_name.kibiai.com for subdomain isolation.
+
+================================================================================
+3. CORE ENTITIES
+================================================================================
+
+Company         Root tenant. Holds branding, plan, license, status.
+User            Employee of a company. Subject to role-based permissions.
+Role            Named permission set. is_super_admin = true grants full override.
+Module          Business category (Sales, CRM, Inventory, Finance, HR).
+Report Template Reusable blueprint: setup_json + config_json. Versioned.
+Report          Runtime output from a template. Stores dataset snapshot.
+Chart Template  Reusable chart blueprint. Linked to a report template.
+Chart           Generated chart from a chart template + specific report.
+AI Usage Log    Audit trail: model, tokens, entity, user, timestamp.
+
+================================================================================
+4. APPLICATION PAGES
+================================================================================
+
+--------------------------------------------------------------------------------
+PAGE 1 — Platform Admin Dashboard  [/admin]
+--------------------------------------------------------------------------------
+Used only by KiBiAI internal admins.
+
+Company Onboarding:
+- Create company: name, logo, address, plan_code, license_key, status
+- Auto-create two users: Client Superadmin + KiBiAI Internal Superadmin
+
+License Management:
+- Track active licenses, expiry, plan upgrades, suspension
+
+Company Controls:
+- Activate / deactivate / review usage per tenant
+
+--------------------------------------------------------------------------------
+PAGE 2 — Company Login  [/company_name]
+--------------------------------------------------------------------------------
+Branded per tenant. Fields: company logo, name, email/user ID, password,
+forgot password. Successful login redirects to Page 3.
+
+--------------------------------------------------------------------------------
+PAGE 3 — Report Template Workspace  [/company_name/templates]
+--------------------------------------------------------------------------------
+Main landing page after login. Browse all report templates grouped by module.
+Supports search and module filter.
+
+Actions per template:
+Action                    Description                          Permission Needed
+-------------------------------------------------------------------------------
+Generate Report           Creates runtime report               Generate Report
+Modify Template           Opens AI Builder to edit logic       Modify Report Template (AI)
+Duplicate Template        Creates a variant                    Create New Report Template (AI)
+Archive Template          Disables without deleting history    Delete Template
+View Versions             Opens version history                Generate Report (read)
+
+RULE: Users only generate reports via templates. No direct DB queries.
+
+--------------------------------------------------------------------------------
+PAGE 4 — Company Admin Workspace  [header nav]
+--------------------------------------------------------------------------------
+Used by company Superadmins. Controls staff, roles, module/template access,
+and license usage.
+
+Permission hierarchy:
+  User -> Module Access -> Template Access -> Template Actions
+  If role.is_super_admin = true: full override, hierarchy bypassed.
+
+Configurable template actions (per user, per template):
+- Generate Report
+- Modify Report Template (AI)
+- Create New Report Template (AI)
+- Delete Template
+- Create Charts (AI)
+
+--------------------------------------------------------------------------------
+PAGE 5 — Template Setup Wizard  [/company/template/{id}/setup]
+--------------------------------------------------------------------------------
+One-time setup per template. Connects source database to KiBiAI.
+Without this, AI has no schema context and cannot generate reports.
+
+Setup sections in order:
+Section                  What It Captures
+-------------------------------------------------------------------------------
+Host Configuration       Server host + data-fetching protocol (e.g. data-api)
+Database Selection       Choose source DB (max 5 databases per template)
+Table/Layout Discovery   List available tables; select layouts and APIs
+Field Mapping            Field names, types, display labels from source schema
+Relationships Builder    JOIN paths: e.g. Contacts -> Sales -> SalesLines -> Products
+Save Setup JSON          Persists as report_template_setup_json. AI reads this per prompt.
+
+--------------------------------------------------------------------------------
+PAGE 6 — Report Template Builder (AI Builder)  [/company/template/{id}/builder]
+--------------------------------------------------------------------------------
+Core intelligence layer. Converts natural language prompts into ReportConfigJSON.
+No analyst required.
+
+Three panels:
+Left   — AI Chat: user types prompts. AI uses setup_json + config_json + prompt.
+Center — Live Preview: paginated report rendered in real-time from current config.
+Right  — Structured Controls: Report Header, Relationships, Sub-Summary,
+         Body Columns, Custom Calculated Fields, Filters, Grand Summary.
+
+Example prompts:
+- Monthly sales grouped by region
+- Inventory below 50 units with category and unit cost
+- Top 10 customers by total revenue
+- Tax summary with effective tax rate calculation
+
+Actions:
+- Update Report: re-renders preview from current config
+- Save Template Version: commits config as new version
+- View Raw JSON: inspect ReportConfigJSON directly
+- Export PDF / Export Excel from preview
+
+--------------------------------------------------------------------------------
+PAGE 7 — Report Generation Screen  [triggered from template list]
+--------------------------------------------------------------------------------
+Executes a template against live data with optional runtime filters.
+Produces a saved report.
+
+Flow: setup_json + config_json + runtime_filters = report_data_json = saved report
+
+Runtime filters (applied per run, do not modify the template):
+- Date range fields (e.g. Sales Date: 01/01/2025 - 12/31/2025)
+- Field filters (e.g. Products.IsActive = True, Sales.PaymentStatus not empty)
+
+Output options:
+- View inline / Save to history / Export PDF / Export Excel / Share internally
+
+--------------------------------------------------------------------------------
+PAGE 8 — Report History  [/company/reports]
+--------------------------------------------------------------------------------
+All previously generated reports. Timestamped, immutable snapshots.
+Searchable by template, user, date.
+
+RULE: Chart widgets are defined on the Report Template. When opening charts for a saved report, they strictly follow the templates and display the validated dataset captured at generation time.
+
+--------------------------------------------------------------------------------
+PAGE 9 — Chart Template Builder  [/company/template/{templateId}/charts]
+--------------------------------------------------------------------------------
+AI-assisted chart creation bound to a Report Template.
+
+Why on the template level, not the report level:
+Chart templates define the visual representation rules (e.g. axes, metrics) for the data structure defined by the report template. When a user generates a specific report, the charts are instantiated automatically by applying the chart templates to the frozen report data.
+The builder uses the report template's cached preview data (`report_template_data_json`) to render realistic previews during configuration.
+
+Available inputs: report columns, summary values, grouped rows, calculated metrics.
+Supported chart types: Bar | Line | Pie | Donut | Area
+
+Example prompts:
+- Total inventory by product category as bar chart
+- Pie chart of revenue share by category
+- Monthly sales trend line chart
+- Revenue vs tax bar chart per quarter
+
+Output: chart_template_setup_json + chart_template_dataset_json. Saved for reuse.
+
+--------------------------------------------------------------------------------
+PAGE 10 — Chart Canvas Workspace
+--------------------------------------------------------------------------------
+Drag-and-drop dashboard designer. Multiple charts on one canvas.
+
+Capabilities:
+- Add, resize, move, duplicate, delete chart widgets
+- Auto-Generate 3 Charts: AI picks 3 most insightful charts for current report
+- Save dashboard layout as chart_template_canvas_state
+
+--------------------------------------------------------------------------------
+PAGE 11 — Insights Workspace
+--------------------------------------------------------------------------------
+AI-generated narrative analysis of reports and charts.
+Plain-language summaries for non-technical decision-makers.
+
+Example report insights:
+- Revenue increased 18% vs same period last year
+- Electronics is top category at 34% of total sales
+- 12 overdue invoices totalling $47,230
+
+Example chart insights:
+- Seasonal dip in March — consider forward purchasing in February
+- Top 3 customers account for 61% of revenue — concentration risk
+
+--------------------------------------------------------------------------------
+PAGE 12 — Version Management
+--------------------------------------------------------------------------------
+Every template save creates a new version.
+Tracks: JSON delta, changed_by user, timestamp.
+Any version can be restored.
+Applies to both report templates and chart templates.
+
+================================================================================
+5. DATABASE SCHEMA
+================================================================================
+
+All PKs are UUID. All entities carry company_id for tenant isolation.
+All timestamps are timestamptz.
+
+--------------------------------------------------------------------------------
+companies
+--------------------------------------------------------------------------------
+company_id        uuid          PK
+company_name      varchar(150)
+company_logo      text          URL
+company_address   text
+license_key       varchar(100)  Unique per tenant
+plan_code         varchar(50)
+status            varchar(20)   Active / Inactive / Suspended
+created_on        timestamptz
+updated_on        timestamptz
+
+--------------------------------------------------------------------------------
+users
+--------------------------------------------------------------------------------
+user_id           uuid          PK
+auth_user_id      uuid          Supabase auth reference
+company_id        uuid          FK -> companies
+user_email        varchar(150)
+full_name         varchar(150)
+designation       varchar(120)  Job title
+user_status       varchar(20)   Active / Invited / Disabled
+created_on        timestamptz
+updated_on        timestamptz
+
+--------------------------------------------------------------------------------
+roles
+--------------------------------------------------------------------------------
+role_id           uuid          PK
+company_id        uuid          FK -> companies
+role_name         varchar(80)
+is_super_admin    boolean       True = full override, bypasses all permission checks
+created_on        timestamptz
+
+--------------------------------------------------------------------------------
+modules
+--------------------------------------------------------------------------------
+module_id         uuid          PK
+company_id        uuid          FK -> companies
+module_name       varchar(120)  e.g. Sales, CRM, Inventory, Finance, HR
+module_code       varchar(60)   Internal reference code
+module_status     varchar(20)   Active / Archived
+created_on        timestamptz
+
+--------------------------------------------------------------------------------
+report_templates
+--------------------------------------------------------------------------------
+report_template_id          uuid          PK
+company_id                  uuid          FK -> companies
+module_id                   uuid          FK -> modules
+report_template_name        varchar(180)
+conversation_id             varchar(120)  AI session reference
+report_template_setup_json  jsonb         DB schema + connection config. AI reads this per prompt.
+report_template_config_json jsonb         Report logic generated by AI. Versioned.
+report_template_data_json   jsonb         Cached preview dataset for builder display.
+report_template_insight     text          AI-generated insight for this template.
+report_template_status      varchar(20)   Draft / Active / Archived
+version_number              integer       Auto-incremented on each save.
+created_by_user_id          uuid          FK -> users
+created_on                  timestamptz
+updated_on                  timestamptz
+
+--------------------------------------------------------------------------------
+reports
+--------------------------------------------------------------------------------
+report_id               uuid          PK
+company_id              uuid          FK -> companies
+report_template_id      uuid          FK -> report_templates
+report_name             varchar(180)
+report_config_json      jsonb         Runtime config snapshot including applied filters.
+report_data_json        jsonb         Final dataset at time of generation. Immutable.
+report_insight          text          AI narrative summary of findings.
+generated_by_user_id    uuid          FK -> users
+created_on              timestamptz   Generation timestamp.
+
+--------------------------------------------------------------------------------
+chart_templates
+--------------------------------------------------------------------------------
+chart_template_id           uuid          PK
+company_id                  uuid          FK -> companies
+report_template_id          uuid          FK -> report_templates
+conversation_id             varchar(120)  AI session reference
+chart_template_name         varchar(180)
+chart_template_type         varchar(40)   Bar / Line / Pie / Donut / Area
+chart_template_setup_json   jsonb         Axis, series, aggregation configuration.
+chart_template_dataset_json jsonb         Dataset schema mapping for rendering.
+chart_template_canvas_state jsonb         Dashboard layout state.
+chart_template_status       varchar(20)   Draft / Active / Archived
+version_number              integer       Auto-incremented on save.
+created_on                  timestamptz
+updated_on                  timestamptz
+
+--------------------------------------------------------------------------------
+charts
+--------------------------------------------------------------------------------
+chart_id                uuid          PK
+company_id              uuid          FK -> companies
+chart_template_id       uuid          FK -> chart_templates
+report_id               uuid          FK -> reports. Specific report this chart was built from.
+chart_name              varchar(180)
+chart_type              varchar(40)   Output type at generation time.
+chart_json              jsonb         Final rendered chart configuration.
+duplicate_of_chart_id   uuid          Nullable. References source chart if cloned.
+created_by_user_id      uuid          FK -> users
+created_on              timestamptz
+
+--------------------------------------------------------------------------------
+ai_usage_logs
+--------------------------------------------------------------------------------
+ai_usage_log_id   uuid          PK
+company_id        uuid          FK -> companies
+user_id           uuid          FK -> users
+entity_type       varchar(30)   Report / Chart / Template
+entity_id         uuid          ID of the entity being worked on.
+model_name        varchar(80)   AI model used.
+input_tokens      integer       Prompt token count.
+output_tokens     integer       Response token count.
+created_on        timestamptz
+
+================================================================================
+6. OPERATIONAL LIFECYCLE
+================================================================================
+
+Stage 1 — Tenant Onboarding       [KiBiAI Admin]
+  Create company, assign license, create Superadmin users, set plan.
+
+Stage 2 — Workspace Access         [Company Users]
+  Login at branded URL, browse templates by module.
+
+Stage 3 — Template Setup           [Admin / Creator]
+  Run Setup Wizard: connect DB, map tables, fields, relationships.
+
+Stage 4 — Template Build           [Admin / Creator]
+  Use AI Builder: prompt -> config JSON -> save version.
+
+Stage 5 — Report Generation        [Business Users]
+  Pick template, apply runtime filters, generate, save or export.
+
+Stage 6 — Chart Creation           [Business Users]
+  Open saved report, AI Chart Builder, arrange on canvas.
+
+Stage 7 — Insights Review          [Users / Leaders]
+  Read AI narrative. Use findings to make decisions.
+
+Stage 8 — Continuous Improvement   [Creators]
+  Refine templates, save new versions, retire old ones.
+
+================================================================================
+7. ARCHITECTURAL STRENGTHS
+================================================================================
+
+Controlled    Users cannot damage schema or bypass logic. All queries go through templates.
+AI-Native     JSON-driven setup + config = clean, structured AI context per prompt.
+Multi-Tenant  company_id on every entity. Full isolation. Subdomain path pre-designed.
+Reusable      One template -> unlimited reports. One chart template -> unlimited charts.
+Consistent    Charts inherit report logic. Dashboard numbers always match report numbers.
+Auditable     Version history, ai_usage_logs, created_by, timestamps across all entities.
+Scalable      Architecture unchanged as tenant count grows into the thousands.
+
+================================================================================
+8. FUTURE ROADMAP
+================================================================================
+
+- Subdomain tenancy: company_name.kibiai.com
+- White-label portals for resellers and enterprise clients
+- Scheduled report delivery via email
+- Slack / webhook alerts on report thresholds
+- AI forecasting on historical report data
+- Embedded analytics (iframe / API) for client-facing products
+- Template marketplace: community and expert-built templates
+
+================================================================================
+Templates create Reports. Reports create Charts. Charts create Decisions.
+KiBiAI is not a reporting screen. It is a Business Intelligence Operating System.
+================================================================================

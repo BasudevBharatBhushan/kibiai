@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 80)",
+      "PowerShell(npx vitest run src/lib/charts/__tests__/DataProcessor.test.ts 2>&1 | Select-Object -Last 60)",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(xargs grep -l \"FileMaker.*Data.*API\\\\|buildFilter\\\\|query.*build\")",
+      "Bash(xargs grep -l \"generate.*report\\\\|report.*generate\")"
+    ]
+  },
+  "disabledMcpjsonServers": [
+    "code-review-graph"
+  ]
+}

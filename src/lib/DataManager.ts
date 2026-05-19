@@ -1,3 +1,4 @@
+// In-memory data manager for chart datasets, pkeys, results, and logs
 export class InMemoryDataManager {
   private datasets: Record<number, any[]> = {};
   private pkeys: Record<number, string[]> = {};

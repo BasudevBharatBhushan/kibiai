@@ -1,13 +1,18 @@
-"use client";
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSession } from "@/utils/auth";
 
-export default function HomePage() {
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4 bg-amber-700">Users</h1>
-      <Link href="/reports">
-        <button className="border-2 bg-amber-300">Go to Reports</button>
-      </Link>
-    </div>
-  );
+export default async function HomePage() {
+  const session = await getSession();
+
+  if (!session) {
+    redirect("/login"); // This will be handled by middleware if it's a subdomain, or we can use a generic /login
+  }
+
+  // If we have a session, redirect to the appropriate workspace
+  if (session.accountType === 'platform_admin') {
+    redirect("/admin");
+  }
+
+  const companySlug = session.companyId || "kibiz-systems-inc"; // Fallback to legacy if no companyId
+  redirect(`/${companySlug}/templates`);
 }
