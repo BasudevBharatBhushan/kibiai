@@ -156,6 +156,7 @@ function convertOperator(value: string, key: string) {
     const [d1, d2] = value.split("...").map((v) => v.trim());
     return `ge '${d1}' and ${key} le '${d2}'`;
   }
+  if (value.startsWith("!=")) return `ne '${value.slice(2).trim()}'`;
   if (value.startsWith(">=")) return `ge ${value.slice(2).trim()}`;
   if (value.startsWith(">")) return `gt ${value.slice(1).trim()}`;
   if (value.startsWith("<=")) return `le ${value.slice(2).trim()}`;
@@ -165,6 +166,43 @@ function convertOperator(value: string, key: string) {
   if (value === "*") return `ne null`;
   if (value === "") return `eq null`;
   return `contains(${key},'${value.trim()}')`;
+}
+
+function buildFileMakerQueries(
+  filter: Record<string, string>,
+  p_key_field?: string,
+  p_keys?: string[]
+): Record<string, any>[] {
+  const normalFilter: Record<string, string> = {};
+  const notEqualEntries: Array<{ field: string; value: string }> = [];
+
+  for (const [field, val] of Object.entries(filter)) {
+    if (String(val).startsWith("!=")) {
+      notEqualEntries.push({ field, value: String(val).slice(2).trim() });
+    } else {
+      normalFilter[field] = val;
+    }
+  }
+
+  const queries: Record<string, any>[] = [];
+
+  if (p_keys && p_keys.length > 0 && p_key_field) {
+    p_keys.forEach(pk => queries.push({ [p_key_field]: pk, ...normalFilter }));
+    if (notEqualEntries.length > 0) {
+      p_keys.forEach(pk =>
+        notEqualEntries.forEach(({ field, value }) =>
+          queries.push({ [p_key_field]: pk, ...normalFilter, [field]: value, omit: "true" })
+        )
+      );
+    }
+  } else {
+    queries.push(normalFilter);
+    notEqualEntries.forEach(({ field, value }) =>
+      queries.push({ ...normalFilter, [field]: value, omit: "true" })
+    );
+  }
+
+  return queries;
 }
 
 function normalizeFindFilters(filter?: Record<string, string>) {
@@ -334,17 +372,11 @@ export async function fetchFmRecord(
     if (p_keys && p_keys.length > 0) {
       if (!p_key_field)
         throw new Error("p_key_field is required when p_keys are provided");
-      const queries = p_keys.map((pk) => ({
-        [p_key_field]: pk,
-        ...(filter || {}),
-      }));
+      const queries = buildFileMakerQueries(filter || {}, p_key_field, p_keys);
       body = JSON.stringify({ query: queries, offset: 1, limit: 5000 });
     } else {
-      body = JSON.stringify({
-        query: [filter || {}],
-        offset: 1,
-        limit: 5000,
-      });
+      const queries = buildFileMakerQueries(filter || {});
+      body = JSON.stringify({ query: queries, offset: 1, limit: 5000 });
     }
   }
   // console.log("Fetch URL:", fetchUrl);

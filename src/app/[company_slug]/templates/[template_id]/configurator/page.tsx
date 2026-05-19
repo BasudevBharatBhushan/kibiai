@@ -392,56 +392,11 @@ function ConfiguratorPageContent({
     []
   );
 
-  // ── Skeleton ───────────────────────────────────────────────────────────────────────
-  if (isPageLoading) {
-    return (
-      <div className="flex flex-1 overflow-hidden animate-pulse">
-        {/* Left: Chat skeleton */}
-        <div className="w-[400px] shrink-0 bg-white border-r border-slate-100 flex flex-col p-4 space-y-4">
-          <div className="h-10 bg-slate-100 rounded-xl" />
-          <div className="flex-1 space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className={`h-12 rounded-xl ${i % 2 === 0 ? "bg-slate-100 ml-8" : "bg-blue-50 mr-8"}`} />
-            ))}
-          </div>
-          <div className="h-10 bg-slate-100 rounded-xl" />
-        </div>
-        {/* Middle: Preview skeleton */}
-        <div className="flex-1 bg-gray-100 flex items-start justify-center pt-8">
-          <div className="bg-white shadow-xl rounded w-[210mm] min-h-[297mm] p-8 space-y-4">
-            <div className="flex justify-between mb-6">
-              <div className="h-3 w-24 bg-slate-100 rounded" />
-              <div className="h-7 w-48 bg-slate-100 rounded" />
-            </div>
-            <div className="h-px bg-slate-100" />
-            {[...Array(14)].map((_, i) => (
-              <div key={i} className="h-3 bg-slate-50 rounded" style={{ width: `${95 - (i % 3) * 10}%` }} />
-            ))}
-          </div>
-        </div>
-        {/* Right: Config skeleton */}
-        <div className="w-[400px] shrink-0 bg-white border-l border-slate-100 p-4 space-y-4">
-          <div className="h-px bg-slate-100" />
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="border border-slate-100 rounded-xl overflow-hidden">
-              <div className="h-10 bg-slate-50" />
-              <div className="p-3 space-y-2">
-                <div className="h-8 bg-slate-100 rounded-lg" />
-                <div className="h-8 bg-slate-100 rounded-lg" />
-              </div>
-            </div>
-          ))}
-          <div className="h-10 bg-blue-100 rounded-xl" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     // No extra header here — panel toggles live in the global Header via HeaderContext
     <div className="flex flex-1 overflow-hidden relative">
 
-      {/* COLUMN 1: AI Copilot (Left) */}
+      {/* COLUMN 1: AI Copilot (Left) — has its own skeleton; independent of preview calc */}
       <div
         className={`bg-white border-r border-slate-200 flex flex-col transition-[width] duration-300 ease-in-out shrink-0 ${
           isChatOpen
@@ -452,22 +407,35 @@ function ConfiguratorPageContent({
         }`}
       >
         <div className="flex-1 overflow-hidden flex flex-col min-w-[400px]">
-          <ModularChatbot
-            botName="Reports"
-            autoInitialize={!hasPreviewData}
-            showAiSuggestions={true}
-            showSetupCheckbox={true}
-            instructionSet={REPORTS_SYSTEM_INSTRUCTION}
-            setupPrompt={setupPrompt}
-            configPrompt={configPrompt}
-            formatPrompt={formatPrompt}
-            suggestedPrompts={reportPromptOptions}
-            initialConversationId={state.conversationId}
-            onAssistantResponse={handleAssistantResponse}
-            onConversationIdChange={handleConversationIdChange}
-            className="h-full w-full flex flex-col bg-white overflow-hidden relative"
-            welcomeMessage="Hello! I am your KiBiAI Assistant. I can help you generate ERP reports from your data. What would you like to see?"
-          />
+          {!state.setup ? (
+            /* Chat skeleton — shown while config API is in flight */
+            <div className="flex flex-col h-full p-4 space-y-4 animate-pulse">
+              <div className="h-10 bg-slate-100 rounded-xl" />
+              <div className="flex-1 space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className={`h-12 rounded-xl ${i % 2 === 0 ? "bg-slate-100 ml-8" : "bg-blue-50 mr-8"}`} />
+                ))}
+              </div>
+              <div className="h-10 bg-slate-100 rounded-xl" />
+            </div>
+          ) : (
+            <ModularChatbot
+              botName="Reports"
+              autoInitialize={!hasPreviewData && !!state.setup}
+              showAiSuggestions={true}
+              showSetupCheckbox={true}
+              instructionSet={REPORTS_SYSTEM_INSTRUCTION}
+              setupPrompt={setupPrompt}
+              configPrompt={configPrompt}
+              formatPrompt={formatPrompt}
+              suggestedPrompts={reportPromptOptions}
+              initialConversationId={state.conversationId}
+              onAssistantResponse={handleAssistantResponse}
+              onConversationIdChange={handleConversationIdChange}
+              className="h-full w-full flex flex-col bg-white overflow-hidden relative"
+              welcomeMessage="Hello! I am your KiBiAI Assistant. I can help you generate ERP reports from your data. What would you like to see?"
+            />
+          )}
         </div>
       </div>
 
@@ -477,10 +445,25 @@ function ConfiguratorPageContent({
           !isChatOpen && !isConfigOpen ? "flex-1" : "flex-1 min-w-[600px]"
         }`}
       >
-        {/* Report preview is ALWAYS mounted — loading indicator overlays on top */}
+        {isPageLoading ? (
+          <div className="w-full animate-pulse">
+            <div className="bg-white shadow-xl rounded w-full max-w-[210mm] mx-auto min-h-[400px] p-8 space-y-4">
+              <div className="flex justify-between mb-6">
+                <div className="h-3 w-24 bg-slate-100 rounded" />
+                <div className="h-7 w-48 bg-slate-100 rounded" />
+              </div>
+              <div className="h-px bg-slate-100" />
+              {[...Array(14)].map((_, i) => (
+                <div key={i} className="h-3 bg-slate-50 rounded" style={{ width: `${95 - (i % 3) * 10}%` }} />
+              ))}
+            </div>
+          </div>
+        ) : (
+        /* Report preview is ALWAYS mounted — loading indicator overlays on top */
         <div className="w-full max-w-full flex justify-center">
           <ReportPreview />
         </div>
+        )}
 
         {/* SSE loading overlay — floats above the existing report, never replaces it */}
         {state.isLoading && (
@@ -542,7 +525,7 @@ function ConfiguratorPageContent({
         )}
       </div>
 
-      {/* COLUMN 3: Report Configurator (Right) — has its own Update + Generate buttons */}
+      {/* COLUMN 3: Report Configurator (Right) — has its own skeleton; independent of preview calc */}
       <div
         className={`bg-white border-l border-slate-200 h-full shadow-xl z-10 transition-[width] duration-300 ease-in-out flex flex-col shrink-0 ${
           isConfigOpen
@@ -553,7 +536,24 @@ function ConfiguratorPageContent({
         }`}
       >
         <div className="flex-1 overflow-hidden relative flex flex-col min-w-[400px]">
-          <ReportConfigurator />
+          {!state.setup ? (
+            /* Configurator skeleton — shown while config API is in flight */
+            <div className="p-4 space-y-4 animate-pulse">
+              <div className="h-px bg-slate-100" />
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="border border-slate-100 rounded-xl overflow-hidden">
+                  <div className="h-10 bg-slate-50" />
+                  <div className="p-3 space-y-2">
+                    <div className="h-8 bg-slate-100 rounded-lg" />
+                    <div className="h-8 bg-slate-100 rounded-lg" />
+                  </div>
+                </div>
+              ))}
+              <div className="h-10 bg-blue-50 rounded-xl" />
+            </div>
+          ) : (
+            <ReportConfigurator />
+          )}
         </div>
       </div>
     </div>

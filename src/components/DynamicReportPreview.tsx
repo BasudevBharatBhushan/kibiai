@@ -215,7 +215,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
   // 1. Generate HTML — deferred to post-paint so the loading state renders first
   useEffect(() => {
     if (jsonData?.length > 0) {
-      setIsCalculating(true); // show spinner immediately before any CPU work
+      if (!previewMode) setIsCalculating(true);
       const id = setTimeout(() => {
         const html = generateDynamicReport(jsonData, metadata);
         setReportHtml(DOMPurify.sanitize(html));
@@ -224,14 +224,46 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
     }
   }, [jsonData, metadata]);
 
-  // 2. Inject & Paginate
-  useLayoutEffect(() => {
-    if (reportHtml && containerRef.current) {
-      containerRef.current.innerHTML = reportHtml;
-      setCurrentPage(1);
-      setTotalPages(1);
-      setTimeout(runPagination, 100);
-    }
+  // 2. Inject HTML then schedule pagination.
+  //    - innerHTML is injected in a double-RAF so React paints the loading state first.
+  //    - Pagination is deferred via requestIdleCallback (fires only when the browser
+  //      has nothing urgent to do, e.g. the user isn't typing/clicking).
+  //      This keeps chat and configurator fully interactive while the report settles.
+  //    - 2 s timeout forces pagination even if the browser never goes truly idle.
+  useEffect(() => {
+    if (!reportHtml || !containerRef.current) return;
+    let cancelled = false;
+    let raf1Id = 0;
+    let raf2Id = 0;
+    let idleId = 0;
+
+    raf1Id = requestAnimationFrame(() => {
+      raf2Id = requestAnimationFrame(() => {
+        if (cancelled || !containerRef.current) return;
+        containerRef.current.innerHTML = reportHtml;
+        setCurrentPage(1);
+        setTotalPages(1);
+
+        if ('requestIdleCallback' in window) {
+          idleId = (window as any).requestIdleCallback(
+            () => { if (!cancelled) runPagination(); },
+            { timeout: 2000 }
+          );
+        } else {
+          idleId = setTimeout(() => { if (!cancelled) runPagination(); }, 200) as unknown as number;
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1Id);
+      cancelAnimationFrame(raf2Id);
+      if (idleId) {
+        if ('cancelIdleCallback' in window) (window as any).cancelIdleCallback(idleId);
+        else clearTimeout(idleId);
+      }
+    };
   }, [reportHtml]);
 
   // 3. Handle Resize
@@ -256,6 +288,8 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
 
   // --- PAGINATION LOGIC ---
   const runPagination = () => {
+    if (previewMode) { setIsCalculating(false); return; }
+
     const root = containerRef.current;
     if (!root) return;
 
@@ -264,7 +298,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
 
     setIsCalculating(true);
 
-    // RESET — writes only, no reads, no reflow
+    // Phase 1 (sync): Reset styles and collect elements — pure DOM writes, no reads
     reportNode.querySelectorAll('[style*="display: none"]').forEach(
       el => (el as HTMLElement).style.display = ''
     );
@@ -272,12 +306,8 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
       el => el.removeAttribute('data-page')
     );
 
-    // ─── PASS 1: collect all atomic elements ───────────────────────────────────
-    // We build a flat list of every element that needs a page number, then read
-    // ALL their offsetHeights in one tight loop. The browser performs a single
-    // layout calculation for the batch instead of one per element.
     const atomicElements: HTMLElement[] = [];
-    const isHeader: boolean[] = []; // parallel flag array
+    const isHeader: boolean[] = [];
 
     const headers = Array.from(
       reportNode.querySelectorAll('.title-header, .current-date')
@@ -289,7 +319,6 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
     ) as HTMLElement[];
 
     if (topSubsummaries.length === 0) {
-      // Flat table — add each body row
       reportNode.querySelectorAll('table.body-table tbody tr').forEach(r => {
         atomicElements.push(r as HTMLElement);
         isHeader.push(false);
@@ -319,37 +348,43 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
     const trailing = reportNode.querySelector('.trailing-summary') as HTMLElement | null;
     if (trailing) { atomicElements.push(trailing); isHeader.push(false); }
 
-    // Single batch read — ONE browser layout flush for the entire report
-    const heights = atomicElements.map(el => el.offsetHeight);
+    // Phase 2 — Frame A: read all heights in one layout flush, compute pages, write data-page attrs.
+    // Splitting across RAF frames ensures the browser can handle chat/configurator events between phases.
+    requestAnimationFrame(() => {
+      const heights = atomicElements.map(el => el.offsetHeight);
 
-    // ─── PASS 2: assign pages using pre-read heights (writes only) ─────────────
-    let pageIndex = 1;
-    let currentHeight = 0;
+      let pageIndex = 1;
+      let currentHeight = 0;
 
-    for (let i = 0; i < atomicElements.length; i++) {
-      const el = atomicElements[i];
-      const h = heights[i];
+      for (let i = 0; i < atomicElements.length; i++) {
+        const el = atomicElements[i];
+        const h = heights[i];
 
-      if (isHeader[i]) {
-        // Headers always go on page 1
-        el.setAttribute('data-page', '1');
+        if (isHeader[i]) {
+          el.setAttribute('data-page', '1');
+          currentHeight += h;
+          continue;
+        }
+
+        if (h === 0) continue;
+
+        if (currentHeight + h > CONTENT_HEIGHT && currentHeight > 50) {
+          pageIndex++;
+          currentHeight = 0;
+        }
         currentHeight += h;
-        continue;
+        el.setAttribute('data-page', pageIndex.toString());
       }
 
-      if (h === 0) continue;
+      setTotalPages(pageIndex);
 
-      if (currentHeight + h > CONTENT_HEIGHT && currentHeight > 50) {
-        pageIndex++;
-        currentHeight = 0;
-      }
-      currentHeight += h;
-      el.setAttribute('data-page', pageIndex.toString());
-    }
-
-    setTotalPages(pageIndex);
-    setIsCalculating(false);
-    updateVisibility(1);
+      // Phase 2 — Frame B: apply visibility and clear spinner in the next frame.
+      // The browser gets a full event-processing window between Frame A and Frame B.
+      requestAnimationFrame(() => {
+        setIsCalculating(false);
+        updateVisibility(1);
+      });
+    });
   };
 
   const updateVisibility = (targetPage: number) => {
@@ -665,18 +700,7 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
       >
         {previewMode ? (
           // Preview mode: natural-flow layout, fills panel width, no A4 constraints
-          <div className="w-full bg-white relative">
-            {/* Preview mode loading overlay */}
-            {isCalculating && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/80 backdrop-blur-[2px] gap-3">
-                <div className="w-48 h-1 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full animate-pulse w-3/4" />
-                </div>
-                <p className="text-[11px] text-slate-400 font-medium tracking-wide uppercase">
-                  Rendering…
-                </p>
-              </div>
-            )}
+          <div className="w-full bg-white">
             <div
               id="dynamic-report-container"
               ref={containerRef}

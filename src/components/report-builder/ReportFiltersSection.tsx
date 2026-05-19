@@ -91,6 +91,7 @@ export function ReportFiltersSection() {
           let val = strVal;
           if (strVal === "*") { op = "*"; val = ""; }
           else if (strVal === "=") { op = "__empty__"; val = ""; }
+          else if (strVal.startsWith("!=")) { op = "!="; val = strVal.substring(2); }
           else if (strVal.startsWith(">=")) { op = ">="; val = strVal.substring(2); }
           else if (strVal.startsWith("<=")) { op = "<="; val = strVal.substring(2); }
           else if (strVal.startsWith("==")) { op = "="; val = strVal.substring(2); }

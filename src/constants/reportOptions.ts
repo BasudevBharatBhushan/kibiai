@@ -20,5 +20,6 @@ export const FILTER_OPERATORS = [
   { label: "Greater Than (>)", value: ">" },
   { label: "Less Than (<)", value: "<" },
   { label: "Greater/Equal (>=)", value: ">=" },
-  { label: "Less/Equal (<=)", value: "<=" }
+  { label: "Less/Equal (<=)", value: "<=" },
+  { label: "Not Equal (!=)", value: "!=" }
 ];

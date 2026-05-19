@@ -87,9 +87,10 @@ Example:
 3. filters
 ------------------------------------------------------------
 Purpose: Non-date field filters.
-Operators: "*" (not empty), "=" (empty), "=Value" (exact), ">Value", "<Value", ">=Value", "<=Value"
+Operators: "*" (not empty), "=" (empty), "=Value" (exact), "!=Value" (not equal), ">Value", "<Value", ">=Value", "<=Value"
 Example:
-"filters": { "SLS": { "InvoiceStatus": "=Closed" } }
+"filters": { "SLS": { "InvoiceStatus": "=Closed", "Region": "!=West" } }
+Note: "!=Value" is automatically converted to the correct protocol — omit blocks for Data API, 'ne' for OData.
 
 ------------------------------------------------------------
 4. group_by_fields
