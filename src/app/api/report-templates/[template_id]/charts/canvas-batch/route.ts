@@ -13,11 +13,17 @@ const layoutSchema = z.object({
   i: z.string().optional(),
 });
 
+const subCardLayoutSchema = z.object({
+  id: z.string(),
+  layout: layoutSchema.optional(),
+});
+
 const chartStateSchema = z.object({
   id: z.string().min(1),
   kind: z.string().optional(),
   isActive: z.boolean().optional(),
   layout: layoutSchema.optional(),
+  subCardLayouts: z.array(subCardLayoutSchema).optional(),
 });
 
 const patchBodySchema = z.object({
@@ -96,6 +102,8 @@ export async function PATCH(
           layout: next?.layout
             ? { ...next.layout, i: chart.chart_template_id }
             : currentCanvas.layout,
+          // Store per-sub-card layouts so insight sub-cards can be individually positioned
+          subCardLayouts: next?.subCardLayouts ?? currentCanvas.subCardLayouts ?? undefined,
         };
 
         const nextType =

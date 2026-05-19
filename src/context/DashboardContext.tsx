@@ -193,75 +193,69 @@ export function DashboardProvider({
         Number.isFinite(l.w) &&
         Number.isFinite(l.h);
 
-      // Build a set of parent IDs that have been explicitly marked inactive in the DB.
-      // This handles multi-result insight sub-cards (e.g. "${pKey}-0", "${pKey}-1")
-      // whose parent pKey is tracked in canvasState rather than the sub-card ID.
-      const inactiveParentIds = new Set(
-        initialCanvasState
-          .filter((s: any) => s.isActive === false)
-          .map((s: any) => s.id)
-          .filter(Boolean)
+      // Build a lookup map from chart_template_id → saved canvas state entry
+      // (handles both direct charts and insight parent IDs)
+      const savedById = new Map<string, any>(
+        initialCanvasState.map((s: any) => [s.id, s])
       );
 
       /**
-       * Resolve the "canonical" parent ID for any chart.
-       * Sub-cards produced by multi-result insight plans use the pattern `${pKey}-N`.
-       * We strip that suffix to recover the pKey so it can be matched against canvasState.
+       * Resolve the "canonical" parent UUID for any chart.
+       * Insight sub-cards use `${parentUUID}-N` pattern.
+       * UUID is exactly 36 chars so the regex is unambiguous.
        */
+      const SUB_CARD_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d+)$/i;
       const resolveParentId = (chartId: string): string => {
-        const match = chartId.match(/^(.+)-(\d+)$/);
+        const match = chartId.match(SUB_CARD_RE);
         return match ? match[1] : chartId;
       };
 
       finalCharts = finalCharts.map(chart => {
-        // Direct ID match first
-        let saved = initialCanvasState.find((s: any) => s.id === chart.id);
-        // Fall back to parent-ID match (for sub-cards like "${pKey}-0")
-        if (!saved) {
-          const parentId = resolveParentId(chart.id);
-          if (parentId !== chart.id) {
-            saved = initialCanvasState.find((s: any) => s.id === parentId);
-          }
-        }
+        // Try direct match first, then parent-ID fallback for sub-cards
+        const saved = savedById.get(chart.id) ?? savedById.get(resolveParentId(chart.id));
         if (!saved) return chart;
 
-        const mergedLayout = isValidLayout(saved.layout)
+        // For sub-cards, look for this specific sub-card's layout inside subCardLayouts
+        let savedLayout = saved.layout;
+        if (saved.subCardLayouts && Array.isArray(saved.subCardLayouts)) {
+          const subCardEntry = saved.subCardLayouts.find((s: any) => s.id === chart.id);
+          if (subCardEntry?.layout) savedLayout = subCardEntry.layout;
+        }
+
+        const mergedLayout = isValidLayout(savedLayout)
           ? {
               ...chart.layout,
-              ...saved.layout,
+              ...savedLayout,
               i: chart.id,     // Always use the sub-card's own ID as the grid key
-              w: saved.layout?.w ?? chart.layout?.w ?? defaultW,
-              h: saved.layout?.h ?? chart.layout?.h ?? defaultH,
+              w: savedLayout?.w ?? chart.layout?.w ?? defaultW,
+              h: savedLayout?.h ?? chart.layout?.h ?? defaultH,
             }
           : chart.layout;
 
         return { ...chart, layout: mergedLayout, kind: saved.kind ?? chart.kind };
       });
 
-      const existingIds = new Set(finalCharts.map(c => c.id));
-      const savedActiveIds = initialCanvasState
-        .filter((s: any) => s.isActive !== false)
-        .map((s: any) => s.id)
-        .filter(Boolean);
-        
-      initialVisibleIds = new Set(savedActiveIds.filter((id: string) => existingIds.has(id)));
-
-      const stateChartIds = new Set(initialCanvasState.map((s: any) => s.id));
+      // --- Visibility Resolution ---
+      // For regular charts: use saved.isActive directly.
+      // For insight sub-cards: use parent saved entry's isActive.
+      // A sub-card is visible if its parent's isActive !== false.
+      initialVisibleIds = new Set<string>();
 
       console.group('[Ctx] Init — visibility resolution');
-      console.log('[Ctx] stateChartIds:', [...stateChartIds]);
-      console.log('[Ctx] inactiveParentIds:', [...inactiveParentIds]);
-      console.log('[Ctx] initialVisibleIds after saved-state merge:', [...initialVisibleIds]);
-      finalCharts.forEach(c => {
-        if (!stateChartIds.has(c.id) && c.isActive) {
-          const parentId = resolveParentId(c.id);
-          const parentIsInactive = inactiveParentIds.has(parentId);
-          console.log(`[Ctx] Fallback check id="${c.id}" parentId="${parentId}" parentIsInactive=${parentIsInactive} → ${parentIsInactive ? 'BLOCKED (was removed)' : 'ACTIVATED (new chart)'}`);
-          if (!parentIsInactive) {
-            initialVisibleIds.add(c.id);
-          }
+      console.log('[Ctx] savedById keys:', [...savedById.keys()]);
+      for (const c of finalCharts) {
+        const saved = savedById.get(c.id) ?? savedById.get(resolveParentId(c.id));
+        if (saved) {
+          // Has a DB record — respect whatever isActive says
+          const active = saved.isActive !== false;
+          console.log(`[Ctx] Saved entry for "${c.id}" → parentId="${resolveParentId(c.id)}" isActive=${active}`);
+          if (active) initialVisibleIds.add(c.id);
+        } else {
+          // Brand-new chart with no saved state — activate by default (isActive from processData)
+          console.log(`[Ctx] No saved entry for "${c.id}" (new) → defaulting to isActive=${c.isActive}`);
+          if (c.isActive) initialVisibleIds.add(c.id);
         }
-      });
+      }
       console.log('[Ctx] FINAL visibleIds:', [...initialVisibleIds]);
       console.groupEnd();
     }
@@ -290,17 +284,54 @@ export function DashboardProvider({
         return;
       }
 
-      const chartsToSave = currentCharts
-        .map(c => ({
-          id: c.id,
-          isActive: visibleIds.has(c.id),
-          layout: c.layout,
-          kind: c.kind
-        }));
+      // Insight sub-cards are named `${parentUUID}-N` (e.g. "abc-def-0").
+      // The DB only has one row per parent UUID, so we must normalize sub-card IDs
+      // back to the parent UUID before sending to the API.
+      const SUB_CARD_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d+)$/i;
+
+      // Map: parentId → { isActive, subCardLayouts, kind }
+      const parentMap = new Map<string, {
+        isActive: boolean;
+        layout?: ChartConfig['layout'];
+        subCardLayouts: Array<{ id: string; layout: ChartConfig['layout'] }>;
+        kind?: string;
+      }>();
+
+      for (const c of currentCharts) {
+        const match = c.id.match(SUB_CARD_RE);
+        if (match) {
+          // Insight sub-card — roll up into parent entry
+          const parentId = match[1];
+          const isVisible = visibleIds.has(c.id);
+          if (!parentMap.has(parentId)) {
+            parentMap.set(parentId, { isActive: false, subCardLayouts: [], kind: c.kind });
+          }
+          const entry = parentMap.get(parentId)!;
+          // Parent is active if ANY sub-card is visible
+          if (isVisible) entry.isActive = true;
+          entry.subCardLayouts.push({ id: c.id, layout: c.layout });
+        } else {
+          // Regular chart — save directly
+          parentMap.set(c.id, {
+            isActive: visibleIds.has(c.id),
+            layout: c.layout,
+            subCardLayouts: [],
+            kind: c.kind,
+          });
+        }
+      }
+
+      const chartsToSave = [...parentMap.entries()].map(([id, entry]) => ({
+        id,
+        isActive: entry.isActive,
+        layout: entry.layout,
+        kind: entry.kind,
+        subCardLayouts: entry.subCardLayouts.length > 0 ? entry.subCardLayouts : undefined,
+      }));
 
       const payload = {
         layoutMode: currentLayoutMode,
-        charts: chartsToSave
+        charts: chartsToSave,
       };
 
       apiClient

@@ -353,7 +353,7 @@ export function ModularChatbot({
         instruction_set: instructionSet,
         // New threads get context once. Existing threads only get explicit latest setup/config requests.
         predefined_prompt: buildPredefinedPrompt({
-          includeDefault: isNewConversation || (!hasSplitContext && (includeLatestSetup || includeLatestConfig)),
+          includeDefault: true,
           includeSetup: isNewConversation || includeLatestSetup,
           includeConfig: isNewConversation || includeLatestConfig,
         }),
