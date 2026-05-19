@@ -4,8 +4,9 @@ import {
   PROCESSOR_DEFAULTS,
   CHART_TYPE_MAP
 } from "@/constants/analytics";
-import { executeInsightPlan } from '@/lib/insights/insightFormulaExecutor';
+import { executeV3InsightPlan } from '@/lib/insights/v3/scopedExecutor';
 import type { FieldSchema } from '@/lib/insights/fieldSchemaAdapter';
+
 
 // Helper to recursively extract BodyFields from nested data
 function extractBodyFields(data: any): any[] {
@@ -81,25 +82,61 @@ export function processData(
     const newId = aiResponse.pKey || uuidv4();
     const activeStatus = coerceIsActive(aiResponse.isActive);
 
-    // 1. Handle Insight Cards
-    // Only render insights that have a plan we can recompute against the
-    // current report. Cached `insight_results` are obsolete and intentionally
-    // ignored — the user only ever sees insights derived from current data.
-    if (aiResponse.chart_type === 'insight' || aiResponse.insight_plan) {
-      if (!aiResponse.insight_plan || bodyData.length === 0) {
-        console.warn(`[DataProcessor] Skipping insight card ${newId}: no insight_plan or no data.`);
+    // 1. Handle Insight Cards (v3)
+    // insight_results holds the pre-computed v3 results persisted at generation time.
+    // If insight_items are present we can re-execute them live against the current dataset.
+    if (aiResponse.chart_type === 'insight') {
+      const items = aiResponse.insight_items;
+      if (!items || !Array.isArray(items) || bodyData.length === 0) {
+        // Fall back to cached results if no items to re-execute
+        if (aiResponse.insight_results?.length) {
+          const insightDateRange = reportDateRange
+            ? { field: reportDateRange.field ?? aiResponse.insight_date_range?.field ?? 'Report range', start: reportDateRange.start, end: reportDateRange.end }
+            : aiResponse.insight_date_range;
+            
+          aiResponse.insight_results.forEach((insightResult, idx) => {
+            const singleId = aiResponse.insight_results!.length > 1 ? `${newId}-${idx}` : newId;
+            results.push({
+              id: singleId,
+              kind: 'insight',
+              title: insightResult.group || aiResponse.chart_title || 'Business Insights',
+              isActive: activeStatus,
+              categories: [],
+              series: [],
+              insight_results: [insightResult],
+              insight_date_range: insightDateRange,
+              report_date_range: reportDateRange,
+              layout: { x: 0, y: 0, w: 6, h: 6, i: singleId }
+            });
+          });
+        } else if (aiResponse.business_insights?.length) {
+          const insightDateRange = reportDateRange
+            ? { field: reportDateRange.field ?? aiResponse.insight_date_range?.field ?? 'Report range', start: reportDateRange.start, end: reportDateRange.end }
+            : aiResponse.insight_date_range;
+          results.push({
+            id: newId,
+            kind: 'insight',
+            title: aiResponse.chart_title || 'Business Insights',
+            isActive: activeStatus,
+            categories: [],
+            series: [],
+            insights: aiResponse.business_insights,
+            insight_date_range: insightDateRange,
+            report_date_range: reportDateRange,
+            layout: { x: 0, y: 0, w: 6, h: 6, i: newId }
+          });
+        } else {
+          console.warn(`[DataProcessor] Skipping insight card ${newId}: no insight_items or data.`);
+        }
         return;
       }
 
       let finalResults;
       try {
-        finalResults = executeInsightPlan(
-          aiResponse.insight_plan,
+        finalResults = executeV3InsightPlan(
+          items,
           bodyData,
-          {
-            reportStart: context?.reportStart,
-            reportEnd: context?.reportEnd,
-          },
+          { reportStart: context?.reportStart, reportEnd: context?.reportEnd },
           fieldSchemas
         );
       } catch (err) {
@@ -122,18 +159,21 @@ export function processData(
           }
         : aiResponse.insight_date_range;
 
-      results.push({
-        id: newId,
-        kind: 'insight',
-        title: aiResponse.chart_title || 'Business Insights',
-        isActive: activeStatus,
-        categories: [],
-        series: [],
-        insights: aiResponse.business_insights,
-        insight_results: finalResults,
-        insight_date_range: insightDateRange,
-        report_date_range: reportDateRange,
-        layout: { x: 0, y: 0, w: 6, h: 6, i: newId }
+      finalResults.forEach((insightResult, idx) => {
+        const singleId = finalResults.length > 1 ? `${newId}-${idx}` : newId;
+        results.push({
+          id: singleId,
+          kind: 'insight',
+          title: insightResult.group || aiResponse.chart_title || 'Business Insights',
+          isActive: activeStatus,
+          categories: [],
+          series: [],
+          insights: aiResponse.business_insights,
+          insight_results: [insightResult],
+          insight_date_range: insightDateRange,
+          report_date_range: reportDateRange,
+          layout: { x: 0, y: 0, w: 6, h: 6, i: singleId }
+        });
       });
       return;
     }

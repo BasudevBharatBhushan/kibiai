@@ -1,4 +1,7 @@
+import type { AIInsightItem, InsightResult } from '@/lib/insights/types';
+
 export type ChartKind = 'line' | 'pie' | 'area' | 'column' | 'donut' | 'insight';
+
 
 // Data series for charts
 export interface ChartDataSeries {
@@ -67,15 +70,17 @@ export interface ReportChartSchema {
   mathematical_aggregation_method?: 'sum' | 'count' | 'average' | 'min' | 'max'; 
   filters?: string[];            
   
-  business_insights?: string[]; 
-  insight_plan?: any; // AIInsightPlan
-  insight_results?: any[];
+  business_insights?: string[];
+  /** v3 AI plan items — used to re-execute insights against fresh data */
+  insight_items?: AIInsightItem[];
+  /** v3 resolved results — persisted at generation time, used as fallback */
+  insight_results?: InsightResult[];
   insight_date_range?: {
     field: string;
     start: string;
     end: string;
   };
-  response_to_user?: string;   
+  response_to_user?: string;
 }
 
 export const COLOR_PALETTES = [

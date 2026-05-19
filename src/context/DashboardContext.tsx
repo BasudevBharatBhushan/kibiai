@@ -44,6 +44,7 @@ interface DashboardContextType {
   templateId?: string;
   isViewerMode: boolean;
   dataset: any[]; // Exposed report rows for AI chart processing
+  context?: import('@/lib/charts/ChartTypes').InsightContext;
 
   // Actions
   setEditOpen: (isOpen: boolean) => void;
@@ -189,15 +190,43 @@ export function DashboardProvider({
         Number.isFinite(l.w) &&
         Number.isFinite(l.h);
 
+      // Build a set of parent IDs that have been explicitly marked inactive in the DB.
+      // This handles multi-result insight sub-cards (e.g. "${pKey}-0", "${pKey}-1")
+      // whose parent pKey is tracked in canvasState rather than the sub-card ID.
+      const inactiveParentIds = new Set(
+        initialCanvasState
+          .filter((s: any) => s.isActive === false)
+          .map((s: any) => s.id)
+          .filter(Boolean)
+      );
+
+      /**
+       * Resolve the "canonical" parent ID for any chart.
+       * Sub-cards produced by multi-result insight plans use the pattern `${pKey}-N`.
+       * We strip that suffix to recover the pKey so it can be matched against canvasState.
+       */
+      const resolveParentId = (chartId: string): string => {
+        const match = chartId.match(/^(.+)-(\d+)$/);
+        return match ? match[1] : chartId;
+      };
+
       finalCharts = finalCharts.map(chart => {
-        const saved = initialCanvasState.find((s: any) => s.id === chart.id);
+        // Direct ID match first
+        let saved = initialCanvasState.find((s: any) => s.id === chart.id);
+        // Fall back to parent-ID match (for sub-cards like "${pKey}-0")
+        if (!saved) {
+          const parentId = resolveParentId(chart.id);
+          if (parentId !== chart.id) {
+            saved = initialCanvasState.find((s: any) => s.id === parentId);
+          }
+        }
         if (!saved) return chart;
 
         const mergedLayout = isValidLayout(saved.layout)
           ? {
               ...chart.layout,
               ...saved.layout,
-              i: chart.id,
+              i: chart.id,     // Always use the sub-card's own ID as the grid key
               w: saved.layout?.w ?? chart.layout?.w ?? defaultW,
               h: saved.layout?.h ?? chart.layout?.h ?? defaultH,
             }
@@ -217,7 +246,13 @@ export function DashboardProvider({
       const stateChartIds = new Set(initialCanvasState.map((s: any) => s.id));
       finalCharts.forEach(c => {
         if (!stateChartIds.has(c.id) && c.isActive) {
-          initialVisibleIds.add(c.id);
+          // Check if this chart's parent ID has been explicitly deactivated.
+          // If so, DO NOT activate this sub-card — it was removed by the user.
+          const parentId = resolveParentId(c.id);
+          const parentIsInactive = inactiveParentIds.has(parentId);
+          if (!parentIsInactive) {
+            initialVisibleIds.add(c.id);
+          }
         }
       });
     }

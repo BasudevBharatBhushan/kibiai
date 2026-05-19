@@ -7,8 +7,7 @@ import { useToast } from "@/context/ToastContext";
 import { validateConfig } from "@/lib/utils/reportValidation";
 import { apiClient } from "@/utils/apiClient";
 import { useParams } from "next/navigation";
-import Link from "next/link";
-import { Loader2, BarChart3, Info, Zap, RefreshCw } from "lucide-react";
+import { Loader2, Info, RefreshCw } from "lucide-react";
 import { classifyReload, applySoftReload } from "@/lib/utils/reportReloadClassifier";
 
 // Components
@@ -206,27 +205,6 @@ export function ReportConfigurator() {
             <RefreshCw size={13} className={isSaving ? "animate-spin" : ""} />
           </button>
 
-          {slug && templateId && (
-            <Link
-              href={`/${slug}/templates/${templateId}/generate`}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 whitespace-nowrap"
-              style={{ background: "#059669" }}
-            >
-              <Zap size={13} />
-              Generate
-            </Link>
-          )}
-
-          {slug && templateId && (
-            <Link
-              href={`/${slug}/templates/${templateId}/charts`}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 whitespace-nowrap"
-              style={{ background: "#2563eb" }}
-            >
-              <BarChart3 size={13} />
-              Charts
-            </Link>
-          )}
         </div>
          
          <button 

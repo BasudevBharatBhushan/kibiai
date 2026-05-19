@@ -39,9 +39,10 @@ import {
 } from "@/lib/charts/bootstrap";
 import type { ReportChartSchema } from "@/lib/charts/ChartTypes";
 import { deriveFieldSchemas } from "@/lib/insights/fieldSchemaAdapter";
-import { executeInsightPlan } from "@/lib/insights/insightFormulaExecutor";
 import { parseInsightResponse } from "@/lib/insights/insightResponseParser";
+import { executeV3InsightPlan } from "@/lib/insights/v3/scopedExecutor";
 import type { InsightResult } from "@/lib/insights/types";
+
 import { apiClient } from "@/utils/apiClient";
 
 type AssistantMode = "chart" | "insight";
@@ -243,7 +244,7 @@ function ChartBuilderWorkspace({
     [fieldSchemas]
   );
   const insightPredefinedPrompt = useMemo(
-    () => buildInsightPredefinedPrompt(templateName, fieldSchemas),
+    () => buildInsightPredefinedPrompt(templateName, fieldSchemas).prompt,
     [templateName, fieldSchemas]
   );
   const toggleChat = useCallback(() => setIsChatOpen((prev) => !prev), []);
@@ -318,9 +319,9 @@ function ChartBuilderWorkspace({
     async (displayedText: string, rawResponseText: string) => {
       setInsightLoading(true);
       try {
-        const plan = parseInsightResponse(rawResponseText || displayedText);
-        if (!plan) {
-          addToast("error", "Failed to parse AI response", "The AI did not return a valid insight JSON structure.");
+        const items = parseInsightResponse(rawResponseText || displayedText);
+        if (!items) {
+          addToast("error", "Failed to parse AI response", "The AI did not return a valid v3 insight JSON array.");
           return;
         }
 
@@ -339,7 +340,7 @@ function ChartBuilderWorkspace({
                 if (!isNaN(startD.getTime()) && !isNaN(endD.getTime())) {
                   reportStart = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`;
                   reportEnd = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`;
-                  
+
                   let label = `${table}::${field}`;
                   if (setupJson?.tables) {
                     const tables = setupJson.tables as any;
@@ -348,7 +349,6 @@ function ChartBuilderWorkspace({
                     }
                   }
                   rangeFieldLabel = label;
-                  
                   break;
                 }
               }
@@ -359,19 +359,19 @@ function ChartBuilderWorkspace({
 
         const context = { reportStart, reportEnd };
         const schemas = deriveFieldSchemas(configJson, setupJson);
-        const results = executeInsightPlan(plan, rows, context, schemas);
+        const results = executeV3InsightPlan(items, rows, context, schemas);
+
         if (!results.length) {
           addToast("warning", "No valid insights", "The AI generated insights but they failed validation or returned zero results.");
           return;
         }
-        
+
         const schema: ReportChartSchema = {
           pKey: crypto.randomUUID(),
           chart_title: "Business Insights",
           chart_type: "insight",
-          insight_plan: plan,
-          insight_results: results,
-          response_to_user: plan.response_to_user,
+          insight_items: items,
+          insight_results: results as InsightResult[],
         };
 
         if (reportStart && reportEnd && rangeFieldLabel) {
@@ -386,6 +386,7 @@ function ChartBuilderWorkspace({
         await persistChartToSupabase(schema);
         await apiClient.patch(`/api/report-templates/${templateId}/insight-thread`, {
           insight_results: results,
+          insight_items: items,
         });
 
         addToast("success", "Insights Generated", `${results.length} business insight(s) added to dashboard.`);
@@ -397,6 +398,8 @@ function ChartBuilderWorkspace({
     },
     [rows, templateId, addToast, addNewChartFromAI, persistChartToSupabase, configJson, setupJson]
   );
+
+
 
   const currentMode = assistantMode;
 
@@ -455,9 +458,10 @@ function ChartBuilderWorkspace({
               chart_title: "Business Insights",
               chart_type: "insight",
               business_insights: item.business_insights,
-              insight_plan: item.insight_plan, // If the chart copilot also returns a plan
+              insight_items: item.insight_items, // v3 items if chart copilot returns them
               response_to_user: item.response_to_user,
             };
+
 
             if (reportStart && reportEnd && rangeFieldLabel) {
               schema.insight_date_range = {

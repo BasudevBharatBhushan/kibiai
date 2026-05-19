@@ -58,7 +58,7 @@
 
 .compare-modal-container {
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 16px;
   width: 96vw;
   max-width: 1520px;
   height: 88vh;
@@ -81,7 +81,7 @@
   padding: 14px 20px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
-  border-radius: 20px 20px 0 0;
+  border-radius: 16px 16px 0 0;
   flex-shrink: 0;
 }
 
@@ -103,6 +103,9 @@
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  gap: 14px;
+  padding: 14px;
+  background: #f1f5f9;
 }
 
 /* ===== COMPARE CHART PANEL (each side) ===== */
@@ -112,13 +115,17 @@
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
 }
 
 .compare-panel-header {
-  padding: 12px 16px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
   flex-shrink: 0;
+  border-radius: 12px 12px 0 0;
 }
 
 .compare-panel-badge {
@@ -156,10 +163,18 @@
 
 .compare-panel-chart {
   flex: 1;
-  padding: 10px;
+  padding: 16px;
   overflow: hidden;
   min-height: 0;
   position: relative;
+  background: #ffffff;
+}
+
+.compare-panel-chart-inner {
+  position: absolute;
+  inset: 16px;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* Insight view inside comparison panel — scrollable, fills available space */
@@ -184,14 +199,15 @@
 
 /* ===== DIVIDER ===== */
 .compare-divider {
-  width: 44px;
+  width: 42px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #f1f5f9;
+  background: #ffffff;
   border-left: 1px solid #e2e8f0;
   border-right: 1px solid #e2e8f0;
+  border-radius: 12px;
   gap: 8px;
   flex-shrink: 0;
 }
@@ -212,6 +228,69 @@
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  border-radius: 12px;
+}
+
+.compare-view-shell {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 10px;
+}
+
+.compare-view-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.compare-view-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.compare-view-action-btn:hover {
+  border-color: #94a3b8;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.compare-view-action-btn--primary {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.compare-view-action-btn--primary:hover {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.compare-view-shell > .compare-panel-empty {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
 }
 
 /* ===== REPORT HISTORY PICKER ===== */
@@ -221,6 +300,9 @@
   height: 100%;
   padding: 20px;
   gap: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
 }
 
 .compare-picker-heading {
@@ -343,6 +425,9 @@
   padding: 20px;
   gap: 16px;
   overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
 }
 
 .compare-filter-form-heading {
@@ -413,6 +498,8 @@
 @media (max-width: 768px) {
   .compare-modal-body {
     flex-direction: column;
+    padding: 10px;
+    gap: 10px;
   }
   .compare-divider {
     width: 100%;
@@ -425,5 +512,11 @@
   }
   .compare-divider-label {
     writing-mode: horizontal-tb;
+  }
+  .compare-view-actions {
+    justify-content: stretch;
+  }
+  .compare-view-action-btn {
+    flex: 1;
   }
 }

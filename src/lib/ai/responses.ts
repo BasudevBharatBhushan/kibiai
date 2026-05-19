@@ -22,7 +22,7 @@ export async function sendUserPrompt({
     conversationId = await createConversation(conversation_metadata);
   }
 
-  const finalPrompt = `${predefined_prompt}\n${user_prompt}`;
+  const finalPrompt = `${predefined_prompt}\n${user_prompt}\n\nPlease respond in JSON format.`;
 
   const response = await openai.responses.create({
     model: "gpt-4.1",

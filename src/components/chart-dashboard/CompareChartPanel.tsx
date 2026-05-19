@@ -161,7 +161,7 @@ export default function CompareChartPanel({
           </div>
         ) : (
           /* Absolute-fill wrapper: gives Highcharts a concrete px size to compute height:100% */
-          <div style={{ position: 'absolute', inset: 0 }}>
+          <div className="compare-panel-chart-inner">
             <HighchartsReact
               highcharts={Highcharts}
               options={opts}

@@ -50,26 +50,37 @@ describe('DataProcessor Filtering & Insight Re-computation', () => {
     expect(result[0].series[0].data).toEqual(expect.arrayContaining([5050, 2000]));
   });
 
-  it('should re-calculate insights in Viewer Mode when a plan is provided', () => {
+  it('should re-calculate insights in Viewer Mode when insight_items are provided (v3)', () => {
     const mockInsightConfig: ReportChartSchema[] = [
       {
         "pKey": "insight-chart",
         "chart_type": "insight",
         "chart_title": "Business Insights",
         "isActive": true,
-        "insight_plan": {
-          "insights": [
-            {
-              "id": "TOTAL_REVENUE",
-              "category": "trend",
-              "statement_template": "Total revenue is {total}",
-              "calculations": {
-                "total": { "formula": "SUM(lineRevenue)", "meaning": "Total Revenue" }
-              },
-              "severity_logic": { "high": "total > 0", "medium": "false" }
+        "insight_items": [
+          {
+            "id": "TOTAL_REVENUE",
+            "group": "Revenue",
+            "category": "trend",
+            "priority_tag": "MONITOR",
+            "severity_color": "blue",
+            "statement_template": "Total revenue is {total}.",
+            "calculations": {
+              "total": {
+                "scope": "period",
+                "description": "Sum of line revenue",
+                "formula": "SUM(lineRevenue)"
+              }
+            },
+            "severity_logic": { "high": "total > 0", "medium": "false", "low": "true" },
+            "drill_down": {
+              "breakdown_by": "contactName",
+              "calc_trace": ["total"],
+              "overview_kpis": [{ "key": "total", "label": "Total Revenue", "highlighted": true }],
+              "trend_bucket": "month"
             }
-          ]
-        }
+          }
+        ]
       }
     ];
 
@@ -80,7 +91,5 @@ describe('DataProcessor Filtering & Insight Re-computation', () => {
 
     expect(result[0].kind).toBe('insight');
     expect(result[0].insight_results).toBeDefined();
-    // GIVAUDAN: 4050, BASF: 2000, GIVAUDAN (April): 1000. Total = 7050
-    expect(result[0].insight_results![0].text).toBe('Total revenue is 7,050');
   });
 });

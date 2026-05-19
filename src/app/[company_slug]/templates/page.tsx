@@ -19,6 +19,10 @@ import {
   ArrowRight,
   Settings,
   FolderOpen,
+  Pencil,
+  Trash2,
+  Check,
+  X,
 } from "lucide-react";
 import { useHeader } from "@/context/HeaderContext";
 import { useAccessControl } from "@/context/AccessControlContext";
@@ -126,6 +130,83 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedModule, setSelectedModule] = useState("all");
   const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
+
+  // Rename and Delete states
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
+
+  const handleStartRename = (template: any) => {
+    setEditingTemplateId(template.report_template_id);
+    setEditingName(template.report_template_name);
+  };
+
+  const handleCancelRename = () => {
+    setEditingTemplateId(null);
+    setEditingName("");
+  };
+
+  const handleSaveRename = async (templateId: string) => {
+    if (!editingName.trim()) return;
+    try {
+      setIsSaving(true);
+      const res = await apiClient.patch<{ success: boolean; error?: string }>(
+        `/api/company/templates/${templateId}`,
+        { report_template_name: editingName }
+      );
+      if (res.success) {
+        setTemplates((prev) =>
+          prev.map((t) =>
+            t.report_template_id === templateId
+              ? { ...t, report_template_name: editingName.trim() }
+              : t
+          )
+        );
+        if (selectedTemplate?.report_template_id === templateId) {
+          setSelectedTemplate((prev: any) =>
+            prev ? { ...prev, report_template_name: editingName.trim() } : null
+          );
+        }
+        setEditingTemplateId(null);
+        setEditingName("");
+      } else {
+        alert(res.error || "Failed to rename template.");
+      }
+    } catch (err: any) {
+      console.error("Failed to rename template", err);
+      alert(err.message || "An error occurred.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string, name: string) => {
+    const confirmed = confirm(
+      `Are you sure you want to permanently delete "${name}"?\n\nThis will cascade delete all reports, chart templates, and charts generated from this template. This action CANNOT be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingTemplateId(templateId);
+      const res = await apiClient.delete<{ success: boolean; error?: string }>(
+        `/api/company/templates/${templateId}`
+      );
+      if (res.success) {
+        setTemplates((prev) => prev.filter((t) => t.report_template_id !== templateId));
+        if (selectedTemplate?.report_template_id === templateId) {
+          setSelectedTemplate(null);
+        }
+      } else {
+        alert(res.error || "Failed to delete template.");
+      }
+    } catch (err: any) {
+      console.error("Failed to delete template", err);
+      alert(err.message || "An error occurred.");
+    } finally {
+      setDeletingTemplateId(null);
+    }
+  };
 
   useEffect(() => {
     setBreadcrumbs([]);
@@ -371,17 +452,83 @@ export default function TemplatesPage() {
                               )}>
                                 <FileText size={15} />
                               </div>
-                              <div className="min-w-0">
-                                <div className={clsx(
-                                  "text-sm font-semibold truncate leading-tight",
-                                  isSelected ? "text-indigo-700" : "text-slate-800 group-hover:text-indigo-700"
-                                )}>
-                                  {template.report_template_name}
+                              {editingTemplateId === template.report_template_id ? (
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="text"
+                                    value={editingName}
+                                    onChange={(e) => setEditingName(e.target.value)}
+                                    className="w-full text-sm font-semibold px-2 py-1 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-150 text-slate-800 bg-slate-50"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleSaveRename(template.report_template_id);
+                                      else if (e.key === "Escape") handleCancelRename();
+                                    }}
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => handleSaveRename(template.report_template_id)}
+                                    disabled={isSaving}
+                                    className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 hover:text-emerald-700 hover:scale-105 active:scale-95 transition-all duration-150 disabled:opacity-50"
+                                    title="Save"
+                                  >
+                                    <Check size={14} className="stroke-[2.5]" />
+                                  </button>
+                                  <button
+                                    onClick={handleCancelRename}
+                                    disabled={isSaving}
+                                    className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-600 hover:text-rose-700 hover:scale-105 active:scale-95 transition-all duration-150 disabled:opacity-50"
+                                    title="Cancel"
+                                  >
+                                    <X size={14} className="stroke-[2.5]" />
+                                  </button>
                                 </div>
-                                <div className="text-[11px] text-slate-400 mt-0.5">
-                                  v{template.version_number} · {template.report_template_id.split("-")[0]}
+                              ) : (
+                                <div className="flex items-center justify-between flex-1 min-w-0">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <div className={clsx(
+                                        "text-sm font-semibold truncate leading-tight transition-colors duration-150",
+                                        isSelected ? "text-indigo-700" : "text-slate-800 group-hover:text-indigo-700"
+                                      )}>
+                                        {template.report_template_name}
+                                      </div>
+                                      {deletingTemplateId === template.report_template_id && (
+                                        <span className="text-[10px] text-rose-500 font-medium animate-pulse shrink-0">deleting...</span>
+                                      )}
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 mt-0.5">
+                                      v{template.version_number} · {template.report_template_id.split("-")[0]}
+                                    </div>
+                                  </div>
+
+                                  {/* Inline Edit/Delete Actions for Authorized Admins */}
+                                  {activeView === "admin" && deletingTemplateId !== template.report_template_id && (
+                                    <div 
+                                      className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-2 shrink-0"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {can("modify_template", template.report_template_id) && (
+                                        <button
+                                          onClick={() => handleStartRename(template)}
+                                          className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600 hover:scale-110 active:scale-95 transition-all duration-150"
+                                          title="Rename Template"
+                                        >
+                                          <Pencil size={13} className="stroke-[2.2]" />
+                                        </button>
+                                      )}
+                                      {can("delete_template", template.report_template_id) && (
+                                        <button
+                                          onClick={() => handleDeleteTemplate(template.report_template_id, template.report_template_name)}
+                                          className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 hover:scale-110 active:scale-95 transition-all duration-150"
+                                          title="Delete Template"
+                                        >
+                                          <Trash2 size={13} className="stroke-[2.2]" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
+                              )}
                             </div>
                           </td>
 

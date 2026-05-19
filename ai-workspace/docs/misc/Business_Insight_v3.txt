@@ -1,0 +1,682 @@
+You are upgrading an existing v2 Executive Insight Engine into a fully interactive v3 Narrative Analytics Runtime.
+
+The current v2 engine is ALREADY IMPLEMENTED and WORKING.
+
+Your task is to extend it to support:
+- drill-down modals
+- KPI overview cards
+- grouped breakdown tables
+- trend visualizations
+- calculation trace explainability
+- scoped calculations
+- runtime narratives
+
+WITHOUT breaking the current architecture.
+
+==================================================
+CORE ARCHITECTURE (MUST PRESERVE)
+==================================================
+
+AI = planner only
+JS = executor only
+
+AI NEVER:
+- sees real data
+- computes metrics
+- evaluates formulas
+- renders charts
+
+AI ONLY:
+- defines formulas
+- defines metadata
+- defines templates
+- defines drill-down configs
+
+JS:
+- evaluates formulas
+- scans datasets
+- groups records
+- computes metrics
+- generates chart series
+- injects placeholders
+- renders UI
+
+This separation is ABSOLUTE.
+
+==================================================
+TARGET UI CAPABILITIES
+==================================================
+
+The upgraded engine must support:
+
+1. Executive Insight Card
+- headline insight
+- contextual summary
+- severity state
+- category tags
+
+2. Overview Tab
+- KPI metric cards
+- comparison summaries
+- target/run-rate metrics
+- decision/risk/action callouts
+
+3. Breakdown Tab
+- grouped analytics
+- contribution/share %
+- ranked breakdown tables
+- distribution bars
+
+4. Trend Tab
+- weekly/monthly/daily trend series
+- bucketed time aggregation
+- chart-ready datasets
+
+5. Calculation Trace Tab
+- explainability
+- ordered calculation chain
+- scope visibility
+- formula transparency
+
+==================================================
+NEW INPUT FORMAT
+==================================================
+
+{
+  "module": "string",
+
+  "fields": {
+    "fieldName": "date|number|text|boolean"
+  },
+
+  "data_stats": {
+    "fieldName": {
+      "avg": n,
+      "max": n,
+      "min": n
+    }
+  },
+
+  "report_period": {
+    "start": "REPORT_START",
+    "end": "REPORT_END",
+    "previous_start": "PREV_START",
+    "previous_end": "PREV_END",
+    "midpoint": "REPORT_MIDPOINT"
+  },
+
+  "targets": {
+    "metricName": "TARGET_METRICNAME"
+  }
+}
+
+==================================================
+NEW OUTPUT FORMAT
+==================================================
+
+AI MUST return JSON array.
+
+Each insight MUST contain:
+
+{
+  "id": "",
+  "group": "",
+  "category": "",
+  "priority_tag": "",
+  "severity_color": "",
+
+  "statement_template": "",
+
+  "summary_template": "",
+
+  "calculations": {},
+
+  "severity_logic": {},
+
+  "risk_callout": "",
+  "decision_callout": "",
+  "action_callout": "",
+
+  "data_quality_check": {},
+
+  "drill_down": {},
+
+  "visualization": {}
+}
+
+==================================================
+SCOPED CALCULATION MODEL
+==================================================
+
+Each calculation MUST define:
+
+{
+  "scope": "per_record|period|derived"
+}
+
+------------------------------------------
+1. per_record
+------------------------------------------
+
+Meaning:
+- evaluate once per dataset row
+- create runtime virtual field
+
+Example:
+
+{
+  "line_amount": {
+    "scope": "per_record",
+    "formula": "quantity * unitPrice"
+  }
+}
+
+JS behavior:
+- iterate dataset
+- compute value for each row
+- append runtime derived field
+
+------------------------------------------
+2. period
+------------------------------------------
+
+Meaning:
+- aggregate over filtered report window
+
+Example:
+
+{
+  "cur_revenue": {
+    "scope": "period",
+    "formula": "SUMIFS(line_amount, saleDate, \">=\" & REPORT_START, saleDate, \"<=\" & REPORT_END)"
+  }
+}
+
+JS behavior:
+- filter rows
+- aggregate values
+- return scalar metric
+
+------------------------------------------
+3. derived
+------------------------------------------
+
+Meaning:
+- compute from already resolved metrics
+
+Example:
+
+{
+  "delta_pct": {
+    "scope": "derived",
+    "formula": "IFERROR(((cur_revenue-prev_revenue)/prev_revenue)*100,0)"
+  }
+}
+
+JS behavior:
+- resolve from metric registry
+- no dataset scan
+
+==================================================
+DEPENDENCY EXECUTION ENGINE
+==================================================
+
+Implement dependency-aware execution.
+
+Requirements:
+- build calculation dependency graph
+- topologically sort calculations
+- execute dependencies first
+- detect circular references
+
+Example chain:
+
+line_amount
+    ↓
+cur_revenue
+    ↓
+delta_pct
+
+==================================================
+VIRTUAL FIELD MATERIALIZATION
+==================================================
+
+per_record calculations create runtime fields.
+
+Example:
+
+line_amount = quantity * unitPrice
+
+JS must internally materialize:
+
+{
+  "__derived": {
+    "line_amount": 1200
+  }
+}
+
+These virtual fields must be reusable by:
+- SUM
+- SUMIFS
+- AVERAGE
+- derived calculations
+
+==================================================
+SUPPORTED FORMULAS
+==================================================
+
+ONLY support:
+
+SUM
+SUMIFS
+COUNTIFS
+AVERAGE
+MIN
+MAX
+IF
+AND
+OR
+ABS
+ROUND
+IFERROR
+
+DO NOT:
+- introduce SQL
+- introduce DSLs
+- redesign parser
+- add arbitrary expressions
+
+Reuse existing formula engine.
+
+==================================================
+BREAKDOWN ENGINE
+==================================================
+
+drill_down.breakdown_by introduces grouped analytics.
+
+Example:
+
+{
+  "breakdown_by": "salesRep"
+}
+
+JS must:
+- partition dataset
+- compute same metrics per group
+- generate grouped result sets
+
+Example runtime result:
+
+{
+  "Alice": {
+    "revenue": 14030
+  },
+
+  "Bob": {
+    "revenue": 6280
+  }
+}
+
+==================================================
+BREAKDOWN TABLE SUPPORT
+==================================================
+
+JS must support:
+- contribution/share %
+- ranked sorting
+- distribution bars
+- top-N rendering
+
+Example:
+
+| Rep   | Revenue | Share |
+|--------|----------|-------|
+| Alice | 14030 | 36% |
+
+Share formula example:
+
+share_pct =
+(group_value / total_value) * 100
+
+This is JS runtime logic.
+
+AI only defines:
+- metric
+- grouping field
+
+==================================================
+TREND ENGINE
+==================================================
+
+AI may define:
+
+{
+  "trend_bucket": "day|week|month"
+}
+
+AND:
+
+{
+  "visualization": {
+    "trend_metric": "cur_revenue",
+    "date_field": "saleDate"
+  }
+}
+
+JS must:
+- bucket rows by period
+- aggregate metric by bucket
+- generate chart-ready series
+
+Example:
+
+[
+  { "label": "WK1", "value": 10090 },
+  { "label": "WK2", "value": 10230 }
+]
+
+==================================================
+CALCULATION TRACE TAB
+==================================================
+
+AI provides:
+
+{
+  "calc_trace": [
+    "line_amount",
+    "cur_revenue",
+    "delta_pct"
+  ]
+}
+
+JS renders:
+- ordered dependency chain
+- formula explanations
+- scope type
+- resolved values
+
+UI example:
+
+line_amount
+quantity * unitPrice
+(per_record)
+
+cur_revenue
+SUMIFS(line_amount, ...)
+(period)
+
+==================================================
+OVERVIEW KPI SUPPORT
+==================================================
+
+AI provides:
+
+{
+  "overview_kpis": [
+    {
+      "key": "cur_revenue",
+      "label": "Current Revenue",
+      "highlighted": true
+    }
+  ]
+}
+
+JS resolves:
+- metric values
+- formatting
+- comparison chips
+- trend indicators
+
+==================================================
+SEVERITY ENGINE
+==================================================
+
+severity_logic may reference:
+- avg
+- max
+- min
+
+Example:
+
+{
+  "high": "delta_pct > avg * 1.2"
+}
+
+JS must:
+- inject stat values
+- evaluate expressions safely
+- resolve severity state
+
+==================================================
+NATURAL LANGUAGE TOKENS
+==================================================
+
+JS owns dynamic wording.
+
+Supported runtime placeholders:
+
+trend_direction
+
+positive:
+"increased"
+
+negative:
+"declined"
+
+zero:
+"remained stable"
+
+==================================================
+DATA QUALITY VALIDATION
+==================================================
+
+Each insight may contain:
+
+{
+  "data_quality_check": {
+    "required": true,
+    "min_threshold": 5
+  }
+}
+
+JS must:
+- validate record count
+- suppress weak insights
+- optionally show low-confidence warnings
+
+==================================================
+VISUALIZATION CONFIG
+==================================================
+
+AI may define:
+
+{
+  "visualization": {
+    "type": "line|bar|table",
+    "trend_metric": "",
+    "date_field": "",
+    "breakdown_metric": "",
+    "sort_by": "",
+    "limit": 5
+  }
+}
+
+AI NEVER renders charts.
+
+JS/frontend controls:
+- rendering library
+- axes
+- colors
+- formatting
+- animations
+
+==================================================
+STRICT VALIDATION RULES
+==================================================
+
+Before execution validate:
+
+- referenced fields exist
+- referenced calculations exist
+- supported functions only
+- scopes valid
+- no circular dependencies
+- placeholders valid
+- breakdown_by field exists
+- trend metric exists
+
+Reject invalid insights.
+
+==================================================
+IMPORTANT ARCHITECTURAL CONSTRAINT
+==================================================
+
+Do NOT evolve this into:
+- SQL engine
+- OLAP cube
+- generalized BI platform
+- distributed analytics system
+
+This system is:
+
+Narrative Executive Analytics Runtime
+
+NOT:
+Full Business Intelligence Infrastructure.
+
+Keep:
+- deterministic execution
+- explainable metrics
+- bounded complexity
+- formula-driven runtime
+
+==================================================
+FINAL OBJECTIVE
+==================================================
+
+The upgraded v3 runtime must support:
+
+- executive insight cards
+- narrative summaries
+- KPI overview tabs
+- grouped breakdown tables
+- trend visualizations
+- calculation explainability
+- drill-down modals
+
+while preserving:
+
+- AI planner / JS executor separation
+- privacy safety
+- existing formula evaluator
+- deterministic execution
+- transparent metric lineage
+
+
+Sample System Instruction
+
+You are a Business Insight Planner for an Executive Insight Engine with drill-down modals.
+You analyze field schemas and output structured JSON insight arrays.
+You NEVER see actual data — only field names, types, and optional data_stats.
+
+## INPUT FORMAT
+{
+  "module": "string",
+  "fields": { "fieldName": "date|number|text|boolean" },
+  "data_stats": { "fieldName": { "avg": n, "max": n, "min": n } },  // optional
+  "report_period": {
+    "start": "REPORT_START", "end": "REPORT_END",
+    "previous_start": "PREV_START", "previous_end": "PREV_END",
+    "midpoint": "REPORT_MIDPOINT"
+  },
+  "targets": { "metricName": "TARGET_METRICNAME" }  // optional
+}
+
+## OUTPUT FORMAT
+Return a JSON array. Each element must follow the v3 schema exactly.
+Required top-level fields:
+  id, group, category, priority_tag, severity_color,
+  statement_template, calculations, severity_logic, drill_down
+
+## RULES — v3 (replace v2 rules entirely)
+
+### Card rules
+1. statement_template must be a complete plain-language sentence.
+2. Formulas ONLY use: SUM SUMIFS COUNTIFS AVERAGE MIN MAX IF AND OR ABS ROUND IFERROR
+3. Use scope: "per_record" for row-level, "period" for filtered aggregates, "derived" for calc-on-calc.
+4. severity_logic thresholds MUST reference named calculation keys — never raw literals
+   unless data_stats is absent.
+5. If data_stats provided, set thresholds relative to avg/max (e.g., "value > avg * 1.2").
+6. risk_callout must name a SPECIFIC consequence (not "performance may suffer").
+7. decision_callout must frame a BINARY or BOUNDED choice.
+8. action_callout must be a CONCRETE next step with at least one {calc_ref}.
+9. Generate 3–6 insights per module. Prioritize actionability over volume.
+
+### Drill-down rules (NEW in v3)
+10. EVERY insight object MUST include a "drill_down" block.
+11. drill_down.breakdown_by must be a field name present in the input schema.
+12. drill_down.calc_trace must be an ORDERED array — dependencies before the
+    calculations that reference them. The Engine renders them top-to-bottom.
+13. drill_down.overview_kpis may include up to 6 items. Mark at most 2 as highlighted:true.
+14. drill_down.trend_bucket defaults to "week". Use "day" only if period < 14 days,
+    "month" only if period > 90 days.
+
+### Data quality
+15. Always include data_quality_check for any insight using SUMIFS or COUNTIFS.
+16. Set min_threshold to the minimum records needed for the insight to be meaningful
+    (typically 5 for averages, 3 for totals).
+
+### Natural language placeholders
+17. Use "trend_direction" when delta can be positive or negative.
+    JS resolves: positive → "increased", negative → "declined".
+18. Use "consecutive_periods" when period history is available.
+    JS resolves: counts streak of same-direction delta.
+JS Engine API Reference
+Engine public API
+JavaScript
+// ── Entry points ──────────────────────────────────────────────────────
+Engine.run()
+  // Recalculates all insights from Engine.data and re-renders cards.
+  // Call this after updating Engine.data.records from any fetch().
+
+Engine.data = {
+  module: "string",
+  reportStart: "YYYY-MM-DD",  reportEnd: "YYYY-MM-DD",
+  previousStart: "YYYY-MM-DD", previousEnd: "YYYY-MM-DD",
+  target_revenue: 80000,       // any TARGET_* constant
+  records: [ { fieldName: value } ]
+}
+
+// ── Swap data source at runtime ───────────────────────────────────────
+fetch('/api/sales?start=2026-04-01&end=2026-04-30')
+  .then(r => r.json())
+  .then(data => {
+    Engine.data = data;
+    Engine.run();
+  });
+
+// ── FileMaker Data API integration ────────────────────────────────────
+fetch('https://fm-server/fmi/data/v2/databases/DB/layouts/Sales/records?_limit=2000', {
+  headers: { 'Authorization': 'Bearer ' + FM_TOKEN }
+})
+.then(r => r.json())
+.then(resp => {
+  Engine.data.records = resp.response.data.map(r => r.fieldData);
+  Engine.run();
+});
+
+// ── Add a new insight definition ──────────────────────────────────────
+// Paste AI-generated JSON object into buildInsightDefs() return array.
+// The Engine automatically renders card + wires up drill-down modal.
+// No other code changes needed.
+
+// ── Internal methods (do not call directly) ───────────────────────────
+Engine.inPeriod(rec, start, end)          // date range filter
+Engine.buildInsightDefs()               // returns insight def array
+Engine.buildCard(ins)                   // returns HTMLElement
+Engine.openDrill(ins)                   // opens modal, populates all 4 tabs
+Engine.renderBreakdown(ins)             // Breakdown tab
+Engine.renderTrend(ins)                // Trend tab (SVG line chart)
+Engine.renderTrace(ins)                // Calculation Trace tab
+Engine.computed                         // last computed values object (read-only)
+

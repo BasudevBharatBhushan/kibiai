@@ -1,13 +1,23 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Lightbulb } from "lucide-react";
 import type { InsightResult, InsightCategory } from "@/lib/insights/types";
+import { isInsightResult } from "@/lib/insights/types";
+
 import { InsightCard, InsightCardStyles } from "./InsightCard";
+import { InsightDrillDownModal } from "./InsightDrillDownModal";
 
 interface InsightDashboardProps {
   insights: InsightResult[];
   isLoading: boolean;
+  /** Optional: passed to the drill-down modal for date-context substitution */
+  reportContext?: {
+    reportStart?: string;
+    reportEnd?: string;
+    previousStart?: string;
+    previousEnd?: string;
+  };
 }
 
 // Category display order and labels for section headers
@@ -75,7 +85,9 @@ function EmptyState() {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function InsightDashboard({ insights, isLoading }: InsightDashboardProps) {
+export function InsightDashboard({ insights, isLoading, reportContext }: InsightDashboardProps) {
+  const [drillDownInsight, setDrillDownInsight] = useState<InsightResult | null>(null);
+
   // Group insights by category
   const grouped: Partial<Record<InsightCategory, InsightResult[]>> = {};
   for (const ins of insights) {
@@ -86,29 +98,59 @@ export function InsightDashboard({ insights, isLoading }: InsightDashboardProps)
   // Global card index for staggered animation
   let globalIndex = 0;
 
+  const handleDrillDown = (insight: InsightResult) => {
+    setDrillDownInsight(insight);
+  };
+
+  const handleModalClose = () => {
+    setDrillDownInsight(null);
+  };
+
   return (
-    <div className="h-full overflow-y-auto scrollbar-minimal px-4 py-4 flex flex-col gap-6">
-      <InsightCardStyles />
+    <>
+      <div className="h-full overflow-y-auto scrollbar-minimal px-4 py-4 flex flex-col gap-6">
+        <InsightCardStyles />
 
-      {isLoading && <InsightSkeleton />}
+        {isLoading && <InsightSkeleton />}
 
-      {!isLoading && insights.length === 0 && <EmptyState />}
+        {!isLoading && insights.length === 0 && <EmptyState />}
 
-      {!isLoading &&
-        CATEGORY_ORDER.filter((cat) => grouped[cat]?.length).map((cat) => (
-          <section key={cat} className="flex flex-col gap-3">
-            {/* Section header */}
-            <h4 className="text-[11px] font-bold uppercase tracking-widest text-slate-400 px-1">
-              {CATEGORY_LABELS[cat]}
-            </h4>
+        {!isLoading &&
+          CATEGORY_ORDER.filter((cat) => grouped[cat]?.length).map((cat) => (
+            <section key={cat} className="flex flex-col gap-3">
+              {/* Section header */}
+              <h4 className="text-[11px] font-bold uppercase tracking-widest text-slate-400 px-1">
+                {CATEGORY_LABELS[cat]}
+              </h4>
 
-            {/* Cards */}
-            {grouped[cat]!.map((insight) => {
-              const idx = globalIndex++;
-              return <InsightCard key={insight.id} insight={insight} index={idx} />;
-            })}
-          </section>
-        ))}
-    </div>
+              {/* Cards */}
+              {grouped[cat]!.map((insight) => {
+                const idx = globalIndex++;
+                return (
+                  <InsightCard
+                    key={insight.id}
+                    insight={insight}
+                    index={idx}
+                    onDrillDown={
+                      isInsightResult(insight)
+                        ? handleDrillDown
+                        : undefined
+                    }
+                  />
+                );
+              })}
+            </section>
+          ))}
+      </div>
+
+      {/* v3 Drill-Down Modal */}
+      {drillDownInsight && (
+        <InsightDrillDownModal
+          insight={drillDownInsight}
+          onClose={handleModalClose}
+          context={reportContext}
+        />
+      )}
+    </>
   );
 }

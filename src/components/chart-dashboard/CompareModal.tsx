@@ -9,7 +9,7 @@ import { useDashboard } from '@/context/DashboardContext';
 import { useToast } from '@/context/ToastContext';
 import { processData } from '@/lib/charts/DataProcessor';
 import { buildInsightContextFromReportConfig } from '@/lib/charts/insightContextBuilder';
-import type { ChartConfig, ReportChartSchema, InsightContext } from '@/lib/charts/ChartTypes';
+import type { ChartConfig, ReportChartSchema } from '@/lib/charts/ChartTypes';
 import { COLOR_PALETTES } from '@/lib/charts/ChartTypes';
 import { apiClient } from '@/utils/apiClient';
 
@@ -43,7 +43,7 @@ interface TemplatePayload {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /** Extract all date-range entries from config, resolved against setup labels */
-function extractDateRangeEntries(
+export function extractDateRangeEntries(
   configJson: Record<string, unknown> | null,
   setupJson: Record<string, unknown> | null
 ) {
@@ -75,7 +75,7 @@ function extractDateRangeEntries(
 }
 
 /** Extract all non-date filter entries from config */
-function extractFilterEntries(
+export function extractFilterEntries(
   configJson: Record<string, unknown> | null,
   setupJson: Record<string, unknown> | null
 ) {
@@ -104,16 +104,35 @@ function extractFilterEntries(
   return entries;
 }
 
-function toIsoDateLocal(dStr: string): string {
+export function toIsoDateLocal(dStr: string): string {
   if (!dStr) return '';
   const d = new Date(dStr);
   if (isNaN(d.getTime())) return dStr;
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-import { AdHocFilterBuilder, AdHocDateRangeBuilder, CollapsibleSection, type AdHocFilter, type AdHocDateRange, parseSavedFilterValue } from "@/components/report-configurator/ReportFiltersUI";
+import { AdHocFilterBuilder, AdHocDateRangeBuilder, CollapsibleSection, type AdHocFilter, type AdHocDateRange } from "@/components/report-configurator/ReportFiltersUI";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { Plus, SlidersHorizontal, Clock, RefreshCw } from "lucide-react";
+
+type TemplateFieldDefinition = {
+  label?: string;
+  type?: string;
+};
+
+type TemplateSetupJson = {
+  tables?: Record<string, { fields?: Record<string, TemplateFieldDefinition> }>;
+};
+
+type ReportFieldRef = {
+  table?: string;
+  field?: string;
+};
+
+type RuntimeFilterPayload = {
+  date_range_fields?: Record<string, Record<string, string>>;
+  filters?: Record<string, Record<string, string>>;
+};
 
 function InlineReportFilterForm({
   templateId,
@@ -136,14 +155,15 @@ function InlineReportFilterForm({
     if (!templateConfigJson || !templateSetupJson) return [];
     
     const fieldMap = new Map<string, { table: string; field: string; label: string; type: string }>();
+    const setupTables = (templateSetupJson as TemplateSetupJson).tables ?? {};
 
     // 1. Fields from Columns
-    const columns = (templateConfigJson.report_columns as any[]) || [];
+    const columns = (templateConfigJson.report_columns as ReportFieldRef[] | undefined) ?? [];
     columns.forEach((col) => {
       if (!col.table || !col.field || col.table === "calculated") return;
       const key = `${col.table}.${col.field}`;
       if (!fieldMap.has(key)) {
-        const fieldDef = (templateSetupJson.tables as any)?.[col.table]?.fields?.[col.field];
+        const fieldDef = setupTables[col.table]?.fields?.[col.field];
         fieldMap.set(key, { 
           table: col.table, 
           field: col.field, 
@@ -154,12 +174,12 @@ function InlineReportFilterForm({
     });
 
     // 2. Fields from Grouping
-    const groups = (templateConfigJson.group_by_fields as Record<string, any>) || {};
+    const groups = (templateConfigJson.group_by_fields as Record<string, ReportFieldRef> | undefined) ?? {};
     Object.values(groups).forEach((group) => {
       if (!group.table || !group.field) return;
       const key = `${group.table}.${group.field}`;
       if (!fieldMap.has(key)) {
-        const fieldDef = (templateSetupJson.tables as any)?.[group.table]?.fields?.[group.field];
+        const fieldDef = setupTables[group.table]?.fields?.[group.field];
         fieldMap.set(key, { 
           table: group.table, 
           field: group.field, 
@@ -180,14 +200,14 @@ function InlineReportFilterForm({
   const [adHocFilters, setAdHocFilters] = useState<AdHocFilter[]>([]);
 
   // ── Template Base Fields ──
-  const dateRangeFields: Record<string, Record<string, string>> = (templateConfigJson?.date_range_fields as any) || {};
-  const filterFields: Record<string, Record<string, any>> = (templateConfigJson?.filters as any) || {};
+  const dateRangeFields = (templateConfigJson?.date_range_fields as Record<string, Record<string, string>> | undefined) ?? {};
+  const filterFields = (templateConfigJson?.filters as Record<string, Record<string, unknown>> | undefined) ?? {};
 
   // ── Submit → POST /api/templates/[id]/generate ──
   const handleSubmit = useCallback(async () => {
-    const payload: any = {};
+    const payload: RuntimeFilterPayload = {};
 
-    const drPayload: any = {};
+    const drPayload: Record<string, Record<string, string>> = {};
     Object.entries(dateRanges).forEach(([table, fields]) => {
       Object.entries(fields).forEach(([field, { from, to }]) => {
         if (from && to) {
@@ -206,7 +226,7 @@ function InlineReportFilterForm({
 
     if (Object.keys(drPayload).length) payload.date_range_fields = drPayload;
 
-    const cfPayload: any = {};
+    const cfPayload: Record<string, Record<string, string>> = {};
     Object.entries(configFilters).forEach(([table, fields]) => {
       Object.entries(fields).forEach(([field, val]) => {
         if (val) { if (!cfPayload[table]) cfPayload[table] = {}; cfPayload[table][field] = val; }
@@ -229,13 +249,13 @@ function InlineReportFilterForm({
 
     setIsGenerating(true);
     try {
-      const res = await apiClient.post<{ success: boolean; data: { report_id: string } }>(
+      const res = await apiClient.post<{ success: boolean; data?: { report_id: string }; error?: string }>(
         `/api/templates/${templateId}/generate`,
         { runtime_filters: payload }
       );
 
       if (!res.success || !res.data?.report_id) {
-        throw new Error((res as any).error ?? 'Report generation did not return a report ID.');
+        throw new Error(res.error ?? 'Report generation did not return a report ID.');
       }
       onSubmit(res.data.report_id);
     } catch (err: unknown) {
@@ -250,7 +270,7 @@ function InlineReportFilterForm({
   }, [dateRanges, adHocDateRanges, configFilters, adHocFilters, templateId, onSubmit, addToast]);
 
   return (
-    <div className="flex flex-col space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+    <div className="compare-filter-form scrollbar-minimal">
       <div className="flex justify-between items-center mb-2">
         <p className="compare-filter-form-heading m-0">Generate with New Filter</p>
         <button
@@ -367,6 +387,35 @@ function LoadingSkeleton({ message }: { message: string }) {
   );
 }
 
+function ComparisonActions({
+  onPickAnother,
+  onNewFilter,
+}: {
+  onPickAnother: () => void;
+  onNewFilter: () => void;
+}) {
+  return (
+    <div className="compare-view-actions">
+      <button
+        type="button"
+        className="compare-view-action-btn"
+        onClick={onPickAnother}
+      >
+        <ArrowLeft size={13} />
+        Select Another
+      </button>
+      <button
+        type="button"
+        className="compare-view-action-btn compare-view-action-btn--primary"
+        onClick={onNewFilter}
+      >
+        <SlidersHorizontal size={13} />
+        New Filter
+      </button>
+    </div>
+  );
+}
+
 // ── Main Modal ─────────────────────────────────────────────────────────────────
 
 interface CompareModalProps {
@@ -383,7 +432,7 @@ export default function CompareModal({
   onClose,
 }: CompareModalProps) {
   const params = useParams();
-  const { templateId, isViewerMode, dataset: primaryDataset } = useDashboard();
+  const { templateId, isViewerMode } = useDashboard();
   const { addToast } = useToast();
 
   // Current report id from URL (user viewer mode only)
@@ -512,18 +561,6 @@ export default function CompareModal({
     init();
   }, [addToast, isViewerMode, primarySourceMeta, reportId, templateId]);
 
-  // ── Build primary InsightContext from the primaryConfig's date range ──
-  const primaryInsightContext = useMemo<InsightContext | undefined>(() => {
-    if (primaryConfig.report_date_range?.start) {
-      return {
-        reportStart: primaryConfig.report_date_range.start,
-        reportEnd: primaryConfig.report_date_range.end,
-        reportDateField: primaryConfig.report_date_range.field,
-      };
-    }
-    return undefined;
-  }, [primaryConfig]);
-
   // ── Handle: user picks a report from the history list ──
   const handleSelectReport = useCallback(
     async (report: ReportListItem) => {
@@ -584,7 +621,7 @@ export default function CompareModal({
         setRightPanelState('PICKING');
       }
     },
-    [addToast, primaryConfig.id]
+    [addToast, primaryConfig.colors, primaryConfig.id]
   );
 
   // ── Handle: new report generated from InlineReportFilterForm ──
@@ -605,6 +642,18 @@ export default function CompareModal({
     },
     [handleSelectReport, templateId]
   );
+
+  const handlePickAnother = useCallback(() => {
+    setRightPanelError(null);
+    setComparisonChartConfig(null);
+    setComparisonSourceMeta(null);
+    setRightPanelState('PICKING');
+  }, []);
+
+  const handleOpenNewFilter = useCallback(() => {
+    setRightPanelError(null);
+    setRightPanelState('NEW_FILTER');
+  }, []);
 
   // ── Labels ──
   // User mode: "Current Report" / "Comparison"
@@ -669,7 +718,7 @@ export default function CompareModal({
                 currentReportId={reportId}
                 templateSetupJson={templateSetupJson}
                 onSelectReport={handleSelectReport}
-                onNewFilter={() => setRightPanelState('NEW_FILTER')}
+                onNewFilter={handleOpenNewFilter}
               />
             )}
 
@@ -687,54 +736,45 @@ export default function CompareModal({
                 templateConfigJson={templateConfigJson}
                 templateSetupJson={templateSetupJson}
                 onSubmit={handleNewReportGenerated}
-                onCancel={() => setRightPanelState('PICKING')}
+                onCancel={handlePickAnother}
               />
             )}
 
             {rightPanelState === 'VIEWING' && rightPanelError && (
-              <div className="compare-panel-empty" style={{ padding: 32 }}>
-                <AlertTriangle
-                  size={32}
-                  strokeWidth={1.5}
-                  style={{ color: '#f59e0b' }}
+              <div className="compare-view-shell">
+                <ComparisonActions
+                  onPickAnother={handlePickAnother}
+                  onNewFilter={handleOpenNewFilter}
                 />
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#78350f', margin: 0 }}>
-                  Comparison Not Available
-                </p>
-                <p style={{ fontSize: 12, color: '#92400e', marginTop: 4, textAlign: 'center' }}>
-                  {rightPanelError}
-                </p>
-                <button
-                  onClick={() => {
-                    setRightPanelError(null);
-                    setRightPanelState('PICKING');
-                  }}
-                  style={{
-                    marginTop: 12,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontSize: 12,
-                    color: '#2563eb',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                  }}
-                >
-                  <ArrowLeft size={13} />
-                  Pick another report
-                </button>
+                <div className="compare-panel-empty">
+                  <AlertTriangle
+                    size={32}
+                    strokeWidth={1.5}
+                    style={{ color: '#f59e0b' }}
+                  />
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#78350f', margin: 0 }}>
+                    Comparison Not Available
+                  </p>
+                  <p style={{ fontSize: 12, color: '#92400e', marginTop: 4, textAlign: 'center' }}>
+                    {rightPanelError}
+                  </p>
+                </div>
               </div>
             )}
 
             {rightPanelState === 'VIEWING' && !rightPanelError && comparisonChartConfig && (
-              <CompareChartPanel
-                config={comparisonChartConfig}
-                sourceMeta={comparisonSourceMeta}
-                label="Comparison"
-                labelColor="purple"
-              />
+              <div className="compare-view-shell">
+                <ComparisonActions
+                  onPickAnother={handlePickAnother}
+                  onNewFilter={handleOpenNewFilter}
+                />
+                <CompareChartPanel
+                  config={comparisonChartConfig}
+                  sourceMeta={comparisonSourceMeta}
+                  label="Comparison"
+                  labelColor="purple"
+                />
+              </div>
             )}
           </div>
         </div>
