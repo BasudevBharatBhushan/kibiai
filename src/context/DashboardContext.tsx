@@ -160,7 +160,10 @@ export function DashboardProvider({
 
     // 1. Process Data — context passed here so viewer-mode filter bypass applies
     const processed = processData(initialDataset || [], initialSchemas, context, fieldSchemas);
-    console.log("[Ctx] Processed Charts:", processed.map(c => ({ id: c.id, title: c.title, isActive: c.isActive })));
+    console.group('[Ctx] Init — processData output');
+    console.log('[Ctx] Processed Charts:', processed.map(c => ({ id: c.id, title: c.title, isActive: c.isActive, kind: c.kind })));
+    console.log('[Ctx] initialCanvasState from DB:', initialCanvasState?.map((s: any) => ({ id: s.id, isActive: s.isActive })));
+    console.groupEnd();
 
     // 2. Assign Defaults
     const defaultW = PROCESSOR_DEFAULTS?.LAYOUT_WIDTH || 6;
@@ -244,17 +247,23 @@ export function DashboardProvider({
       initialVisibleIds = new Set(savedActiveIds.filter((id: string) => existingIds.has(id)));
 
       const stateChartIds = new Set(initialCanvasState.map((s: any) => s.id));
+
+      console.group('[Ctx] Init — visibility resolution');
+      console.log('[Ctx] stateChartIds:', [...stateChartIds]);
+      console.log('[Ctx] inactiveParentIds:', [...inactiveParentIds]);
+      console.log('[Ctx] initialVisibleIds after saved-state merge:', [...initialVisibleIds]);
       finalCharts.forEach(c => {
         if (!stateChartIds.has(c.id) && c.isActive) {
-          // Check if this chart's parent ID has been explicitly deactivated.
-          // If so, DO NOT activate this sub-card — it was removed by the user.
           const parentId = resolveParentId(c.id);
           const parentIsInactive = inactiveParentIds.has(parentId);
+          console.log(`[Ctx] Fallback check id="${c.id}" parentId="${parentId}" parentIsInactive=${parentIsInactive} → ${parentIsInactive ? 'BLOCKED (was removed)' : 'ACTIVATED (new chart)'}`);
           if (!parentIsInactive) {
             initialVisibleIds.add(c.id);
           }
         }
       });
+      console.log('[Ctx] FINAL visibleIds:', [...initialVisibleIds]);
+      console.groupEnd();
     }
 
     setAllCharts(finalCharts);

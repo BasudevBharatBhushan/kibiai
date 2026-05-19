@@ -162,12 +162,31 @@ export function runBreakdownEngine(
   opts?: BreakdownOptions
 ): BreakdownRow[] {
   const breakdownFieldRaw = plan.drill_down?.breakdown_by;
-  if (!breakdownFieldRaw) return [];
+
+  // ─── DIAGNOSTIC LOGGING ───────────────────────────────────────────────────
+  console.group(`[BreakdownEngine] plan="${plan.id}"`);
+  console.log('[BreakdownEngine] breakdown_by (raw from plan):', breakdownFieldRaw);
+  console.log('[BreakdownEngine] dataset.length:', dataset.length);
+  if (dataset.length > 0) {
+    console.log('[BreakdownEngine] dataset[0] keys:', Object.keys(dataset[0]));
+    console.log('[BreakdownEngine] dataset[0] sample:', JSON.stringify(dataset[0]).slice(0, 300));
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  if (!breakdownFieldRaw) {
+    console.warn('[BreakdownEngine] No breakdown_by field defined — returning []');
+    console.groupEnd();
+    return [];
+  }
 
   const limit = opts?.limit ?? plan.visualization?.limit ?? 10;
   const workset = dataset.slice(0, MAX_BREAKDOWN_RECORDS);
 
   const breakdownField = workset.length > 0 ? findActualKey(breakdownFieldRaw, workset[0]) : breakdownFieldRaw;
+  console.log(`[BreakdownEngine] breakdown_by resolved: "${breakdownFieldRaw}" → "${breakdownField}"`);
+  if (breakdownField === breakdownFieldRaw && workset.length > 0 && workset[0][breakdownField] === undefined) {
+    console.error('[BreakdownEngine] ⚠️  FIELD NOT FOUND in dataset row! All group keys will be "(blank)".');
+  }
 
   // Build context scalars (report period constants)
   const ctx = opts?.context ?? {};
@@ -197,6 +216,10 @@ export function runBreakdownEngine(
     const groupKey = String(row[breakdownField] ?? "(blank)");
     if (!groups.has(groupKey)) groups.set(groupKey, []);
     groups.get(groupKey)!.push(row);
+  }
+  console.log(`[BreakdownEngine] Groups found: ${groups.size}`, [...groups.keys()].slice(0, 10));
+  if (groups.size === 0 || (groups.size === 1 && groups.has('(blank)'))) {
+    console.error('[BreakdownEngine] ⚠️  All rows resolved to "(blank)" — field lookup failed completely.');
   }
 
   // 2. For each group, materialize per_record fields, then run period calcs
@@ -241,5 +264,8 @@ export function runBreakdownEngine(
   // 4. Sort by primary metric descending and apply limit
   rows.sort((a, b) => (b.metrics[primaryMetricKey] ?? 0) - (a.metrics[primaryMetricKey] ?? 0));
 
-  return rows.slice(0, limit);
+  const finalRows = rows.slice(0, limit);
+  console.log(`[BreakdownEngine] Returning ${finalRows.length} rows. primaryMetricKey="${primaryMetricKey}"`, finalRows.slice(0, 3));
+  console.groupEnd();
+  return finalRows;
 }
