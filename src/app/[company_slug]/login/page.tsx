@@ -1,19 +1,27 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCompany } from "@/components/providers/CompanyProvider";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import kibiaiLogo from "@/assets/kibiai.png";
+import { useAccessControl } from "@/context/AccessControlContext";
 
 export default function CompanyLoginPage() {
   const { company, isLoading, error } = useCompany();
+  const { accountId, isLoading: isAuthLoading } = useAccessControl();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const router = useRouter();
   const { company_slug } = useParams();
+
+  useEffect(() => {
+    if (!isAuthLoading && accountId) {
+      router.replace(`/${company_slug}`);
+    }
+  }, [accountId, isAuthLoading, company_slug, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +46,7 @@ export default function CompanyLoginPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isAuthLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>

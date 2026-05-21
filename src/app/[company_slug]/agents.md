@@ -25,6 +25,7 @@ This module provides the multi-tenant workspace experience for client companies.
 - **Tenant Binding**: Login requests are bound to a specific `company_id`.
 - **Identity Isolation**: (In Progress) Ensuring sessions only grant access to data belonging to the resolved `company_id`.
 - **Branding**: Logos and names are dynamically injected from the database to ensure a white-labeled experience.
+- **Login Redirection Bypass**: If the user has a valid active session, accessing `/[company_slug]/login` checks `useAccessControl()` client-side on mount and redirects the user immediately to `/[company_slug]` to avoid form flash.
 
 ## Database Relationships
 - `companies` (1) <-> (M) `report_templates`

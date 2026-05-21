@@ -133,8 +133,13 @@ export async function middleware(request: NextRequest) {
       if (pathname.endsWith('/login')) {
         if (user.accountType === 'platform_admin' && !user.companyId) {
           return NextResponse.redirect(new URL('/admin', request.url));
-        } else if (user.companySlug) {
-          return NextResponse.redirect(new URL(`/${user.companySlug}`, request.url));
+        } else {
+          const pathSegments = pathname.split('/').filter(Boolean);
+          const pathSlug = pathSegments[0];
+          const targetSlug = user.companySlug || (pathSlug && pathSlug !== 'login' && pathSlug !== 'admin' ? pathSlug : null);
+          if (targetSlug) {
+            return NextResponse.redirect(new URL(`/${targetSlug}`, request.url));
+          }
         }
       }
 
@@ -198,8 +203,11 @@ export async function middleware(request: NextRequest) {
     if (user && pathname.endsWith('/login')) {
       if (user.accountType === 'platform_admin' && !user.companyId) {
         return NextResponse.redirect(new URL('/', `https://admin.${BASE_DOMAIN}`));
-      } else if (user.companySlug) {
-        return NextResponse.redirect(new URL('/', `https://${user.companySlug}.${BASE_DOMAIN}`));
+      } else {
+        const targetSlug = user.companySlug;
+        if (targetSlug) {
+          return NextResponse.redirect(new URL('/', `https://${targetSlug}.${BASE_DOMAIN}`));
+        }
       }
     }
 
@@ -213,8 +221,11 @@ export async function middleware(request: NextRequest) {
     if (pathname.endsWith('/login')) {
       if (user.accountType === 'platform_admin' && !user.companyId) {
         return NextResponse.redirect(new URL('/', `https://admin.${BASE_DOMAIN}`));
-      } else if (user.companySlug) {
-        return NextResponse.redirect(new URL('/', `https://${user.companySlug}.${BASE_DOMAIN}`));
+      } else {
+        const targetSlug = user.companySlug || subdomain;
+        if (targetSlug) {
+          return NextResponse.redirect(new URL('/', `https://${targetSlug}.${BASE_DOMAIN}`));
+        }
       }
     }
 

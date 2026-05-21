@@ -1,27 +1,63 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import kibiaiLogo from "@/assets/kibiai.png";
 import Link from "next/link";
 
 export default function GlobalLoginPage() {
-  const router = useRouter();
   const [workspace, setWorkspace] = useState("");
   const [baseDomain, setBaseDomain] = useState("");
   const [isLocalhost, setIsLocalhost] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
     // Only access window on the client side
     if (typeof window !== "undefined") {
-      setIsLocalhost(
+      const localhost = 
         window.location.hostname.includes("localhost") ||
         window.location.hostname.includes("127.0.0.1") ||
-        window.location.hostname.startsWith("192.168.")
-      );
+        window.location.hostname.startsWith("192.168.");
+      setIsLocalhost(localhost);
       // Extract base domain from env
-      setBaseDomain(process.env.NEXT_PUBLIC_BASE_DOMAIN || "");
+      const domain = process.env.NEXT_PUBLIC_BASE_DOMAIN || "";
+      setBaseDomain(domain);
+
+      // Check session
+      const checkSession = async () => {
+        try {
+          const res = await fetch("/api/auth/me");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.user) {
+              const { user } = data;
+              if (user.accountType === "platform_admin" && !user.company_id) {
+                // Platform Admin without company context
+                if (localhost) {
+                  window.location.href = "/admin";
+                } else {
+                  const targetDomain = domain || window.location.hostname;
+                  window.location.href = `https://admin.${targetDomain}`;
+                }
+                return; // Keep loading spinner until redirected
+              } else if (user.companySlug) {
+                if (localhost) {
+                  window.location.href = `/${user.companySlug}`;
+                } else {
+                  const targetDomain = domain || window.location.hostname;
+                  window.location.href = `https://${user.companySlug}.${targetDomain}`;
+                }
+                return; // Keep loading spinner until redirected
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Session check failed:", err);
+        } finally {
+          setIsCheckingSession(false);
+        }
+      };
+      checkSession();
     }
   }, []);
 
@@ -36,6 +72,14 @@ export default function GlobalLoginPage() {
       window.location.href = `https://${slug}.${baseDomain}/login`;
     }
   };
+
+  if (isCheckingSession) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
@@ -80,7 +124,7 @@ export default function GlobalLoginPage() {
               )}
             </div>
             <p className="mt-2 text-xs text-gray-500">
-              Enter your company's workspace slug to continue to login.
+              {"Enter your company's workspace slug to continue to login."}
             </p>
           </div>
 

@@ -84,6 +84,7 @@ export async function GET() {
     user: {
       email: session.email,
       accountType: session.accountType,
+      companySlug: session.companySlug,
       ...userData
     } 
   });

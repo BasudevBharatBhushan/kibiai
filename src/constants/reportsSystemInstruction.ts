@@ -97,8 +97,8 @@ Note: "!=Value" is automatically converted to the correct protocol — omit bloc
 ------------------------------------------------------------
 Purpose: Defines sub-summary grouping. Renders as collapsible group headers in the report.
 - field: the grouping field (NOT repeated in report_columns)
-- display: additional context fields shown in the group header (NOT repeated in report_columns)
-- group_total: numeric fields aggregated per group (NOT repeated in report_columns)
+- display: additional context fields shown in the group header (NOT repeated in report_columns). Use this for any static or pre-calculated header fields (e.g., TotalInvStatic).
+- group_total: ONLY use line-item (body) fields that need to be dynamically summed/aggregated across the group (e.g., LineRevenue, Quantity). NEVER use pre-calculated or static header fields (like TotalInvStatic, Total_Due_Static) here. If the user wants to show a direct/static total field, it MUST be placed in 'display', NOT 'group_total'. (NOT repeated in report_columns)
 - sort_order: "asc" or "desc"
 Example:
 "group_by_fields": {
