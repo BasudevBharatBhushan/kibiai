@@ -125,7 +125,6 @@ export async function GET(req: Request) {
          modules(module_name, module_code)`
       )
       .eq("company_id", company_id)
-      .neq("report_template_status", "Archived")
       .order("created_on", { ascending: false });
 
     if (error) {

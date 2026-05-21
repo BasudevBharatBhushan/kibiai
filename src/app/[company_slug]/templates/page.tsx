@@ -84,25 +84,55 @@ function ViewToggle({
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: string }) {
+function EditableStatusBadge({ 
+  status, 
+  onChange, 
+  disabled 
+}: { 
+  status: string; 
+  onChange?: (newStatus: string) => void;
+  disabled?: boolean;
+}) {
   const isActive = status === "Active";
+  const colorClasses = isActive
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+    : status === "Archived"
+    ? "bg-slate-50 text-slate-700 ring-slate-200"
+    : "bg-amber-50 text-amber-700 ring-amber-200";
+
+  const dotClasses = isActive
+    ? "bg-emerald-500"
+    : status === "Archived"
+    ? "bg-slate-500"
+    : "bg-amber-500";
+
+  if (!onChange || disabled) {
+    return (
+      <span className={clsx("inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded ring-1", colorClasses)}>
+        <span className={clsx("w-1.5 h-1.5 rounded-full", dotClasses)} />
+        {status}
+      </span>
+    );
+  }
+
   return (
-    <span
-      className={clsx(
-        "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded",
-        isActive
-          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-          : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-      )}
-    >
-      <span
+    <div className="relative inline-flex items-center">
+      <span className={clsx("absolute left-2 w-1.5 h-1.5 rounded-full pointer-events-none z-10", dotClasses)} />
+      <select
+        value={status}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
         className={clsx(
-          "w-1.5 h-1.5 rounded-full",
-          isActive ? "bg-emerald-500" : "bg-amber-500"
+          "appearance-none pl-5 pr-5 py-0.5 text-[11px] font-semibold rounded ring-1 outline-none cursor-pointer hover:ring-2 transition-all",
+          colorClasses
         )}
-      />
-      {status}
-    </span>
+      >
+        <option value="Draft">Draft</option>
+        <option value="Active">Active</option>
+        <option value="Archived">Archived</option>
+      </select>
+      <ChevronRight size={10} className="absolute right-1.5 pointer-events-none opacity-50 rotate-90" />
+    </div>
   );
 }
 
@@ -129,6 +159,7 @@ export default function TemplatesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedModule, setSelectedModule] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("active_draft");
   const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
 
   // Rename and Delete states
@@ -175,6 +206,37 @@ export default function TemplatesPage() {
       }
     } catch (err: any) {
       console.error("Failed to rename template", err);
+      alert(err.message || "An error occurred.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveStatus = async (templateId: string, newStatus: string) => {
+    try {
+      setIsSaving(true);
+      const res = await apiClient.patch<{ success: boolean; error?: string }>(
+        `/api/company/templates/${templateId}`,
+        { report_template_status: newStatus }
+      );
+      if (res.success) {
+        setTemplates((prev) =>
+          prev.map((t) =>
+            t.report_template_id === templateId
+              ? { ...t, report_template_status: newStatus }
+              : t
+          )
+        );
+        if (selectedTemplate?.report_template_id === templateId) {
+          setSelectedTemplate((prev: any) =>
+            prev ? { ...prev, report_template_status: newStatus } : null
+          );
+        }
+      } else {
+        alert(res.error || "Failed to update status.");
+      }
+    } catch (err: any) {
+      console.error("Failed to update status", err);
       alert(err.message || "An error occurred.");
     } finally {
       setIsSaving(false);
@@ -248,7 +310,11 @@ export default function TemplatesPage() {
         .includes(searchQuery.toLowerCase());
       const matchesModule =
         selectedModule === "all" || t.modules?.module_name === selectedModule;
-      if (!matchesSearch || !matchesModule) return false;
+      const matchesStatus =
+        selectedStatus === "all" ? true
+        : selectedStatus === "active_draft" ? (t.report_template_status === "Active" || t.report_template_status === "Draft")
+        : t.report_template_status === selectedStatus;
+      if (!matchesSearch || !matchesModule || !matchesStatus) return false;
       if (activeView === "user" && !isSuperAdmin) {
         const perm = templatePermissions.find(
           (p) => p.report_template_id === t.report_template_id
@@ -257,7 +323,7 @@ export default function TemplatesPage() {
       }
       return true;
     });
-  }, [templates, searchQuery, selectedModule, activeView, isSuperAdmin, templatePermissions]);
+  }, [templates, searchQuery, selectedModule, selectedStatus, activeView, isSuperAdmin, templatePermissions]);
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
 
@@ -359,6 +425,21 @@ export default function TemplatesPage() {
               {modules.map((mod) => (
                 <option key={mod} value={mod}>{mod}</option>
               ))}
+            </select>
+            <ChevronRight size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
+          </div>
+          <div className="relative flex-shrink-0">
+            <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="pl-9 pr-9 py-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 transition-all text-sm appearance-none cursor-pointer shadow-sm min-w-[140px]"
+            >
+              <option value="active_draft">Active & Draft</option>
+              <option value="all">All Statuses</option>
+              <option value="Draft">Draft</option>
+              <option value="Active">Active</option>
+              <option value="Archived">Archived</option>
             </select>
             <ChevronRight size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
           </div>
@@ -541,8 +622,12 @@ export default function TemplatesPage() {
                           </td>
 
                           {/* Status */}
-                          <td className="px-4 py-3.5 hidden md:table-cell w-24">
-                            <StatusBadge status={template.report_template_status} />
+                          <td className="px-4 py-3.5 hidden md:table-cell w-24" onClick={(e) => e.stopPropagation()}>
+                            <EditableStatusBadge
+                              status={template.report_template_status}
+                              disabled={!(activeView === "admin" && (can("modify_template", template.report_template_id) || isSuperAdmin))}
+                              onChange={(val) => handleSaveStatus(template.report_template_id, val)}
+                            />
                           </td>
 
                           {/* Date */}

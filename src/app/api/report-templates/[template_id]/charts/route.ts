@@ -225,3 +225,69 @@ export async function POST(
     );
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ template_id: string }> }
+) {
+  try {
+    const session = await getSession();
+    if (!session?.companyId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const { template_id } = await params;
+    if (!template_id) {
+      return NextResponse.json(
+        { success: false, error: "template_id is required" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+    
+    // 1. Delete all charts for this report template
+    const { error: deleteChartsError } = await supabase
+      .from("chart_templates")
+      .delete()
+      .eq("report_template_id", template_id)
+      .eq("company_id", session.companyId);
+
+    if (deleteChartsError) {
+      throw deleteChartsError;
+    }
+
+    // 2. Clear AI copilot conversation IDs and insight results from report_templates
+    const { error: updateTemplateError } = await supabase
+      .from("report_templates")
+      .update({
+        chart_conversation_id: null,
+        insight_conversation_id: null,
+        insight_results: null,
+        updated_on: new Date().toISOString(),
+      })
+      .eq("report_template_id", template_id)
+      .eq("company_id", session.companyId);
+
+    if (updateTemplateError) {
+      throw updateTemplateError;
+    }
+
+    return NextResponse.json(
+      { success: true },
+      { status: 200 }
+    );
+  } catch (err: unknown) {
+    console.error("[DELETE /api/report-templates/[template_id]/charts]", err);
+    return NextResponse.json(
+      {
+        success: false,
+        error: err instanceof Error ? err.message : "Internal server error",
+      },
+      { status: 500 }
+    );
+  }
+}

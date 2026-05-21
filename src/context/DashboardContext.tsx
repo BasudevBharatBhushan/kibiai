@@ -63,6 +63,7 @@ interface DashboardContextType {
   updateLayout: (newLayout: Layout[]) => void; 
   applyLayoutPreset: (mode: LayoutMode) => void; 
   resetDashboard: () => Promise<void>;
+  deleteAllCharts: () => Promise<void>;
 }
 
 interface DashboardProviderProps {
@@ -470,6 +471,17 @@ export function DashboardProvider({
     }
   };
 
+  const deleteAllCharts = async () => {
+    if (isViewerMode) return;
+    if (templateId) {
+      if (window.confirm('Are you sure you want to delete all charts and insights? This cannot be undone.')) {
+        await apiClient.delete(`/api/report-templates/${templateId}/charts`);
+        window.location.reload();
+      }
+    }
+  };
+
+
   // 6. Add a single AI-generated chart schema into the dashboard
   const addNewChartFromAI = useCallback((schema: ReportChartSchema) => {
     const processed = processData(dataset, [schema], context, fieldSchemas);
@@ -595,7 +607,8 @@ export function DashboardProvider({
     addMultipleChartsFromAI,
     updateLayout,
     applyLayoutPreset,
-    resetDashboard
+    resetDashboard,
+    deleteAllCharts
   };
 
   return (

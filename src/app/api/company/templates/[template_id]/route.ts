@@ -26,9 +26,25 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { report_template_name } = body;
-    if (!report_template_name || typeof report_template_name !== "string" || !report_template_name.trim()) {
-      return NextResponse.json({ success: false, error: "report_template_name is required" }, { status: 400 });
+    const { report_template_name, report_template_status } = body;
+    if (report_template_name === undefined && report_template_status === undefined) {
+      return NextResponse.json({ success: false, error: "Nothing to update" }, { status: 400 });
+    }
+
+    const updatePayload: any = { updated_on: new Date().toISOString() };
+    
+    if (report_template_name !== undefined) {
+      if (typeof report_template_name !== "string" || !report_template_name.trim()) {
+        return NextResponse.json({ success: false, error: "Invalid report_template_name" }, { status: 400 });
+      }
+      updatePayload.report_template_name = report_template_name.trim();
+    }
+
+    if (report_template_status !== undefined) {
+      if (!["Draft", "Active", "Archived"].includes(report_template_status)) {
+        return NextResponse.json({ success: false, error: "Invalid report_template_status" }, { status: 400 });
+      }
+      updatePayload.report_template_status = report_template_status;
     }
 
     const adminClient = createAdminClient();
@@ -55,10 +71,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     // Update name
     const { data: updated, error: updateError } = await adminClient
       .from("report_templates")
-      .update({
-        report_template_name: report_template_name.trim(),
-        updated_on: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("report_template_id", template_id)
       .select("report_template_id, report_template_name, report_template_status, updated_on")
       .single();

@@ -20,7 +20,8 @@ export default function EditPanel() {
     inactiveCharts, 
     addChart, 
     removeChart, 
-    updateChartKind 
+    updateChartKind,
+    deleteAllCharts
   } = useDashboard();
 
   const [isActiveOpen, setIsActiveOpen] = useState(true);
@@ -151,8 +152,11 @@ export default function EditPanel() {
 
       </div>
 
-      <div className="p-5 border-t border-slate-100 bg-white shrink-0">
-        <button onClick={() => setEditOpen(false)} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium">
+      <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex gap-3">
+        <button onClick={deleteAllCharts} className="w-full py-2.5 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-lg font-medium transition-colors">
+          Delete All
+        </button>
+        <button onClick={() => setEditOpen(false)} className="w-full py-2.5 bg-slate-900 text-white hover:bg-slate-800 transition-colors rounded-lg font-medium">
           Done
         </button>
       </div>
