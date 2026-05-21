@@ -865,6 +865,14 @@ export function generateReportStructure(
 
     // Helper function to get label for a field
     function getFieldLabel(table: string, field: string): string {
+      // Handle calculated fields
+      if (table === "calculated") {
+        const calcField = reportStructure.custom_calculated_fields?.find(
+          (cf: any) => cf.field_name === field
+        );
+        return calcField?.label || field;
+      }
+
       return fieldLabelMap[table]?.[field] || field;
     }
 
@@ -898,12 +906,30 @@ export function generateReportStructure(
       return null;
     }
 
-    // Get BodyFieldOrder from report_columns (using labels)
-    const bodyFieldOrder = reportStructure.report_columns
-      ? reportStructure.report_columns.map((col) =>
-          getFieldLabel(col.table, col.field)
-        )
-      : [];
+    const bodyFieldOrder: string[] = [];
+
+    if (reportStructure.report_columns) {
+      reportStructure.report_columns.forEach((col) => {
+        // Skip if table/field is empty
+        if (!col.table || !col.field) return;
+
+        const label = getFieldLabel(col.table, col.field);
+
+        // Don't add duplicates
+        if (!bodyFieldOrder.includes(label)) {
+          bodyFieldOrder.push(label);
+        }
+      });
+    }
+
+    if (reportStructure.custom_calculated_fields) {
+      reportStructure.custom_calculated_fields.forEach((calcField: any) => {
+        const displayLabel = calcField.label || calcField.field_name;
+        if (!bodyFieldOrder.includes(displayLabel)) {
+          bodyFieldOrder.push(displayLabel);
+        }
+      });
+    }
 
     const result: any[] = [];
 
@@ -968,38 +994,57 @@ export function generateReportStructure(
       (label) => !excludeLabelsSet.has(label)
     );
 
-    // Get BodySortOrder from body_sort_order in reportStructure (using labels)
     const bodySortOrder: Array<{ Column: string; Order: string }> = [];
     if (reportStructure.body_sort_order) {
       reportStructure.body_sort_order.forEach((sortItem: any) => {
-        // Find the field label by matching the sort field name with setup labels
         let fieldLabel: string | null = null;
 
-        Object.keys(setupJson.tables || {}).forEach((tableName) => {
-          const table = setupJson.tables?.[tableName];
-          const tableFields = table?.fields;
-
-          if (table && tableFields) {
-            Object.keys(tableFields).forEach((fieldName) => {
-              const field = tableFields[fieldName];
-              if (field && field.label === sortItem.field) {
-                fieldLabel = sortItem.field;
-              }
-            });
-          }
-        });
-
-        // If not found by label, try to find by field name in report columns
-        if (!fieldLabel) {
-          const reportCol = reportStructure.report_columns?.find(
+        // First, try to find the field in report_columns to get the table
+        if (reportStructure.report_columns) {
+          const reportCol = reportStructure.report_columns.find(
             (col) => col.field === sortItem.field
           );
+
           if (reportCol) {
+            // Use getFieldLabel to get the proper label
             fieldLabel = getFieldLabel(reportCol.table, reportCol.field);
           }
         }
 
-        if (fieldLabel && !excludeLabelsSet.has(fieldLabel)) {
+        // If not found in report_columns, check calculated fields
+        if (!fieldLabel && reportStructure.custom_calculated_fields) {
+          const calcField = reportStructure.custom_calculated_fields.find(
+            (cf: any) => cf.field_name === sortItem.field
+          );
+          if (calcField) {
+            fieldLabel = calcField.label || calcField.field_name;
+          }
+        }
+
+        // If still not found, try to find by field name in setup JSON
+        if (!fieldLabel) {
+          Object.keys(setupJson.tables || {}).forEach((tableName) => {
+            const table = setupJson.tables?.[tableName];
+            const tableFields = table?.fields;
+
+            if (table && tableFields) {
+              // Check if this field exists in this table
+              if (tableFields[sortItem.field]) {
+                // Get the label from the field definition
+                fieldLabel =
+                  tableFields[sortItem.field]?.label || sortItem.field;
+              }
+            }
+          });
+        }
+
+        // Last resort: use the field name as-is
+        if (!fieldLabel) {
+          fieldLabel = sortItem.field;
+        }
+
+        // Check if this field is in the filtered body fields
+        if (fieldLabel && filteredBodyFields.includes(fieldLabel)) {
           bodySortOrder.push({
             Column: fieldLabel,
             Order: sortItem.sort_order === "asc" ? "Asc" : "Desc",
@@ -1021,6 +1066,30 @@ export function generateReportStructure(
         fieldSuffix[fieldLabel] = suffix;
       }
     });
+
+    if (reportStructure.custom_calculated_fields) {
+      reportStructure.custom_calculated_fields.forEach((calcField: any) => {
+        const displayLabel = calcField.label || calcField.field_name;
+
+        if (filteredBodyFields.includes(displayLabel)) {
+          const { format } = calcField;
+
+          switch (format) {
+            case "currency":
+              fieldPrefix[displayLabel] = "$";
+              break;
+            case "percentage":
+              fieldSuffix[displayLabel] = "%";
+              break;
+            case "number":
+              // No prefix/suffix for plain numbers
+              break;
+            default:
+              break;
+          }
+        }
+      });
+    }
 
     const bodySection = {
       Body: {

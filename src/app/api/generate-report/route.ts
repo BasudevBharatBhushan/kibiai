@@ -844,7 +844,7 @@ function calculateCustomFields(
           if (typeof cellValue === "number" && !isNaN(cellValue)) {
             switch (format) {
               case "percentage":
-                finalValue = Math.round(cellValue * 10000) / 100;
+                finalValue = Math.round(cellValue * 100) / 100;
                 break;
               case "currency":
                 finalValue = Math.round(cellValue * 100) / 100;

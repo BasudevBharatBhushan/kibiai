@@ -62,6 +62,28 @@ Example Output:
   "aggregation_method": "sum"
 }
 
+Limit Count (limit_count)
+Purpose: Defines the maximum number of items to display in the chart when a user asks for "Top N" or "Bottom N" (e.g., "Top 10" -> 10).
+Rules:
+Extract the numerical limit from the user's prompt request.
+If the user does not specify a limit, omit this property.
+Example Output:
+{
+  "limit_count": 10
+}
+
+Sort Order (sort_order)
+Purpose: Defines the sorting order of the aggregated data, usually inferred from "Top" (descending) or "Bottom" (ascending).
+Rules:
+If the user asks for "Top", use "desc".
+If the user asks for "Bottom", use "asc".
+If a limit_count is set but no explicit sort order is given, default to "desc".
+If no limit is requested and sorting isn't implied, omit this property.
+Example Output:
+{
+  "sort_order": "desc"
+}
+
 Chart Type (chart_type)
 Purpose: Specifies the type of chart to generate.
 Supported Chart Types:(All Chart JS supported charts)

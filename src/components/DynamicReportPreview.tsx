@@ -941,8 +941,11 @@ function generateDynamicReport(jsonData: any[], metadata?: ReportMetadata): stri
               const trimmedField = field.trim();
               const prefix = prefixMap[field] || prefixMap[trimmedField] || '';
               const suffix = suffixMap[trimmedField] || '';
-              const value = group[0]?.[field] || '';
-              displayInfo += `<span class="display-item"><span class="display-label">${field}:</span> <span class="display-value">${prefix}${value}${suffix}</span></span>`;
+              const value = group[0]?.[field];
+              const displayVal = (value !== undefined && value !== null) ? String(value).trim() : '';
+              const hasData = displayVal !== '' && displayVal !== '--';
+              const fullVal = hasData ? `${prefix}${displayVal}${suffix}` : displayVal;
+              displayInfo += `<span class="display-item"><span class="display-label">${field}:</span> <span class="display-value">${fullVal}</span></span>`;
           });
 
           let groupTotals: Record<string, number> = {};
@@ -954,10 +957,14 @@ function generateDynamicReport(jsonData: any[], metadata?: ReportMetadata): stri
               groupTotals[field] = sum;
           });
 
+          const trimmedGroupVal = (groupValue !== undefined && groupValue !== null) ? String(groupValue).trim() : '';
+          const hasGroupData = trimmedGroupVal !== '' && trimmedGroupVal !== '--';
+          const fullGroupVal = hasGroupData ? `${groupFieldPrefix}${trimmedGroupVal}${groupFieldSuffix}` : (trimmedGroupVal || 'N/A');
+
           html += `
           <div class="subsummary level-${level}">
               <h${level + 3} class="subsummary-header">
-                  <span class="field-name">${groupField.trim()}</span>: ${groupFieldPrefix}${groupValue || 'N/A'}${groupFieldSuffix}
+                  <span class="field-name">${groupField.trim()}</span>: ${fullGroupVal}
               </h${level + 3}>
               ${displayInfo ? `<div class="subsummary-display">${displayInfo}</div>` : ''}
               <div class="subsummary-content">
@@ -1043,8 +1050,9 @@ function generateDynamicReport(jsonData: any[], metadata?: ReportMetadata): stri
                       }
                   }
               }
-              const displayVal = (cellValue !== undefined && cellValue !== null) ? cellValue : '';
-              const fullVal = prefix + displayVal + suffix;
+              const displayVal = (cellValue !== undefined && cellValue !== null) ? String(cellValue).trim() : '';
+              const hasData = displayVal !== '' && displayVal !== '--';
+              const fullVal = hasData ? (prefix + displayVal + suffix) : displayVal;
               const align = getFieldAlignment(field, fullVal);
               html += `<td style="text-align: ${align}">${fullVal}</td>`;
           });

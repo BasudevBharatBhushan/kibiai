@@ -21,6 +21,8 @@ export interface ChartConfig {
 
     categories: string[];
     series: ChartDataSeries[];
+    limit_count?: number;
+    sort_order?: 'asc' | 'desc';
     insights?: string[];
     insight_results?: any[];
     insight_date_range?: {
@@ -67,6 +69,8 @@ export interface ReportChartSchema {
   numerical_field?: string;     
   group_field?: string;        
   subgroup_field?: string;      
+  limit_count?: number;
+  sort_order?: 'asc' | 'desc';
   mathematical_aggregation_method?: 'sum' | 'count' | 'average' | 'min' | 'max'; 
   filters?: string[];            
   

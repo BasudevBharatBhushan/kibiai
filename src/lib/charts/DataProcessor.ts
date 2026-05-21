@@ -287,7 +287,7 @@ export function processData(
 
     // --- Grouping ---
     const useSubgroups = subgroup_field && subgroup_field.trim() !== "";
-    const labels = [...new Set(filteredData.map(item => item[actualGroupField || group_field]).filter(Boolean))];
+    let labels = [...new Set(filteredData.map(item => item[actualGroupField || group_field]).filter(Boolean))];
     
     if (labels.length === 0) {
       console.warn(`[DataProcessor] No labels found for chart "${chart_title}" using group_field "${group_field}" (Actual: ${actualGroupField})`);
@@ -314,6 +314,28 @@ export function processData(
       
       groupedData[groupKey][subGroupKey].push(numVal);
     });
+
+    // --- Sorting & Limiting (Top/Bottom N) ---
+    if (aiResponse.limit_count || aiResponse.sort_order) {
+      const order = aiResponse.sort_order || 'desc';
+      const labelTotals = labels.map(label => {
+        let total = 0;
+        allSubgroups.forEach(sub => {
+          const values = groupedData[label]?.[sub] || [];
+          if (values.length === 0) return;
+          if (aggMethod === 'sum') total += values.reduce((a, b) => a + b, 0);
+          else if (aggMethod === 'average') total += values.reduce((a, b) => a + b, 0) / values.length;
+          else if (aggMethod === 'count') total += values.length;
+          else total += values.reduce((a, b) => a + b, 0);
+        });
+        return { label, total };
+      });
+      
+      labelTotals.sort((a, b) => order === 'desc' ? b.total - a.total : a.total - b.total);
+      
+      const limit = aiResponse.limit_count ? parseInt(String(aiResponse.limit_count), 10) : labelTotals.length;
+      labels = labelTotals.slice(0, limit).map(lt => String(lt.label));
+    }
 
     // --- Aggregation ---
     const series = allSubgroups.map(subgroup => {

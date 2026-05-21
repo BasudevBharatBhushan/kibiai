@@ -7,7 +7,7 @@ import { useToast } from "@/context/ToastContext";
 import { validateConfig } from "@/lib/utils/reportValidation";
 import { apiClient } from "@/utils/apiClient";
 import { useParams } from "next/navigation";
-import { Loader2, Info, RefreshCw } from "lucide-react";
+import { Loader2, Info, RefreshCw, LayoutList, Printer } from "lucide-react";
 import { classifyReload, applySoftReload } from "@/lib/utils/reportReloadClassifier";
 
 // Components
@@ -18,9 +18,28 @@ import { ReportBodySection } from "@/components/report-builder/ReportBodySection
 import { CustomCalcsSection } from "@/components/report-builder/CustomCalcsSection";
 import { ReportFiltersSection } from "@/components/report-builder/ReportFiltersSection";
 import { GrandSummarySection } from "@/components/report-builder/GrandSummarySection";
+import { ClassicViewSettingsSection, type ClassicViewSettings, type FilterField } from "@/components/report-builder/ClassicViewSettingsSection";
 import { Modal } from "@/components/ui/Modal";
 
-export function ReportConfigurator() {
+interface ReportConfiguratorProps {
+  classicSettings?: ClassicViewSettings;
+  onClassicSettingsChange?: (key: keyof ClassicViewSettings, value: boolean) => void;
+  viewMode?: "classic" | "print";
+  onViewModeChange?: (mode: "classic" | "print") => void;
+  filterFields?: FilterField[];
+  activeFilters?: Record<string, string>;
+  onFilterChange?: (field: string, value: string) => void;
+}
+
+export function ReportConfigurator({
+  classicSettings,
+  onClassicSettingsChange,
+  viewMode = "classic",
+  onViewModeChange,
+  filterFields,
+  activeFilters,
+  onFilterChange,
+}: ReportConfiguratorProps = {}) {
 
   // --- CONTEXT & HOOKS ---
   const { state, dispatch } = useReport();
@@ -182,7 +201,7 @@ export function ReportConfigurator() {
   return (
     <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200 shadow-xl">
       
-      {/* --- HEADER: Update + Generate + View JSON --- */}
+      {/* --- HEADER: Update + View Toggle + JSON --- */}
       <div className="px-4 py-3 bg-white flex justify-between items-center shrink-0 z-20 sticky top-0 border-b border-slate-100">
         <div className="flex items-center gap-2">
           <button 
@@ -195,7 +214,7 @@ export function ReportConfigurator() {
               : "Update"}
           </button>
 
-          {/* Force Refresh — always hard-reloads from the backend */}
+          {/* Force Refresh */}
           <button
             onClick={handleForceRefresh}
             disabled={isSaving}
@@ -205,6 +224,33 @@ export function ReportConfigurator() {
             <RefreshCw size={13} className={isSaving ? "animate-spin" : ""} />
           </button>
 
+          {/* Classic | Print view toggle */}
+          <div className="flex items-center gap-0.5 bg-slate-100 border border-slate-200 rounded-lg p-0.5 ml-1">
+            <button
+              onClick={() => onViewModeChange?.("classic")}
+              title="Classic View — interactive collapsible table"
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-semibold transition-all ${
+                viewMode === "classic"
+                  ? "bg-white text-teal-600 shadow-sm border border-teal-100"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <LayoutList size={11} />
+              Classic
+            </button>
+            <button
+              onClick={() => onViewModeChange?.("print")}
+              title="Print View — paginated A4 layout"
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-semibold transition-all ${
+                viewMode === "print"
+                  ? "bg-white text-slate-800 shadow-sm border border-slate-200"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Printer size={11} />
+              Print
+            </button>
+          </div>
         </div>
          
          <button 
@@ -218,6 +264,18 @@ export function ReportConfigurator() {
 
       {/* --- SCROLLABLE CONTENT --- */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-12 scrollbar-minimal">
+
+         {/* 0. Classic View Settings — shown FIRST when in Classic mode */}
+         {viewMode === "classic" && classicSettings && onClassicSettingsChange && (
+           <ClassicViewSettingsSection
+             settings={classicSettings}
+             onChange={onClassicSettingsChange}
+             filterFields={filterFields}
+             activeFilters={activeFilters}
+             onFilterChange={onFilterChange}
+           />
+         )}
+
          {/* 1. Header Section */}
          <HeaderSection  />
 

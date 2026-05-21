@@ -20,6 +20,8 @@ import { ModularChatbot } from "@/components/chat/ModularChatbot";
 import { REPORTS_SYSTEM_INSTRUCTION } from "@/constants/reportsSystemInstruction";
 import { apiClient } from "@/utils/apiClient";
 import { sanitizeReportConfig } from "@/lib/utils/sanitizeReportConfig";
+import type { ClassicViewSettings } from "@/components/report-builder/ClassicViewSettingsSection";
+import type { FilterField } from "@/components/report-builder/ClassicViewSettingsSection";
 
 // ── Build predefinedPrompt (DB schema context) ─────────────────────────────────
 // Per REPORTS_SYSTEM_INSTRUCTION TYPE 1/3/4:
@@ -112,6 +114,71 @@ function ConfiguratorPageContent({
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [templateName, setTemplateName] = useState("");
   const [hasPreviewData, setHasPreviewData] = useState(false);
+
+  // Classic view display settings — shared between preview and configurator panels
+  const [classicSettings, setClassicSettings] = useState<ClassicViewSettings>({
+    showAvg: false,
+    collapseBody: false,
+  });
+  const handleClassicSettingsChange = useCallback(
+    (key: keyof ClassicViewSettings, value: boolean) => {
+      setClassicSettings((prev) => ({ ...prev, [key]: value }));
+    },
+    []
+  );
+
+  // View mode — classic (default) or print — shared between preview and configurator
+  const [viewMode, setViewMode] = useState<"classic" | "print">("classic");
+  const handleViewModeChange = useCallback((mode: "classic" | "print") => {
+    setViewMode(mode);
+  }, []);
+
+  // Quick filters — computed from live report data, controlled here and passed to both panels
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
+  const handleFilterChange = useCallback((field: string, value: string) => {
+    setActiveFilters((prev) => {
+      const next = { ...prev };
+      if (value) next[field] = value;
+      else delete next[field];
+      return next;
+    });
+  }, []);
+
+  const filterFields = useMemo<FilterField[]>(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw: any = state.reportPreview;
+    if (!raw) return [];
+    let jsonData: unknown[] = [];
+    try {
+      if (raw.report_structure_json && Array.isArray(raw.report_structure_json)) {
+        jsonData = raw.report_structure_json;
+      } else if (Array.isArray(raw)) {
+        jsonData = raw;
+      } else if (raw.ReportStructuredData) {
+        const p = typeof raw.ReportStructuredData === "string"
+          ? JSON.parse(raw.ReportStructuredData) : raw.ReportStructuredData;
+        jsonData = Array.isArray(p) ? p : [];
+      }
+    } catch { jsonData = []; }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bodyData: Record<string, unknown>[] = (jsonData.find((x: any) => "Body" in x) as any)?.Body?.BodyField ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const subsummaries: any[] = jsonData.filter((x: any) => "Subsummary" in x).map((x: any) => x.Subsummary);
+
+    const seen = new Set<string>();
+    const result: FilterField[] = [];
+    for (const ss of subsummaries) {
+      const field: string = ss.SubsummaryFields?.[0];
+      if (!field || seen.has(field)) continue;
+      seen.add(field);
+      const options = [
+        ...new Set(bodyData.map((r) => String(r[field] ?? "").trim()).filter(Boolean)),
+      ].sort();
+      if (options.length > 0) result.push({ field, options });
+    }
+    return result;
+  }, [state.reportPreview]);
 
   const toggleChat = useCallback(() => setIsChatOpen((p) => !p), []);
   const toggleConfig = useCallback(() => setIsConfigOpen((p) => !p), []);
@@ -461,7 +528,11 @@ function ConfiguratorPageContent({
         ) : (
         /* Report preview is ALWAYS mounted — loading indicator overlays on top */
         <div className="w-full max-w-full flex justify-center">
-          <ReportPreview />
+          <ReportPreview
+            classicSettings={classicSettings}
+            viewMode={viewMode}
+            activeFilters={activeFilters}
+          />
         </div>
         )}
 
@@ -552,7 +623,15 @@ function ConfiguratorPageContent({
               <div className="h-10 bg-blue-50 rounded-xl" />
             </div>
           ) : (
-            <ReportConfigurator />
+            <ReportConfigurator
+              classicSettings={classicSettings}
+              onClassicSettingsChange={handleClassicSettingsChange}
+              viewMode={viewMode}
+              onViewModeChange={handleViewModeChange}
+              filterFields={filterFields}
+              activeFilters={activeFilters}
+              onFilterChange={handleFilterChange}
+            />
           )}
         </div>
       </div>

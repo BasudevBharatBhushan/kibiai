@@ -3,21 +3,37 @@
 import { useMemo } from "react";
 import { useReport } from "@/context/ReportContext";
 import DynamicReport from "@/components/DynamicReportPreview";
+import { ClassicReportView } from "@/components/report-viewer/ClassicReportView";
 import { buildReportMetadata, type ReportMetadata } from "@/lib/utils/reportMetadata";
+import type { ClassicViewSettings } from "@/components/report-builder/ClassicViewSettingsSection";
 
 interface ReportPreviewProps {
   /** Optional pre-built metadata. When omitted, metadata is derived from ReportContext. */
   metadata?: ReportMetadata;
+  /** Classic view display settings driven from the ReportConfigurator panel */
+  classicSettings?: ClassicViewSettings;
+  /**
+   * Active view mode — "classic" (default) or "print".
+   * Controlled by the parent (ConfiguratorPageContent) so both
+   * the configurator panel and the preview stay in sync.
+   */
+  viewMode?: "classic" | "print";
+  /** Active filter state applied to the report data. */
+  activeFilters?: Record<string, string>;
 }
 
-export function ReportPreview({ metadata: metadataProp }: ReportPreviewProps = {}) {
+export function ReportPreview({
+  metadata: metadataProp,
+  classicSettings,
+  viewMode = "classic",
+  activeFilters = {},
+}: ReportPreviewProps = {}) {
   const { state } = useReport();
-  const rawData = state.reportPreview;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawData: any = state.reportPreview;
 
-  // Fallback: derive metadata from the current config in ReportContext so
-  // admin previews stay in sync with date_range_fields / filters edits.
   const configToUse = state.lastGeneratedConfig || state.config;
-  
+
   const derivedMetadata = useMemo<ReportMetadata | undefined>(() => {
     if (metadataProp) return metadataProp;
     if (!configToUse) return undefined;
@@ -43,46 +59,89 @@ export function ReportPreview({ metadata: metadataProp }: ReportPreviewProps = {
     );
   }
 
-  // --- DATA NORMALIZATION LOGIC ---
+  // --- DATA NORMALIZATION ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let finalJsonData: any[] = [];
 
   try {
-    // 1. Live API response: { status: "ok", report_structure_json: [...] }
     if (rawData.report_structure_json && Array.isArray(rawData.report_structure_json)) {
       finalJsonData = rawData.report_structure_json;
-    } 
-    // 2. Direct Array (Already parsed from DB string)
-    else if (Array.isArray(rawData)) {
+    } else if (Array.isArray(rawData)) {
       finalJsonData = rawData;
-    }
-    // 3. Fallback: Try to find ReportStructuredData if passed as raw object
-    else if (rawData.ReportStructuredData) {
-       const parsed = typeof rawData.ReportStructuredData === 'string' 
+    } else if (rawData.ReportStructuredData) {
+      const parsed =
+        typeof rawData.ReportStructuredData === "string"
           ? JSON.parse(rawData.ReportStructuredData)
           : rawData.ReportStructuredData;
-       finalJsonData = Array.isArray(parsed) ? parsed : [];
-    }
-    else {
+      finalJsonData = Array.isArray(parsed) ? parsed : [];
+    } else {
       console.warn("Unknown Preview Data Structure", rawData);
     }
-
   } catch (e) {
     console.error("Preview Data Error", e);
     return <div className="text-red-500 p-10">Error parsing report data.</div>;
   }
 
   if (finalJsonData.length === 0) {
-     return (
-        <div className="flex items-center justify-center h-full text-slate-400 bg-white border border-slate-200 min-h-[600px]">
-           No preview data available or data is empty.
-        </div>
-     )
+    return (
+      <div className="flex items-center justify-center h-full text-slate-400 bg-white border border-slate-200 min-h-[600px]">
+        No preview data available or data is empty.
+      </div>
+    );
   }
 
-  // Render the DynamicReport with the normalized array
+  const effectiveSettings: ClassicViewSettings = classicSettings ?? {
+    showAvg: false,
+    collapseBody: false,
+  };
+
+  const isPrint = viewMode === "print";
+
   return (
-    <div className="w-full h-full p-4 overflow-auto">
-      <DynamicReport jsonData={finalJsonData} metadata={derivedMetadata} />
+    <div className="w-full h-full flex flex-col overflow-hidden">
+      {/*
+        Classic View — shown when viewMode === "classic"
+      */}
+      {!isPrint && (
+        <div className="flex-1 overflow-auto p-4">
+          <div className="w-full bg-white rounded-lg border border-slate-200 shadow-sm p-4">
+            <ClassicReportView
+              jsonData={finalJsonData}
+              showAvg={effectiveSettings.showAvg}
+              collapseBody={effectiveSettings.collapseBody}
+              metadata={derivedMetadata}
+              activeFilters={activeFilters}
+            />
+          </div>
+        </div>
+      )}
+
+      {/*
+        Print View — DynamicReport is ALWAYS kept mounted (even when in Classic mode)
+        by placing it in an absolutely-positioned, off-screen container.
+        This means pagination is calculated once on first load and cached in
+        DynamicReport's own state. Switching to Print view is instant — no recalculation.
+        
+        We use position:absolute + visibility:hidden (NOT display:none) so that
+        DynamicReport can still read element.offsetHeight during pagination.
+      */}
+      <div
+        style={
+          isPrint
+            ? { flex: 1, overflow: "auto", padding: "16px" }
+            : {
+                position: "absolute",
+                left: "-9999px",
+                top: 0,
+                width: "210mm",
+                visibility: "hidden",
+                pointerEvents: "none",
+                zIndex: -1,
+              }
+        }
+      >
+        <DynamicReport jsonData={finalJsonData} metadata={derivedMetadata} />
+      </div>
     </div>
   );
 }

@@ -1,0 +1,486 @@
+/* ============================================================
+   Classic Report View Styles  —  classicview.css
+   ============================================================ */
+
+/* ── Wrap & scroll ─────────────────────────────────────────── */
+.cv-wrap {
+  width: 100%;
+  font-family: 'DM Sans', 'Inter', Arial, sans-serif;
+  font-size: 12px;
+  color: #1c1917;
+}
+
+/* ── Report header (title + metadata) ─────────────────────── */
+.cv-report-header {
+  padding: 12px 0 14px;
+  border-bottom: 2px solid #2d2d2d;
+  margin-bottom: 14px;
+}
+.cv-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1c1917;
+  margin: 0 0 3px;
+  font-family: 'Source Serif 4', 'Georgia', serif;
+}
+.cv-subtitle {
+  font-size: 11px;
+  color: #78716c;
+  margin-bottom: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.cv-subtitle .cv-sep { color: #d6d3d1; }
+.cv-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 5px;
+}
+.cv-meta-chip {
+  font-size: 10px;
+  font-weight: 500;
+  background: #f5f3f0;
+  border: 1px solid #e7e5e4;
+  border-radius: 20px;
+  padding: 2px 8px;
+  color: #57534e;
+  white-space: nowrap;
+}
+.cv-meta-chip strong {
+  color: #1c1917;
+  font-weight: 700;
+}
+
+/* ── Quick filters bar ─────────────────────────────────────── */
+.cv-qf-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid #e7e5e4;
+  margin-bottom: 10px;
+}
+.cv-qf-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #78716c;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.cv-qf-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cv-qf-field-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #57534e;
+  white-space: nowrap;
+}
+.cv-qf-select {
+  font-size: 11px;
+  font-family: inherit;
+  border: 1px solid #d6d3d1;
+  border-radius: 6px;
+  padding: 3px 22px 3px 7px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2378716c'/%3E%3C/svg%3E") no-repeat right 6px center;
+  -webkit-appearance: none;
+  appearance: none;
+  color: #1c1917;
+  cursor: pointer;
+  min-width: 110px;
+  max-width: 180px;
+  transition: border-color 0.15s;
+}
+.cv-qf-select:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 2px rgba(13,148,136,0.15);
+}
+.cv-qf-select.active {
+  border-color: #0d9488;
+  background-color: #f0fdfc;
+}
+.cv-qf-reset {
+  font-size: 10px;
+  font-weight: 600;
+  color: #0d9488;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: background 0.12s;
+}
+.cv-qf-reset:hover {
+  background: #f0fdfc;
+}
+.cv-active-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: #0d9488;
+  background: #ccfbf1;
+  border-radius: 20px;
+  padding: 1px 7px;
+}
+
+/* ── Scroll wrapper (horizontal scroll as last resort only) ── */
+.cv-scroll-x {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* ── Main table ─────────────────────────────────────────────── */
+.cv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: auto;
+}
+
+/* ── Sticky column headers ─────────────────────────────────── */
+.cv-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.cv-table thead th {
+  background: #2d2d2d;
+  color: #f5f5f4;
+  padding: 7px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border: 1px solid #1a1a1a;
+  white-space: nowrap;
+  /* required for sticky to work inside overflow-x: auto */
+  position: sticky;
+  top: 0;
+}
+.cv-table thead th.cv-nr {
+  text-align: right;
+}
+
+/* ── Detail rows ────────────────────────────────────────────── */
+tr.cv-det td {
+  padding: 4px 10px;
+  border: 1px solid #e7e5e4;
+  font-size: 11.5px;
+  vertical-align: top;
+  /* responsive: wrap text, no forced nowrap */
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+tr.cv-det:nth-child(odd) td {
+  background: #fafaf8;
+}
+tr.cv-det:hover td {
+  background: #efece9 !important;
+}
+td.cv-nr {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Subsummary rows (level 0) ─────────────────────────────── */
+tr.cv-ss td {
+  background: #f5f3f0;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 7px 10px;
+  border-bottom: 2px solid #44403c;
+  border-top: 2px solid #44403c;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+  vertical-align: middle;
+}
+tr.cv-ss:hover td {
+  background: #ebe8e3;
+}
+
+/* Subsummary full-row flex layout (td spans all columns) */
+.cv-ss-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.cv-ss-label-side {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.cv-ss-label-text {
+  flex: 1;
+  min-width: 0;
+  /* allow wrapping — column width is now set by detail rows, not by this label */
+  white-space: normal;
+  word-break: break-word;
+  font-size: 12px;
+}
+.cv-ss-total-side {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.cv-ss-total-item {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+}
+.cv-ss-total-field {
+  font-size: 9px;
+  font-weight: 600;
+  color: #78716c;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  line-height: 1;
+  margin-bottom: 1px;
+}
+.cv-ss-total-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: #0f766e;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* Amount cells in subsummary — now inside cv-ss-total-value, kept for compat */
+tr.cv-ss td.cv-amt {
+  font-weight: 800;
+  color: #0f766e;
+  white-space: nowrap;
+}
+
+/* ── Subsummary rows (level 1 — nested) ────────────────────── */
+tr.cv-ss.cv-lv2 td {
+  font-size: 11.5px;
+  font-weight: 600;
+  border-bottom-width: 1px;
+  border-top-width: 1px;
+  background: #efece9;
+}
+tr.cv-ss.cv-lv2:hover td {
+  background: #e5e2dd;
+}
+/* Level-2 label gets extra left indent for visual nesting */
+tr.cv-ss.cv-lv2 .cv-ss-label-side {
+  padding-left: 16px;
+}
+tr.cv-ss.cv-lv2 td.cv-amt {
+  color: #0f766e;
+}
+
+/* Chevron inside subsummary */
+.cv-chv {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  margin-right: 5px;
+  font-size: 9px;
+  color: #78716c;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+/* ── Avg label — shown on NEXT LINE below the value ─────────── */
+.cv-avg-line {
+  display: block;
+  font-size: 9px;
+  font-weight: 500;
+  color: #78716c;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+/* Display info strip (secondary fields inside subsummary label cell) */
+.cv-disp-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+.cv-disp-item {
+  font-size: 10px;
+  font-weight: 500;
+  color: #57534e;
+}
+.cv-disp-label {
+  font-weight: 700;
+  color: #44403c;
+}
+
+/* ── Grand summary row ───────────────────────────────────────────────── */
+tr.cv-gs td {
+  background: #2d2d2d;
+  color: #f5f5f4;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 8px 10px;
+  border: 1px solid #1a1a1a;
+  /* no white-space:nowrap — uses flex layout internally now */
+}
+/* Total values inside the dark grand summary row */
+tr.cv-gs .cv-ss-total-value {
+  color: #14b8a6;
+  font-size: 13px;
+}
+tr.cv-gs .cv-ss-total-field {
+  color: #a8a29e;
+}
+tr.cv-gs .cv-avg-line {
+  color: #a8a29e;
+}
+
+/* Footer */
+.cv-foot {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid #e7e5e4;
+  text-align: center;
+  font-size: 10px;
+  color: #a8a29e;
+}
+
+/* ── Drill-down modal ──────────────────────────────────────── */
+.cv-dd-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(2px);
+  animation: cv-fade-in 0.15s ease;
+}
+@keyframes cv-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.cv-dd-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  width: 100%;
+  max-width: 900px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cv-slide-up 0.2s ease;
+}
+@keyframes cv-slide-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.cv-dd-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #e7e5e4;
+  background: #fafaf9;
+  flex-shrink: 0;
+}
+.cv-dd-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1c1917;
+  margin: 0 0 4px;
+}
+.cv-dd-meta {
+  font-size: 11px;
+  color: #78716c;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cv-dd-meta strong {
+  color: #0f766e;
+}
+.cv-dd-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #78716c;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+.cv-dd-close:hover { background: #f5f3f0; color: #1c1917; }
+.cv-dd-body {
+  overflow: auto;
+  flex: 1;
+  padding: 0;
+}
+.cv-dd-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+.cv-dd-tbl thead th {
+  background: #2d2d2d;
+  color: #f5f5f4;
+  padding: 7px 10px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+  position: sticky;
+  top: 0;
+}
+.cv-dd-tbl thead th.cv-nr { text-align: right; }
+.cv-dd-tbl tbody tr:nth-child(odd) td { background: #fafaf8; }
+.cv-dd-tbl tbody tr:hover td { background: #efece9; }
+.cv-dd-tbl tbody td {
+  padding: 4px 10px;
+  border: 1px solid #e7e5e4;
+  word-break: break-word;
+}
+.cv-dd-foot {
+  padding: 12px 20px;
+  background: #2d2d2d;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  border-radius: 0 0 14px 14px;
+}
+.cv-dd-foot-label { font-size: 9px; color: #a8a29e; text-transform: uppercase; letter-spacing: 0.5px; }
+.cv-dd-foot-value { font-size: 13px; font-weight: 700; color: #14b8a6; font-variant-numeric: tabular-nums; }
+.cv-dd-empty {
+  padding: 40px;
+  text-align: center;
+  color: #a8a29e;
+  font-size: 12px;
+}
+
+/* Collapsed state */
+.cv-hidden { display: none !important; }

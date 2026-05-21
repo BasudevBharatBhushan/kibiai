@@ -10,6 +10,8 @@ const BaseChartSchema = {
   response_to_user: z.string(),
   chart_title: z.string().min(1),
   filters: z.array(z.string()).optional(),
+  limit_count: z.number().optional(),
+  sort_order: z.enum(["asc", "desc"]).optional(),
 };
 
 // --- CARTESIAN CHARTS (Bar, Line, Area) ---
@@ -123,6 +125,8 @@ export const ReportAnalysisChartSchema = z.object({
   ]),
   chart_title: z.string().min(1),
   filters: z.array(z.string()).optional(),
+  limit_count: z.number().optional(),
+  sort_order: z.enum(["asc", "desc"]).optional(),
 });
 
 export const ReportAnalysisSchema = z.object({

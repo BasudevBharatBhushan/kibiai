@@ -35,6 +35,16 @@ This module provides the multi-tenant workspace experience for client companies.
 - **Unit Tests**: `src/services/__tests__/company.service.test.ts` (Vitest). Mocks Supabase client to verify resolution and fuzzy matching logic.
 - **E2E Tests**: `tests/company_workspace.spec.ts` (Playwright). Verifies that navigating to a valid slug loads the branded UI and an invalid slug shows a "Workspace Error".
 
+## Classic View Feature (T-044)
+- **Default view mode** in the report template viewer (configurator page).
+- `src/components/report-viewer/ClassicReportView.tsx` — interactive collapsible table renderer, consumes same JSON as print view.
+- `src/components/report-builder/ClassicViewSettingsSection.tsx` — toggle section in the right configurator panel.
+- `src/styles/classicview.css` — styles for the classic table layout.
+- **Show Average in Subtotals** toggle: switches group subtotals (and grand total) from sum to avg, labels with `(avg)` suffix.
+- **Collapse Body by Default** toggle: hides detail rows on load; each subsummary group row is individually clickable to expand.
+- View mode state (`'classic' | 'print'`) is local to `ReportPreview.tsx` — not persisted to `ReportContext`.
+- Classic settings (`showAvg`, `collapseBody`) are lifted to `ConfiguratorPageContent` in `configurator/page.tsx` and passed as props to both `ReportConfigurator` and `ReportPreview`.
+
 ## Common Tasks
 - **Updating Branding**: Modifying the `company_logo` or `company_name` in the database will automatically reflect in the workspace.
 - **Handling Slugs**: The resolver handles hyphen-to-space normalization and prefix matching. For maximum reliability, a dedicated `slug` column should be added to the `companies` table in the future.
