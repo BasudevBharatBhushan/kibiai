@@ -137,8 +137,8 @@ export function ModularChatbot({
   const [loading, setLoading] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
-  const [includeLatestSetup, setIncludeLatestSetup] = useState(false);
-  const [includeLatestConfig, setIncludeLatestConfig] = useState(false);
+  const [includeLatestSetup, setIncludeLatestSetup] = useState(!initialConversationId);
+  const [includeLatestConfig, setIncludeLatestConfig] = useState(!initialConversationId);
 
   const inputRef = useRef<HTMLTextAreaElement>(null); 
   const scrollRef = useAutoScroll<HTMLDivElement>([messages, loading]);
@@ -351,11 +351,11 @@ export function ModularChatbot({
       const payload = {
         conversation_id: conversationId,
         instruction_set: instructionSet,
-        // New threads get context once. Existing threads only get explicit latest setup/config requests.
+        // Send setup/config context explicitly based on checkbox state
         predefined_prompt: buildPredefinedPrompt({
           includeDefault: true,
-          includeSetup: isNewConversation || includeLatestSetup,
-          includeConfig: isNewConversation || includeLatestConfig,
+          includeSetup: includeLatestSetup,
+          includeConfig: includeLatestConfig,
         }),
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
@@ -415,8 +415,8 @@ export function ModularChatbot({
             instruction_set: instructionSet,
             predefined_prompt: buildPredefinedPrompt({
               includeDefault: true,
-              includeSetup: true,
-              includeConfig: true,
+              includeSetup: includeLatestSetup,
+              includeConfig: includeLatestConfig,
             }),
             conversation_metadata: conversationMetadata || {},
             user_prompt: finalPrompt,
@@ -482,6 +482,11 @@ export function ModularChatbot({
             if (item.role === "assistant") {
               text = parseAssistantResponse(text);
             } else if (item.role === "user") {
+              const jsonInstruction = "Please respond in JSON format.";
+              if (text.endsWith(jsonInstruction)) {
+                text = text.substring(0, text.length - jsonInstruction.length).trim();
+              }
+
               const chartEndStr = "Please use these fields and their exact labels or names when creating chart configurations. You must prefer labels for titles but names or labels for actual grouped/numerical fields.";
               const chartEndIdx = text.indexOf(chartEndStr);
               
@@ -508,11 +513,6 @@ export function ModularChatbot({
                   }
                 }
               }
-              const jsonInstruction = "Please respond in JSON format.";
-              if (text.endsWith(jsonInstruction)) {
-                text = text.substring(0, text.length - jsonInstruction.length).trim();
-              }
-
               if (text.endsWith(".json")) {
                 text = text.slice(0, -5).trim();
               }
@@ -542,6 +542,8 @@ export function ModularChatbot({
     setInput("");            
     setShowPrompts(false);   
     setAiSuggestions([]);
+    setIncludeLatestSetup(true);
+    setIncludeLatestConfig(true);
     if (onConversationIdChange) onConversationIdChange(null);
   }, [onConversationIdChange]);
 
