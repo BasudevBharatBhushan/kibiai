@@ -83,6 +83,13 @@ Context providers wrapping the application layout.
 
 ---
 
+### `chat/ModularChatbot.tsx`
+**Purpose:** Reusable, AI-powered conversational interface.
+- **User Prompt Formatting:** The AI backend (`responses.ts`) appends hidden instructions (e.g., "Please respond in JSON format.") to the user's prompt before sending to the LLM. 
+- **CRITICAL RULE:** When restoring conversation history from the API, this component MUST strip out these appended system instructions (e.g., using `text.replace()` or `substring()`). NEVER remove this stripping logic, otherwise internal AI prompting instructions will be visibly leaked to the user in the chat UI.
+
+---
+
 ## Data Flow
 
 ```

@@ -508,6 +508,10 @@ export function ModularChatbot({
                   }
                 }
               }
+              const jsonInstruction = "Please respond in JSON format.";
+              if (text.endsWith(jsonInstruction)) {
+                text = text.substring(0, text.length - jsonInstruction.length).trim();
+              }
 
               if (text.endsWith(".json")) {
                 text = text.slice(0, -5).trim();
