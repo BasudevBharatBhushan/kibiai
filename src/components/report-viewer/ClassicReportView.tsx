@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import "@/styles/classicview.css";
-import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { ChevronDown, ChevronRight, X, Printer, ChevronLeft } from "lucide-react";
 import type { ReportMetadata } from "@/lib/utils/reportMetadata";
 import { formatDisplayDate } from "@/lib/utils/reportMetadata";
 
@@ -15,6 +15,8 @@ interface ClassicReportViewProps {
   jsonData: any[];
   showAvg: boolean;
   collapseBody: boolean;
+  paginate?: boolean;
+  dateBreakdown?: { field: string; interval: "Month" | "Quarter" };
   metadata?: ReportMetadata;
   /** Active field→value filter selections (controlled by parent via ClassicViewSettings) */
   activeFilters?: Record<string, string>;
@@ -230,6 +232,8 @@ export function ClassicReportView({
   jsonData,
   showAvg,
   collapseBody,
+  paginate = false,
+  dateBreakdown,
   metadata,
   activeFilters: activeFiltersProp = {},
 }: ClassicReportViewProps) {
@@ -258,19 +262,40 @@ export function ClassicReportView({
     [jsonData]
   );
 
+  // ── All total fields across all subsummaries ──────────────────────────────
+  const allTotalFields = useMemo(
+    () => [...new Set(subsummaries.flatMap((ss) => ss.SubsummaryTotal ?? []))],
+    [subsummaries]
+  );
+
   // ── Hide subsummary group-by fields from the visible columns ─────────────
   // (same as the HTML reference: grouping fields are shown only in the subsummary
   //  label, not as redundant columns in the detail rows or header)
+  
+  const effectiveSubsummaries = useMemo(() => {
+    const arr = [...subsummaries];
+    if (dateBreakdown?.field) {
+      arr.unshift({
+        SubsummaryFields: ["_date_breakdown"],
+        SubsummaryTotal: allTotalFields,
+        SubsummaryDisplay: [],
+        SortOrder: "asc"
+      });
+    }
+    return arr;
+  }, [subsummaries, dateBreakdown, allTotalFields]);
+
   const hiddenFields = useMemo(() => {
     const s = new Set<string>();
-    for (const ss of subsummaries) {
+    s.add("_date_breakdown");
+    for (const ss of effectiveSubsummaries) {
       for (const f of ss.SubsummaryFields) {
         s.add(f.trim());
         s.add(f);
       }
     }
     return s;
-  }, [subsummaries]);
+  }, [effectiveSubsummaries]);
 
   // Visible field order used for headers and detail rows (excludes group-by fields)
   const visibleFieldOrder = useMemo(
@@ -297,22 +322,39 @@ export function ClassicReportView({
     return set;
   }, [bodyData, visibleFieldOrder, fieldOrder, prefixMap]);
 
-  // ── All total fields across all subsummaries ──────────────────────────────
-  const allTotalFields = useMemo(
-    () => [...new Set(subsummaries.flatMap((ss) => ss.SubsummaryTotal ?? []))],
-    [subsummaries]
-  );
-
-
   // ── Filters — driven by parent (ClassicViewSettings) ─────────────────────
   const filteredBodyData = useMemo(() => {
-    if (Object.keys(activeFiltersProp).length === 0) return bodyData;
-    return bodyData.filter((row) =>
-      Object.entries(activeFiltersProp).every(
-        ([field, val]) => !val || String(row[field] ?? "").trim() === val
-      )
-    );
-  }, [bodyData, activeFiltersProp]);
+    let base = bodyData;
+    if (Object.keys(activeFiltersProp).length > 0) {
+      base = bodyData.filter((row) =>
+        Object.entries(activeFiltersProp).every(
+          ([field, val]) => !val || String(row[field] ?? "").trim() === val
+        )
+      );
+    }
+    
+    // Inject date breakdown if active
+    if (dateBreakdown?.field) {
+      const { field, interval } = dateBreakdown;
+      base = base.map(row => {
+        const val = row[field];
+        let breakdownVal = "Unknown Date";
+        if (val) {
+          const d = new Date(val as string);
+          if (!isNaN(d.getTime())) {
+            if (interval === "Month") {
+              breakdownVal = d.toLocaleDateString("en-US", { year: 'numeric', month: 'long' });
+            } else if (interval === "Quarter") {
+              const q = Math.floor(d.getMonth() / 3) + 1;
+              breakdownVal = `Q${q} ${d.getFullYear()}`;
+            }
+          }
+        }
+        return { ...row, _date_breakdown: breakdownVal };
+      });
+    }
+    return base;
+  }, [bodyData, activeFiltersProp, dateBreakdown]);
 
   // ── Collapse state ────────────────────────────────────────────────────────
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -377,10 +419,10 @@ export function ClassicReportView({
 
   const buildRows = useCallback(
     (data: Record<string, unknown>[], ssLevel: number, parentId: string): RowSpec[] => {
-      if (ssLevel >= subsummaries.length) {
+      if (ssLevel >= effectiveSubsummaries.length) {
         return data.map((row) => ({ kind: "det" as const, groupId: parentId, row }));
       }
-      const ss = subsummaries[ssLevel];
+      const ss = effectiveSubsummaries[ssLevel];
       const groupField = ss.SubsummaryFields[0];
       const grouped = groupBy(data, groupField);
       const sorted = sortMap(grouped, (ss.SortOrder || "asc").toLowerCase());
@@ -407,7 +449,7 @@ export function ClassicReportView({
       }
       return out;
     },
-    [subsummaries]
+    [effectiveSubsummaries]
   );
 
   const rows = useMemo(() => {
@@ -428,6 +470,69 @@ export function ClassicReportView({
     }
     return true;
   }
+
+  // ── Pagination & Print ────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredBodyData, paginate, dateBreakdown]);
+
+  const visibleRows = useMemo(() => {
+    if (!paginate) return rows;
+    const start = (currentPage - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, paginate, currentPage, pageSize]);
+  
+  const totalPages = paginate ? Math.ceil(rows.length / pageSize) : 1;
+
+  const handlePrint = useCallback(() => {
+    const printWindow = window.open('', '', 'width=900,height=1200');
+    if (!printWindow) {
+        alert("Pop-up blocked. Please allow pop-ups for this site to print.");
+        return;
+    }
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(el => el.outerHTML)
+      .join('\n');
+      
+    const tableHtml = document.querySelector('.cv-scroll-x')?.outerHTML || '';
+    const headerHtml = document.querySelector('.cv-report-header')?.outerHTML || '';
+    const footerHtml = document.querySelector('.cv-foot')?.outerHTML || '';
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Print Classic View</title>
+          ${styles}
+          <style>
+            body { font-family: sans-serif; padding: 20px; background: white; }
+            .cv-wrap { max-width: 100%; border: none; box-shadow: none; }
+            .cv-scroll-x { overflow: visible !important; }
+            .cv-table { width: 100%; }
+            .no-print { display: none !important; }
+            @media print {
+              .no-print { display: none !important; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="cv-wrap">
+            ${headerHtml}
+            ${tableHtml}
+            ${footerHtml}
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+    }, 500);
+  }, []);
 
   // ── Render subtotal cells ─────────────────────────────────────────────────
   function renderSubtotalCells(spec: Extract<RowSpec, { kind: "ss" }>) {
@@ -517,6 +622,12 @@ export function ClassicReportView({
           <span className="cv-meta-chip">
             {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
           </span>
+          <button 
+            onClick={handlePrint}
+            className="no-print flex items-center gap-1 px-2 py-1 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors ml-auto shadow-sm"
+          >
+            <Printer size={12} /> Print
+          </button>
         </div>
       </div>
 
@@ -533,7 +644,7 @@ export function ClassicReportView({
             </tr>
           </thead>
           <tbody>
-            {rows.map((spec, rowIdx) => {
+            {visibleRows.map((spec, rowIdx) => {
               // ── Grand Summary ──
               if (spec.kind === "gs") {
                 // Build grand total display items
@@ -680,7 +791,30 @@ export function ClassicReportView({
         </table>
       </div>
 
-      <div className="cv-foot">Classic View · {filteredBodyData.length} records</div>
+      <div className="cv-foot flex items-center justify-between">
+        <span>Classic View · {filteredBodyData.length} records</span>
+        {paginate && totalPages > 1 && (
+          <div className="flex items-center gap-2 no-print">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-[11px] font-semibold text-slate-600">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* ── Drill-down Modal ────────────────────────────────────────────────── */}
       {drillModal && (

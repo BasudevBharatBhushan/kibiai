@@ -119,6 +119,7 @@ function ConfiguratorPageContent({
   const [classicSettings, setClassicSettings] = useState<ClassicViewSettings>({
     showAvg: false,
     collapseBody: false,
+    paginate: false,
   });
   const handleClassicSettingsChange = useCallback(
     (key: keyof ClassicViewSettings, value: boolean) => {
@@ -178,6 +179,37 @@ function ConfiguratorPageContent({
       if (options.length > 0) result.push({ field, options });
     }
     return result;
+  }, [state.reportPreview]);
+
+  const dateFields = useMemo<string[]>(() => {
+    const raw: any = state.reportPreview;
+    if (!raw) return [];
+    let jsonData: unknown[] = [];
+    try {
+      if (raw.report_structure_json && Array.isArray(raw.report_structure_json)) {
+        jsonData = raw.report_structure_json;
+      } else if (Array.isArray(raw)) {
+        jsonData = raw;
+      } else if (raw.ReportStructuredData) {
+        const p = typeof raw.ReportStructuredData === "string"
+          ? JSON.parse(raw.ReportStructuredData) : raw.ReportStructuredData;
+        jsonData = Array.isArray(p) ? p : [];
+      }
+    } catch { return []; }
+
+    const bodyData: Record<string, unknown>[] = (jsonData.find((x: any) => "Body" in x) as any)?.Body?.BodyField ?? [];
+    if (!bodyData.length) return [];
+    
+    // Pick the first row with values to test for date types
+    const sample = bodyData[0];
+    return Object.keys(sample).filter(k => {
+      const v = sample[k];
+      if (typeof v === "string" && v.length > 5 && isNaN(Number(v))) {
+        const ts = Date.parse(v);
+        return !isNaN(ts);
+      }
+      return false;
+    }).sort();
   }, [state.reportPreview]);
 
   const toggleChat = useCallback(() => setIsChatOpen((p) => !p), []);
@@ -629,6 +661,7 @@ function ConfiguratorPageContent({
               viewMode={viewMode}
               onViewModeChange={handleViewModeChange}
               filterFields={filterFields}
+              dateFields={dateFields}
               activeFilters={activeFilters}
               onFilterChange={handleFilterChange}
             />

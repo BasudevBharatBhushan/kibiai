@@ -27,6 +27,7 @@ interface ReportConfiguratorProps {
   viewMode?: "classic" | "print";
   onViewModeChange?: (mode: "classic" | "print") => void;
   filterFields?: FilterField[];
+  dateFields?: string[];
   activeFilters?: Record<string, string>;
   onFilterChange?: (field: string, value: string) => void;
 }
@@ -37,6 +38,7 @@ export function ReportConfigurator({
   viewMode = "classic",
   onViewModeChange,
   filterFields,
+  dateFields,
   activeFilters,
   onFilterChange,
 }: ReportConfiguratorProps = {}) {
@@ -267,10 +269,11 @@ export function ReportConfigurator({
 
          {/* 0. Classic View Settings — shown FIRST when in Classic mode */}
          {viewMode === "classic" && classicSettings && onClassicSettingsChange && (
-           <ClassicViewSettingsSection
+             <ClassicViewSettingsSection
              settings={classicSettings}
              onChange={onClassicSettingsChange}
              filterFields={filterFields}
+             dateFields={dateFields}
              activeFilters={activeFilters}
              onFilterChange={onFilterChange}
            />

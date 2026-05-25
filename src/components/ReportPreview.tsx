@@ -93,6 +93,7 @@ export function ReportPreview({
   const effectiveSettings: ClassicViewSettings = classicSettings ?? {
     showAvg: false,
     collapseBody: false,
+    paginate: false,
   };
 
   const isPrint = viewMode === "print";
@@ -109,6 +110,8 @@ export function ReportPreview({
               jsonData={finalJsonData}
               showAvg={effectiveSettings.showAvg}
               collapseBody={effectiveSettings.collapseBody}
+              paginate={effectiveSettings.paginate}
+              dateBreakdown={effectiveSettings.dateBreakdown}
               metadata={derivedMetadata}
               activeFilters={activeFilters}
             />
