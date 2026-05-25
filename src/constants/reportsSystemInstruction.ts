@@ -22,21 +22,19 @@ CORE PRINCIPLES
 STRICT FIELD PLACEMENT RULES (MUST FOLLOW — NEVER VIOLATE)
 ============================================================
 
-RULE 1 — NO FIELD OVERLAP BETWEEN report_columns AND group_by_fields:
-  A field that appears in group_by_fields (as field, display, or group_total)
-  MUST NOT also appear in report_columns.
-  The grouping engine renders those fields automatically in sub-summary headers.
-  Duplicating them in report_columns will corrupt the report layout.
+RULE 1 — FIELD OVERLAP RULES BETWEEN report_columns AND group_by_fields:
+  - 'field' and 'display' inside group_by_fields MUST NOT appear in report_columns. The grouping engine renders those fields automatically in sub-summary headers. Duplicating them will corrupt the report layout.
+  - 'group_total' inside group_by_fields MUST ONLY contain fields that ARE already present in report_columns. The JS engine sums up these columns directly from the report body to show in the group header.
 
   ✅ CORRECT:
-    group_by_fields: { Region: { table: "REG", field: "RegionName", group_total: [{ table: "LIC", field: "LinePrice" }] } }
+    group_by_fields: { Region: { table: "REG", field: "RegionName", group_total: [{ table: "LIC", field: "Quantity" }] } }
     report_columns: [{ table: "SLS", field: "InvoiceNo" }, { table: "LIC", field: "Quantity" }]
-    — RegionName and LinePrice are NOT in report_columns.
+    — RegionName is NOT in report_columns. Quantity IS in report_columns.
 
   ❌ WRONG:
     group_by_fields: { Region: { table: "REG", field: "RegionName", group_total: [{ table: "LIC", field: "LinePrice" }] } }
-    report_columns: [{ table: "REG", field: "RegionName" }, { table: "LIC", field: "LinePrice" }]
-    — Both are repeated in report_columns. DO NOT DO THIS.
+    report_columns: [{ table: "REG", field: "RegionName" }, { table: "LIC", field: "Quantity" }]
+    — RegionName is repeated in report_columns. LinePrice is in group_total but NOT in report_columns. DO NOT DO THIS.
 
 RULE 2 — NO DUPLICATES WITHIN ANY SECTION:
   - report_columns: Each table.field pair must be unique.
@@ -99,11 +97,11 @@ Note: "!=Value" is automatically converted to the correct protocol — omit bloc
 Purpose: Defines sub-summary grouping. Renders as collapsible group headers in the report. Simplicity First: Prioritize a solid flat report with at least 2 columns. Only add grouping if explicitly requested or strictly required.
 - field: the grouping field (NOT repeated in report_columns)
 - display: additional context fields shown in the group header (NOT repeated in report_columns). Use this for any static or pre-calculated header fields (e.g., TotalInvStatic).
-- group_total: ONLY use (body) fields that need to be dynamically summed/aggregated across the group (e.g., LineRevenue, Quantity). NEVER use pre-calculated or static header fields (like TotalInvStatic, Total_Due_Static) here. If the user wants to show a direct/static total field, it MUST be placed in 'display', NOT 'group_total'. (NOT repeated in report_columns)
+- group_total: ONLY use fields that are PRESENT IN report_columns that need to be dynamically summed/aggregated across the group (e.g., LineRevenue, Quantity). NEVER use pre-calculated or static header fields (like TotalInvStatic, Total_Due_Static) here. If the user wants to show a direct/static total field, it MUST be placed in 'display', NOT 'group_total'.
 - sort_order: "asc" or "desc"
 Example:
 "group_by_fields": {
-  "Region": { "table": "REG", "field": "RegionName", "display": [], "group_total": [{ "table": "LIC", "field": "LinePrice" }], "sort_order": "asc" }
+  "Region": { "table": "REG", "field": "RegionName", "display": [], "group_total": [{ "table": "calculated", "field": "LineTotal" }], "sort_order": "asc" }
 }
 
 ------------------------------------------------------------
@@ -111,7 +109,8 @@ Example:
 ------------------------------------------------------------
 Purpose: Body columns shown in each row of the report.
 - Min 2, max 5 fields.
-- Must NOT include any field already in group_by_fields (field, display, or group_total).
+- Must NOT include any field already used as 'field' or 'display' in group_by_fields.
+- MUST include any fields that are used in 'group_total' of group_by_fields.
 - Calculated fields use { "table": "calculated", "field": "<field_name>" }.
 Example:
 "report_columns": [
@@ -235,7 +234,7 @@ Output:
   "date_range_fields": { "SLS": { "SalesDate": "05/01/2025...05/31/2025" } },
   "filters": { "SLS": { "InvoiceStatus": "=Closed" } },
   "group_by_fields": {
-    "Region": { "table": "REG", "field": "RegionName", "display": [], "group_total": [{ "table": "LIC", "field": "LinePrice" }], "sort_order": "asc" }
+    "Region": { "table": "REG", "field": "RegionName", "display": [], "group_total": [{ "table": "calculated", "field": "LineTotal" }], "sort_order": "asc" }
   },
   "report_columns": [
     { "table": "SLS", "field": "InvoiceNo" },
@@ -244,7 +243,7 @@ Output:
     { "table": "calculated", "field": "LineTotal" }
   ],
   "body_sort_order": [{ "field": "InvoiceNo", "sort_order": "asc" }],
-  "summary_fields": ["LinePrice"],
+  "summary_fields": ["LineTotal"],
   "custom_calculated_fields": [
     { "field_name": "LineTotal", "label": "Line Total", "formula": "=Quantity * UnitPrice", "dependencies": ["Quantity", "UnitPrice"], "format": "currency" }
   ],
@@ -267,6 +266,8 @@ Output:
   },
   "report_columns": [
     { "table": "MOV", "field": "MovementDate" },
+    { "table": "MOV", "field": "QuantityIn" },
+    { "table": "MOV", "field": "QuantityOut" },
     { "table": "calculated", "field": "NetMovement" }
   ],
   "body_sort_order": [{ "field": "MovementDate", "sort_order": "desc" }],
