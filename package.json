@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@mindfiredigital/pivothead": "^1.22.1",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-slot": "^1.2.4",

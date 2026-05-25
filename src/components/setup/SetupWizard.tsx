@@ -228,20 +228,23 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
         const res = await fetch(`/api/company/templates/${templateId}/setup`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.success && data.template?.report_template_setup_json) {
-          const existing = data.template.report_template_setup_json;
-          if (existing?.host !== undefined || Object.keys(existing?.tables || {}).length > 0) {
-            dispatch({ type: "SET_CONFIG", payload: existing });
-            if (data.template?.module_id) {
-              setModuleId(data.template.module_id);
-            }
+        if (data.success && data.template) {
+          if (data.template.module_id) {
+            setModuleId(data.template.module_id);
+          }
+          
+          if (data.template.report_template_setup_json) {
+            const existing = data.template.report_template_setup_json;
+            if (existing?.host !== undefined || Object.keys(existing?.tables || {}).length > 0) {
+              dispatch({ type: "SET_CONFIG", payload: existing });
             
-            // Auto-select the first table if exists, else relationships if exists, else add_database
-            const tableKeys = Object.keys(existing.tables || {});
-            if (tableKeys.length > 0) {
-              setSelectedView(`table:${tableKeys[0]}`);
-            } else if (existing.relationships?.length > 0) {
-              setSelectedView("relationships");
+              // Auto-select the first table if exists, else relationships if exists, else add_database
+              const tableKeys = Object.keys(existing.tables || {});
+              if (tableKeys.length > 0) {
+                setSelectedView(`table:${tableKeys[0]}`);
+              } else if (existing.relationships?.length > 0) {
+                setSelectedView("relationships");
+              }
             }
           }
         }
