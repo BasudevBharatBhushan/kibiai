@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { fetchFmRecord, validateFmDateFilter } from "@/lib/utils/utility";
+import { fetchFmRecord, validateFmDateFilter, closeFmSession } from "@/lib/utils/utility";
 
 // Types
 interface ReportSetupJson {
@@ -345,16 +345,23 @@ async function fetchDataFromAPI(
   //     }
   //   );
 
-  const response = await fetchFmRecord(payload, token);
-
-  //   if (!response.ok) {
-  //     throw new Error(
-  //       `API call failed: ${response.status} ${response.statusText}`
-  //     );
-  //   }
-
-  const result = response;
-  return result.data || [];
+  let fmSessionToken: string | null = null;
+  try {
+    const response = await fetchFmRecord(payload, token);
+    fmSessionToken = response.token ?? null;
+    return response.data || [];
+  } finally {
+    // Always close the FM Data API session after the fetch — even on error.
+    // The OData path does not use /sessions so we guard with isDataApi.
+    if (isDataApi && fmSessionToken) {
+      await closeFmSession(
+        fmSessionToken,
+        setupJson.host ?? "",
+        tableConfig.file ?? "",
+        "vLatest"
+      );
+    }
+  }
 }
 
 async function processFetchOrder(
@@ -1210,7 +1217,7 @@ async function stitch(
   }
 }
 
-function generateReportStructure(
+export function generateReportStructure(
   stitchResult: StitchResult,
   reportStructure: ReportConfigJson,
   setupJson: ReportSetupJson

@@ -20,7 +20,7 @@
  */
 
 import { ReportConfig, ReportSetup } from "@/lib/reportConfigTypes";
-import { generateReportStructure } from "@/lib/utils/utility";
+import { generateReportStructure } from "@/app/api/generate-report/route";
 
 export type ReloadType = "hard" | "soft";
 

@@ -50,6 +50,47 @@ RULE 3 — CALCULATED FIELDS NEVER IN JOINS:
 RULE 4 — body_sort_order MUST reference fields from report_columns only:
   Do not add sort entries for fields that are only in group_by_fields.
 
+RULE 5 — CHOOSING join_type ("inner" vs "left") — CRITICAL:
+
+  Use "left" when:
+    - The parent table (fetch_order=1) is a FACT table (SalesLineItem, Invoice, PurchaseOrder, etc.).
+      A fact table already exists only because a transaction occurred, so all rows are meaningful.
+    - You want to show parent rows even when an optional related table has no match
+      (e.g., show all Invoices even if some have no line items).
+
+  Use "inner" when:
+    - The parent table (fetch_order=1) is a DIMENSION table (Product, Contact, Staff, etc.)
+      that contains ALL records in the system, not just those with transactions.
+    - You have applied a date_range_fields or filter to a JOINED table and you ONLY want
+      to see dimension rows that actually have matching data in that joined table.
+    - The report goal is "show me only products that were sold/purchased in this period" —
+      NOT "show me all products and their sales (which would include products with zero activity)".
+
+  THE DIMENSION-AS-CONNECTOR PATTERN (common mistake):
+    When a DIMENSION table (e.g., Product) is used at fetch_order=1 to connect two FACT
+    tables (e.g., SalesLineItem and MaterialLineItem), and both fact tables have date filters:
+    - Using "left" on BOTH joins will pull ALL dimension rows into the report, producing
+      rows with empty Quantity/Qty_Received for products that had no 2026 transactions.
+    - Use "inner" on the fact table joins whose date/filter condition defines the report scope.
+
+  DECISION GUIDE:
+    Q: Is fetch_order=1 a dimension table (Product, Contact, Region, etc.)?
+      YES → joined fact tables should almost always be "inner".
+      NO  → joined lookup/dimension tables should almost always be "left".
+
+  ✅ CORRECT — Product as connector, show only products with 2026 receipts:
+    { "primary_table": "Product", "fetch_order": 1 }
+    { "joined_table": "SalesLineItem",   "join_type": "left",  "fetch_order": 2, ... }
+    { "joined_table": "MaterialLineItem", "join_type": "inner", "fetch_order": 3, ... }
+    — Only products that appear in MaterialLineItem (2026) are shown.
+      Their SalesLineItem data is shown if available, blank if not.
+
+  ❌ WRONG — All products returned, most with empty sales/purchase data:
+    { "primary_table": "Product", "fetch_order": 1 }
+    { "joined_table": "SalesLineItem",   "join_type": "left", "fetch_order": 2, ... }
+    { "joined_table": "MaterialLineItem", "join_type": "left", "fetch_order": 3, ... }
+    — Pulls ALL products. Products with no 2026 data appear as empty rows.
+
 ============================================================
 JSON OUTPUT STRUCTURE
 ============================================================
@@ -251,8 +292,9 @@ Output:
   "response_to_user": "Generating sales by region for May 2025, grouped by region A-Z, showing invoice details and line totals."
 }
 
---- TYPE 3: Full Report — Product Stock ---
+--- TYPE 3: Full Report — Product Stock (FACT table as base) ---
 Input: "Product-wise stock details for this month, highest stock-in first."
+Note: MOV (StockMovement) is a FACT table → use "left" for the dimension join.
 Output:
 {
   "db_defination": [
@@ -277,5 +319,41 @@ Output:
   ],
   "report_header": "Product Stock Movement",
   "response_to_user": "Generating product stock movement for May 2025, grouped by product name (highest stock-in first), showing net movement per entry."
+}
+
+--- TYPE 3: Full Report — Buy vs Sale Analysis (DIMENSION table as connector) ---
+Input: "Show 2026 buy vs sale analysis by product category and product name, only products with receipts greater than zero."
+Note: Product is a DIMENSION table connecting two FACT tables. Both fact tables have date filters.
+      Use "inner" on the fact table whose condition defines the report scope (MaterialLineItem, Qty_Received > 0).
+      Use "left" on the optional fact table (SalesLineItem) so products with receipts but no sales still appear.
+Output:
+{
+  "db_defination": [
+    { "primary_table": "Product", "fetch_order": 1 },
+    { "primary_table": "Product", "joined_table": "SalesLineItem",   "source": "ItemNo", "target": "ItemNo", "fetch_order": 2, "join_type": "left" },
+    { "primary_table": "Product", "joined_table": "MaterialLineItem", "source": "ItemNo", "target": "ItemNo", "fetch_order": 3, "join_type": "inner" }
+  ],
+  "date_range_fields": {
+    "SalesLineItem":   { "SalesDate":    "01/01/2026...12/31/2026" },
+    "MaterialLineItem": { "DateReceived": "01/01/2026...12/31/2026" }
+  },
+  "filters": { "MaterialLineItem": { "Qty_Received": ">0" } },
+  "group_by_fields": {
+    "ProductCategory": { "table": "Product", "field": "ProductCategory", "display": [], "group_total": [{ "table": "SalesLineItem", "field": "Quantity" }, { "table": "MaterialLineItem", "field": "Qty_Received" }, { "table": "calculated", "field": "SaleToReceiveRatio" }], "sort_order": "asc" },
+    "ProductName":     { "table": "Product", "field": "ItemName",        "display": [], "group_total": [{ "table": "SalesLineItem", "field": "Quantity" }, { "table": "MaterialLineItem", "field": "Qty_Received" }, { "table": "calculated", "field": "SaleToReceiveRatio" }], "sort_order": "asc" }
+  },
+  "report_columns": [
+    { "table": "Product",          "field": "ItemNo" },
+    { "table": "SalesLineItem",    "field": "Quantity" },
+    { "table": "MaterialLineItem", "field": "Qty_Received" },
+    { "table": "calculated",       "field": "SaleToReceiveRatio" }
+  ],
+  "body_sort_order": [{ "field": "ItemNo", "sort_order": "asc" }],
+  "summary_fields": ["Quantity", "Qty_Received", "SaleToReceiveRatio"],
+  "custom_calculated_fields": [
+    { "field_name": "SaleToReceiveRatio", "label": "Sold/Received %", "formula": "=IF(Qty_Received=0,0,Quantity/Qty_Received)", "dependencies": ["Quantity", "Qty_Received"], "format": "percentage" }
+  ],
+  "report_header": "Product Buy vs Sale Analysis by Category",
+  "response_to_user": "Generating 2026 buy vs sale analysis grouped by product category and name, showing only products with received quantity greater than zero."
 }
 `;
