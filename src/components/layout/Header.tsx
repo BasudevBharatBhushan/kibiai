@@ -237,7 +237,10 @@ export default function Header() {
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push(`/${slug}/login`);
+    // Use a full page reload instead of router.push so that React state
+    // (including AccessControlContext) is fully cleared. A soft navigation
+    // keeps accountId in memory, causing the login page to redirect back.
+    window.location.href = `/${slug}/login`;
   };
 
   const displayName = userName || (userEmail ? firstNameFromEmail(userEmail) : "Admin");

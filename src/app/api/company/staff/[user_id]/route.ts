@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/server";
-import { getSession } from "@/utils/auth";
+import { getSession, hashPassword } from "@/utils/auth";
 
 interface RouteParams {
   params: Promise<{
@@ -58,7 +58,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
-    const { full_name, user_email, designation, role_id, user_status } = await req.json();
+    const { full_name, user_email, designation, role_id, user_status, new_password } = await req.json();
 
     // Update user record
     const { data: updatedUser, error: updateError } = await adminClient
@@ -89,12 +89,27 @@ export async function PUT(req: Request, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: updateError.message }, { status: 500 });
     }
 
-    // Optionally update email in auth_accounts if changed
+    // Update email in auth_accounts if changed
     if (user_email && user_email !== targetUser.user_email) {
       await adminClient
         .from("auth_accounts")
         .update({ email: user_email })
         .eq("email", targetUser.user_email);
+    }
+
+    // Update password in auth_accounts if a new password was provided
+    if (new_password && new_password.trim().length >= 6) {
+      const hashedPassword = await hashPassword(new_password);
+      const emailToLookup = user_email || targetUser.user_email;
+      const { error: pwError } = await adminClient
+        .from("auth_accounts")
+        .update({ password_hash: hashedPassword })
+        .eq("email", emailToLookup);
+
+      if (pwError) {
+        console.warn("PUT /api/company/staff/[user_id]: password update failed —", pwError.message);
+        // Non-fatal: user profile was updated successfully, just warn
+      }
     }
 
     return NextResponse.json({ success: true, user: updatedUser });

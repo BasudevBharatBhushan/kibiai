@@ -63,6 +63,7 @@ export default function AdminDashboardPage() {
     designation: string;
     role_id: string;
     user_status: string;
+    new_password: string;
   } | null>(null);
 
   const [staff, setStaff] = useState<User[]>([]);
@@ -151,6 +152,8 @@ export default function AdminDashboardPage() {
           designation: editingStaff.designation,
           role_id: editingStaff.role_id,
           user_status: editingStaff.user_status,
+          // Only send new_password if the superadmin actually typed something
+          ...(editingStaff.new_password.trim() ? { new_password: editingStaff.new_password } : {}),
         },
         { companyId: company.id }
       );
@@ -390,7 +393,8 @@ export default function AdminDashboardPage() {
                                   user_email: user.user_email,
                                   designation: user.designation,
                                   role_id: primaryRole.role_id,
-                                  user_status: user.user_status || 'Active'
+                                  user_status: user.user_status || 'Active',
+                                  new_password: '',
                                 });
                                 setIsEditStaffModalOpen(true);
                               }}
@@ -810,6 +814,28 @@ export default function AdminDashboardPage() {
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </select>
+              </div>
+              {/* Password Reset — divider + optional field */}
+              <div className="col-span-2">
+                <div className="flex items-center gap-3 my-1">
+                  <div className="flex-1 h-px bg-gray-100" />
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">🔑 Password Reset</span>
+                  <div className="flex-1 h-px bg-gray-100" />
+                </div>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                  New Password <span className="text-gray-300 font-normal normal-case">(optional — leave blank to keep current)</span>
+                </label>
+                <input 
+                  type="password"
+                  placeholder="Min. 6 characters"
+                  minLength={6}
+                  autoComplete="new-password"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  value={editingStaff.new_password}
+                  onChange={e => setEditingStaff({...editingStaff, new_password: e.target.value})}
+                />
               </div>
             </div>
             <button 
