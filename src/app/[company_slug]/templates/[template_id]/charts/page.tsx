@@ -880,7 +880,8 @@ function ChartBuilderPageContent() {
         rows={pageData.rows}
         reportDataJson={pageData.report_template_data_json}
         shouldBootstrapCharts={
-          shouldBootstrapStarterCharts({
+          // TODO: Remove this equiparts-specific override once chart bootstrap is re-enabled for them.
+          slug === "equiparts" ? false : shouldBootstrapStarterCharts({
             schemaCount: pageData.schemas.length,
             conversationId: pageData.chart_conversation_id,
           })
