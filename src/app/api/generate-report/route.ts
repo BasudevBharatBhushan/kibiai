@@ -817,16 +817,33 @@ function calculateCustomFields(
       hfInstance.setSheetContent(sheetId, sheetData);
 
       // Pre-process formula (replace field names with column references)
-      let processedFormula = formula.trim().replace(/`/g, "");
+      let processedFormula = formula.trim();
       if (processedFormula.startsWith("=")) {
         processedFormula = processedFormula.substring(1);
       }
 
-      dependencies.forEach((dep, index) => {
-        const colLetter = String.fromCharCode(65 + index);
-        const regex = new RegExp(`\\b${dep}\\b`, "g");
-        processedFormula = processedFormula.replace(regex, `${colLetter}2`);
+      // Sort dependencies by length descending to prevent substring replacement bugs
+      // e.g. replacing "Price" before "Total Price"
+      const sortedDeps = dependencies
+        .map((dep, index) => ({ dep, colLetter: String.fromCharCode(65 + index) }))
+        .sort((a, b) => b.dep.length - a.dep.length);
+
+      sortedDeps.forEach(({ dep, colLetter }) => {
+        // Escape special regex characters in the dependency name
+        const escapedDep = dep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // 1. Try to replace backticked occurrences first (e.g. `Total Price`)
+        const backtickRegex = new RegExp(`\`${escapedDep}\``, "g");
+        processedFormula = processedFormula.replace(backtickRegex, `${colLetter}2`);
+
+        // 2. Replace unbackticked occurrences using lookarounds for word boundaries
+        // This handles cases where dep contains non-word characters
+        const boundaryRegex = new RegExp(`(?<=^|[^a-zA-Z0-9_])${escapedDep}(?=[^a-zA-Z0-9_]|$)`, "g");
+        processedFormula = processedFormula.replace(boundaryRegex, `${colLetter}2`);
       });
+
+      // Remove any leftover backticks
+      processedFormula = processedFormula.replace(/`/g, "");
 
       // Calculate per row
       bodyFields.forEach((row, rowIndex) => {
@@ -1195,14 +1212,8 @@ async function stitch(
       return outputRecord;
     });
 
-    const bodyFieldsWithCalculations = calculateCustomFields(
-      bodyFields,
-      reportStructure.custom_calculated_fields || [],
-      fieldLabelMap
-    );
-
     const stitchResult: StitchResult = {
-      BodyField: bodyFieldsWithCalculations,
+      BodyField: bodyFields,
     };
 
     // Save the stitched result
@@ -1548,9 +1559,16 @@ export function generateReportStructure(
         }
       });
     }
+    // Compute custom fields dynamically so soft reloads reflect format/label changes
+    const computedBodyFields = calculateCustomFields(
+      stitchResult.BodyField,
+      reportStructure.custom_calculated_fields || [],
+      fieldLabelMap
+    );
+
     const bodySection = {
       Body: {
-        BodyField: stitchResult.BodyField,
+        BodyField: computedBodyFields,
         BodyFieldOrder: filteredBodyFields,
         BodySortOrder: bodySortOrder,
         FieldPrefix: fieldPrefix,

@@ -677,7 +677,10 @@ export function ClassicReportView({
                   </span>
                 )}
                 <span className="cv-ss-label-text">
-                  <strong>{spec.field.trim()}:</strong>&nbsp;{spec.label}
+                  {spec.field.trim() !== "_date_breakdown" && (
+                    <><strong>{spec.field.trim()}:</strong>&nbsp;</>
+                  )}
+                  {spec.label}
                   {collapsed && (
                     <span style={{ color: "#78716c", fontWeight: "normal", fontSize: "11px", marginLeft: "6px" }}>
                       {effectiveSubsummaries[spec.level + 1] ? (() => {
