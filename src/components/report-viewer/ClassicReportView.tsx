@@ -678,6 +678,15 @@ export function ClassicReportView({
                 )}
                 <span className="cv-ss-label-text">
                   <strong>{spec.field.trim()}:</strong>&nbsp;{spec.label}
+                  {collapsed && (
+                    <span style={{ color: "#78716c", fontWeight: "normal", fontSize: "11px", marginLeft: "6px" }}>
+                      {effectiveSubsummaries[spec.level + 1] ? (() => {
+                        const nextField = effectiveSubsummaries[spec.level + 1].SubsummaryFields[0];
+                        const countItems = new Set(spec.rows.map(r => String(r[nextField] ?? "").trim())).size;
+                        return `(${countItems} ${nextField.trim()}${countItems !== 1 ? 's' : ''}, ${spec.rows.length} record${spec.rows.length !== 1 ? 's' : ''})`;
+                      })() : `(${spec.rows.length} record${spec.rows.length !== 1 ? 's' : ''})`}
+                    </span>
+                  )}
                   {spec.displayFields.length > 0 && (
                     <div className="cv-disp-strip">
                       {spec.displayFields.map((df) => {
@@ -723,6 +732,7 @@ export function ClassicReportView({
     isCollapsed,
     toggleGroup,
     setDrillModal,
+    effectiveSubsummaries,
   ]);
 
   // ── Render subtotal cells ─────────────────────────────────────────────────

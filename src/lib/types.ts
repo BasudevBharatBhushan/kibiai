@@ -59,6 +59,11 @@ export interface ReportConfigJson {
   summary_fields?: string[];
   report_header?: string;
   response_to_user?: string;
+  classic_settings?: {
+    showAvg?: boolean;
+    collapseBody?: boolean;
+    paginate?: boolean;
+  };
   [key: string]: any;
 }
 
@@ -176,4 +181,9 @@ export const reportConfigSchema = z.object({
   summary_fields: z.array(z.string()).optional(),
   report_header: z.string().optional(),
   response_to_user: z.string().optional(),
+  classic_settings: z.object({
+    showAvg: z.boolean().optional(),
+    collapseBody: z.boolean().optional(),
+    paginate: z.boolean().optional(),
+  }).optional(),
 });

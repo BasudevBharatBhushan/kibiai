@@ -121,11 +121,30 @@ function ConfiguratorPageContent({
     collapseBody: false,
     paginate: false,
   });
+
+  // Sync from DB config when loaded
+  useEffect(() => {
+    if (state.config?.classic_settings) {
+      setClassicSettings((prev) => ({
+        ...prev,
+        ...state.config.classic_settings,
+      }));
+    }
+  }, [state.config?.classic_settings]);
+
   const handleClassicSettingsChange = useCallback(
     (key: keyof ClassicViewSettings, value: boolean) => {
-      setClassicSettings((prev) => ({ ...prev, [key]: value }));
+      setClassicSettings((prev) => {
+        const next = { ...prev, [key]: value };
+        if (state.templateId) {
+          dispatch({ type: "UPDATE_CLASSIC_SETTINGS", payload: { [key]: value } });
+          const newConfig = { ...state.config, classic_settings: next };
+          apiClient.post(`/api/templates/${state.templateId}/config`, { config_json: newConfig }).catch(console.error);
+        }
+        return next;
+      });
     },
-    []
+    [state.templateId, state.config, dispatch]
   );
 
   // View mode — classic (default) or print — shared between preview and configurator

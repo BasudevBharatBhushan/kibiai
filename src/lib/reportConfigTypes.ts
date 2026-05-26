@@ -78,4 +78,9 @@ export interface ReportConfig {
   body_sort_order: SortField[];
   summary_fields: string[];
   custom_calculated_fields: CustomCalcField[];
+  classic_settings?: {
+    showAvg?: boolean;
+    collapseBody?: boolean;
+    paginate?: boolean;
+  };
 }

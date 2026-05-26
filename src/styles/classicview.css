@@ -13,7 +13,6 @@
 /* ── Report header (title + metadata) ─────────────────────── */
 .cv-report-header {
   padding: 12px 0 14px;
-  border-bottom: 2px solid #2d2d2d;
   margin-bottom: 14px;
 }
 .cv-title {

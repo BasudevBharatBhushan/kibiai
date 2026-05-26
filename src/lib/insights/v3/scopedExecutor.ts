@@ -188,7 +188,11 @@ function runPeriodPass(
     try {
       const hf = HyperFormula.buildFromSheets(
         { Sheet1: sheetData as never },
-        { licenseKey: "gpl-v3", dateFormats: ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY"] }
+        {
+          licenseKey: "gpl-v3",
+          dateFormats: ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY"],
+          maxRows: 200000,
+        }
       );
       const val = hf.getCellValue({ sheet: 0, row: formulaRowIdx, col: 0 });
       hf.destroy();
@@ -254,7 +258,10 @@ function runDerivedPass(
       try {
         const hf = HyperFormula.buildFromSheets(
           { Sheet1: [[`=${formula}`]] },
-          { licenseKey: "gpl-v3" }
+          {
+            licenseKey: "gpl-v3",
+            maxRows: 200000,
+          }
         );
         const val = hf.getCellValue({ sheet: 0, row: 0, col: 0 });
         hf.destroy();

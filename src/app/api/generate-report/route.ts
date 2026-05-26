@@ -808,6 +808,7 @@ function calculateCustomFields(
         licenseKey: "gpl-v3",
         // Set null date to December 30, 1899 (Excel standard)
         nullDate: { year: 1899, month: 12, day: 30 },
+        maxRows: 200000,
       });
 
       const sheetName = "CalcSheet";

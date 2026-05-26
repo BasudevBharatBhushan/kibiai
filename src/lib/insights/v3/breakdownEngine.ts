@@ -105,7 +105,11 @@ function evalPeriodCalc(
 
     const hf = HyperFormula.buildFromSheets(
       { Sheet1: sheetData as never },
-      { licenseKey: "gpl-v3", dateFormats: ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY"] }
+      {
+        licenseKey: "gpl-v3",
+        dateFormats: ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY"],
+        maxRows: 200000,
+      }
     );
     const result = hf.getCellValue({ sheet: 0, row: formulaRowIdx, col: 0 });
     hf.destroy();

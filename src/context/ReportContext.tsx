@@ -60,6 +60,8 @@ type Action =
   | { type: "REMOVE_SUMMARY_FIELD"; payload: number }
   | { type: "UPDATE_SUMMARY_FIELD"; payload: { index: number; value: string } }
   | { type: "REORDER_SUMMARY_FIELDS"; payload: { sourceIndex: number; destinationIndex: number } }
+  // Classic Settings
+  | { type: "UPDATE_CLASSIC_SETTINGS"; payload: Record<string, any> }
   // Loading Report 
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "LOAD_FULL_REPORT"; payload: { config: ReportConfig; setup: ReportSetup; templateId: string; conversationId?: string | null } }
@@ -535,6 +537,18 @@ case "SYNC_DATE_RANGES":
     case "SET_LOADING":
       return { ...state, isLoading: action.payload };
 
+    case "UPDATE_CLASSIC_SETTINGS":
+      return {
+        ...state,
+        config: {
+          ...state.config,
+          classic_settings: {
+            ...state.config.classic_settings,
+            ...action.payload
+          }
+        }
+      };
+
     case "LOAD_FULL_REPORT": {
       const loadedConfig: ReportConfig = {
         ...initialState.config,
@@ -546,7 +560,8 @@ case "SYNC_DATE_RANGES":
         custom_calculated_fields: action.payload.config.custom_calculated_fields || [],
         group_by_fields: action.payload.config.group_by_fields || {},
         filters: action.payload.config.filters || {},
-        date_range_fields: action.payload.config.date_range_fields || {}
+        date_range_fields: action.payload.config.date_range_fields || {},
+        classic_settings: action.payload.config.classic_settings || {}
       };
       return {
         ...state,
