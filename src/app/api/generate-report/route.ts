@@ -1402,6 +1402,7 @@ export function generateReportStructure(
               SubsummaryFields: [mainFieldLabel],
               SubsummaryTotal: subsummaryTotal,
               SubsummaryDisplay: displayLabels,
+              SortOrder: group.sort_order || "asc",
             },
           });
         }

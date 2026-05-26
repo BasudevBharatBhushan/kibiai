@@ -251,6 +251,12 @@ export function ClassicReportView({
   const prefixMap: Record<string, string> = useMemo(() => bodyItem?.FieldPrefix ?? {}, [bodyItem]);
   const suffixMap: Record<string, string> = useMemo(() => bodyItem?.FieldSuffix ?? {}, [bodyItem]);
 
+  // BodySortOrder: [{Column, Order}] — same structure the print view already uses
+  const bodySortOrder: Array<{ Column: string; Order: string }> = useMemo(
+    () => bodyItem?.BodySortOrder ?? [],
+    [bodyItem]
+  );
+
   const subsummaries: SubsummaryDef[] = useMemo(
     () => jsonData.filter((x) => "Subsummary" in x).map((x) => x.Subsummary),
     [jsonData]
@@ -356,6 +362,22 @@ export function ClassicReportView({
     return base;
   }, [bodyData, activeFiltersProp, dateBreakdown]);
 
+  // ── Apply BodySortOrder (same logic as the print view) ────────────────────
+  const sortedBodyData = useMemo(() => {
+    if (!bodySortOrder.length) return filteredBodyData;
+    return [...filteredBodyData].sort((a, b) => {
+      for (const spec of bodySortOrder) {
+        const col = spec.Column;
+        const order = spec.Order.toLowerCase();
+        if (a[col] === undefined || b[col] === undefined) continue;
+        const va = parseSortValue(a[col]);
+        const vb = parseSortValue(b[col]);
+        if (va !== vb) return order === "asc" ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+      }
+      return 0;
+    });
+  }, [filteredBodyData, bodySortOrder]);
+
   // ── Collapse state ────────────────────────────────────────────────────────
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -393,13 +415,13 @@ export function ClassicReportView({
   const grandTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     for (const f of trailingSummaryFields) {
-      totals[f.trim()] = filteredBodyData.reduce(
+      totals[f.trim()] = sortedBodyData.reduce(
         (s, r) => s + (parseFloat(String(r[f.trim()] ?? "")) || 0),
         0
       );
     }
     return totals;
-  }, [trailingSummaryFields, filteredBodyData]);
+  }, [trailingSummaryFields, sortedBodyData]);
 
   // ── Build rows recursively ────────────────────────────────────────────────
   type RowSpec =
@@ -453,13 +475,13 @@ export function ClassicReportView({
   );
 
   const rows = useMemo(() => {
-    if (!filteredBodyData.length) return [];
-    const allRows = buildRows(filteredBodyData, 0, "root");
+    if (!sortedBodyData.length) return [];
+    const allRows = buildRows(sortedBodyData, 0, "root");
     if (trailingSummaryFields.length > 0) {
       allRows.push({ kind: "gs" });
     }
     return allRows;
-  }, [filteredBodyData, buildRows, trailingSummaryFields]);
+  }, [sortedBodyData, buildRows, trailingSummaryFields]);
 
   // ── Visibility helper ─────────────────────────────────────────────────────
   const isRowVisible = useCallback(
@@ -490,7 +512,7 @@ export function ClassicReportView({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filteredBodyData, paginate, dateBreakdown, collapsedGroups]);
+  }, [sortedBodyData, paginate, dateBreakdown, collapsedGroups]);
 
   const totalPages = paginate ? Math.ceil(visibleRowsList.length / pageSize) : 1;
 

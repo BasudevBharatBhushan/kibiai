@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useCompany } from "@/components/providers/CompanyProvider";
-import { Search, Plus, Check, Shield } from "lucide-react";
+import { Search, Plus, Check, Shield, Edit3, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import clsx from "clsx";
@@ -10,6 +10,7 @@ import { useHeader } from "@/context/HeaderContext";
 import { apiClient } from "@/utils/apiClient";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton, StaffSkeleton, ModuleSkeleton, PermissionSkeleton } from "@/components/ui/Skeleton";
+import { useAccessControl } from "@/context/AccessControlContext";
 
 interface Role {
   role_id: string;
@@ -52,6 +53,17 @@ export default function AdminDashboardPage() {
   const { setBreadcrumbs, resetHeader } = useHeader();
   const params = useParams();
   const slug = params?.company_slug as string;
+
+  const { isSuperAdmin: isCurrentUserSuperAdmin, userId: loggedInUserId } = useAccessControl();
+  const [isEditStaffModalOpen, setIsEditStaffModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<{
+    user_id: string;
+    full_name: string;
+    user_email: string;
+    designation: string;
+    role_id: string;
+    user_status: string;
+  } | null>(null);
 
   const [staff, setStaff] = useState<User[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
@@ -123,6 +135,54 @@ export default function AdminDashboardPage() {
       alert(err.message || "Failed to add staff");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleEditStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff || !company?.id) return;
+    setIsSubmitting(true);
+    try {
+      const data = await apiClient.put<{ success: boolean, error?: string }>(
+        `/api/company/staff/${editingStaff.user_id}`,
+        {
+          full_name: editingStaff.full_name,
+          user_email: editingStaff.user_email,
+          designation: editingStaff.designation,
+          role_id: editingStaff.role_id,
+          user_status: editingStaff.user_status,
+        },
+        { companyId: company.id }
+      );
+      if (data.success) {
+        setIsEditStaffModalOpen(false);
+        setEditingStaff(null);
+        fetchStaff();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to update staff");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteStaff = async (userId: string) => {
+    if (!company?.id) return;
+    if (!confirm("Are you sure you want to delete this staff member? This action cannot be undone.")) return;
+    
+    try {
+      const data = await apiClient.delete<{ success: boolean, error?: string }>(
+        `/api/company/staff/${userId}`,
+        { companyId: company.id }
+      );
+      if (data.success) {
+        if (selectedUserId === userId) {
+          setSelectedUserId(null);
+        }
+        fetchStaff();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete staff");
     }
   };
 
@@ -285,7 +345,7 @@ export default function AdminDashboardPage() {
                         if (!isSuperAdmin) setSelectedUserId(user.user_id);
                       }}
                       className={clsx(
-                        "flex items-center gap-3 p-3 rounded-lg transition-all border group",
+                        "flex items-center gap-3 p-3 rounded-lg transition-all border group relative",
                         isSuperAdmin ? "cursor-default opacity-70 bg-gray-50/50 border-gray-100" : "cursor-pointer hover:bg-gray-50 hover:border-indigo-100",
                         selectedUserId === user.user_id && !isSuperAdmin
                           ? "border-indigo-400 bg-indigo-50/50 shadow-sm" 
@@ -303,18 +363,54 @@ export default function AdminDashboardPage() {
                         <div className="text-[11px] text-gray-500 truncate">{user.user_email}</div>
                         <div className="text-[11px] text-indigo-400 font-medium truncate">{user.designation || "User"}</div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <div className={clsx(
-                          "text-[11px] font-bold px-2 py-0.5 rounded-full border",
-                          isSuperAdmin 
-                            ? "text-indigo-600 bg-indigo-50 border-indigo-100" 
-                            : "text-gray-600 bg-gray-50 border-gray-200"
-                        )}>
-                          {primaryRole.role_name}
+                      <div className="text-right shrink-0 relative flex items-center min-w-[70px] justify-end">
+                        <div className="group-hover:opacity-0 transition-opacity duration-200">
+                          <div className={clsx(
+                             "text-[11px] font-bold px-2 py-0.5 rounded-full border",
+                             isSuperAdmin 
+                               ? "text-indigo-600 bg-indigo-50 border-indigo-100" 
+                               : "text-gray-600 bg-gray-50 border-gray-200"
+                          )}>
+                            {primaryRole.role_name}
+                          </div>
+                          {isSuperAdmin && (
+                            <div className="text-[9px] text-indigo-400 font-bold uppercase tracking-tighter mt-1">
+                              Super Access
+                            </div>
+                          )}
                         </div>
-                        {isSuperAdmin && (
-                          <div className="text-[9px] text-indigo-400 font-bold uppercase tracking-tighter mt-1">
-                            Super Access
+                        {isCurrentUserSuperAdmin && (
+                          <div className="absolute right-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-white pl-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingStaff({
+                                  user_id: user.user_id,
+                                  full_name: user.full_name,
+                                  user_email: user.user_email,
+                                  designation: user.designation,
+                                  role_id: primaryRole.role_id,
+                                  user_status: user.user_status || 'Active'
+                                });
+                                setIsEditStaffModalOpen(true);
+                              }}
+                              className="p-1.5 hover:bg-gray-100 text-gray-500 hover:text-indigo-600 rounded transition-all"
+                              title="Edit Staff Member"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                            {user.user_id !== loggedInUserId && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteStaff(user.user_id);
+                                }}
+                                className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded transition-all"
+                                title="Delete Staff Member"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -650,6 +746,81 @@ export default function AdminDashboardPage() {
             {isSubmitting ? "Processing..." : "Create Staff Member"}
           </button>
         </form>
+      </Modal>
+
+      {/* Edit Staff Modal */}
+      <Modal isOpen={isEditStaffModalOpen} onClose={() => { setIsEditStaffModalOpen(false); setEditingStaff(null); }} title="Edit Staff Member">
+        {editingStaff && (
+          <form onSubmit={handleEditStaff} className="flex flex-col gap-5 p-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Full Name</label>
+                <input 
+                  required
+                  type="text" 
+                  placeholder="John Doe"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  value={editingStaff.full_name}
+                  onChange={e => setEditingStaff({...editingStaff, full_name: e.target.value})}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Email Address</label>
+                <input 
+                  required
+                  type="email" 
+                  placeholder="john@example.com"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  value={editingStaff.user_email}
+                  onChange={e => setEditingStaff({...editingStaff, user_email: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Designation</label>
+                <input 
+                  type="text" 
+                  placeholder="Manager"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  value={editingStaff.designation}
+                  onChange={e => setEditingStaff({...editingStaff, designation: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">System Role</label>
+                <select 
+                  required
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none"
+                  value={editingStaff.role_id}
+                  onChange={e => setEditingStaff({...editingStaff, role_id: e.target.value})}
+                >
+                  <option value="" disabled>Select Role</option>
+                  {availableRoles.map(role => (
+                    <option key={role.role_id} value={role.role_id}>{role.role_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">User Status</label>
+                <select 
+                  required
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none"
+                  value={editingStaff.user_status}
+                  onChange={e => setEditingStaff({...editingStaff, user_status: e.target.value})}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            <button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-all mt-2 shadow-lg shadow-indigo-100 disabled:opacity-50 active:scale-[0.98]"
+            >
+              {isSubmitting ? "Updating..." : "Save Changes"}
+            </button>
+          </form>
+        )}
       </Modal>
 
       {/* Add Module Modal */}
