@@ -462,30 +462,50 @@ export function ClassicReportView({
   }, [filteredBodyData, buildRows, trailingSummaryFields]);
 
   // ── Visibility helper ─────────────────────────────────────────────────────
-  function isDetRowVisible(groupId: string): boolean {
-    const parts = groupId.split("|");
-    for (let i = 1; i <= parts.length; i++) {
-      const ancestorId = parts.slice(0, i).join("|");
-      if (isCollapsed(ancestorId)) return false;
-    }
-    return true;
-  }
+  const isRowVisible = useCallback(
+    (spec: RowSpec): boolean => {
+      if (spec.kind === "gs") return true;
+      const groupId = spec.groupId;
+      const parts = groupId.split("|");
+      // For detail rows, groupId is the parent's group ID, so we check all ancestors.
+      // For subsummary rows, groupId is the row's own group ID, so we check ancestors excluding the last part (itself).
+      const checkLimit = spec.kind === "det" ? parts.length : parts.length - 1;
+      // We start i from 2 to skip "root" which is at parts[0]
+      for (let i = 2; i <= checkLimit; i++) {
+        const ancestorId = parts.slice(0, i).join("|");
+        if (isCollapsed(ancestorId)) return false;
+      }
+      return true;
+    },
+    [isCollapsed]
+  );
 
-  // ── Pagination & Print ────────────────────────────────────────────────────
+  // ── Recalculate pagination based on collapsed view ────────────────────────
+  const visibleRowsList = useMemo(() => {
+    return rows.filter(isRowVisible);
+  }, [rows, isRowVisible]);
+
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
-  
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [filteredBodyData, paginate, dateBreakdown]);
+  }, [filteredBodyData, paginate, dateBreakdown, collapsedGroups]);
+
+  const totalPages = paginate ? Math.ceil(visibleRowsList.length / pageSize) : 1;
+
+  // Clamp current page to valid page range when pagination recalculates
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(Math.max(1, totalPages));
+    }
+  }, [totalPages, currentPage]);
 
   const visibleRows = useMemo(() => {
-    if (!paginate) return rows;
+    if (!paginate) return visibleRowsList;
     const start = (currentPage - 1) * pageSize;
-    return rows.slice(start, start + pageSize);
-  }, [rows, paginate, currentPage, pageSize]);
-  
-  const totalPages = paginate ? Math.ceil(rows.length / pageSize) : 1;
+    return visibleRowsList.slice(start, start + pageSize);
+  }, [visibleRowsList, paginate, currentPage, pageSize]);
 
   const handlePrint = useCallback(() => {
     const printWindow = window.open('', '', 'width=900,height=1200');
@@ -497,7 +517,8 @@ export function ClassicReportView({
       .map(el => el.outerHTML)
       .join('\n');
       
-    const tableHtml = document.querySelector('.cv-scroll-x')?.outerHTML || '';
+    // Print the entire table (all pages, respecting collapsed states)
+    const tableHtml = document.getElementById('classic-print-area')?.innerHTML || '';
     const headerHtml = document.querySelector('.cv-report-header')?.outerHTML || '';
     const footerHtml = document.querySelector('.cv-foot')?.outerHTML || '';
     
@@ -520,7 +541,9 @@ export function ClassicReportView({
         <body>
           <div class="cv-wrap">
             ${headerHtml}
-            ${tableHtml}
+            <div class="cv-scroll-x">
+              ${tableHtml}
+            </div>
             ${footerHtml}
           </div>
         </body>
@@ -533,6 +556,174 @@ export function ClassicReportView({
         printWindow.close();
     }, 500);
   }, []);
+
+  const renderTableRows = useCallback((rowsToRender: RowSpec[], isPrintView = false) => {
+    return rowsToRender.flatMap((spec, rowIdx) => {
+      // ── Grand Summary ──
+      if (spec.kind === "gs") {
+        const gtItems = Object.entries(grandTotals).map(([f, sum]) => {
+          const value = showAvg && filteredBodyData.length > 0 ? sum / filteredBodyData.length : sum;
+          const prefix = prefixMap[f] ?? prefixMap[f.trim()] ?? "";
+          const suffix = suffixMap[f] ?? suffixMap[f.trim()] ?? "";
+          return { f, value, prefix, suffix };
+        });
+        return (
+          <tr key={`gs-${isPrintView ? "print" : "normal"}`} className="cv-gs">
+            <td colSpan={visibleFieldOrder.length}>
+              <div className="cv-ss-row">
+                <div className="cv-ss-label-side">
+                  <span className="cv-ss-label-text">
+                    Grand Total ({filteredBodyData.length} record{filteredBodyData.length !== 1 ? "s" : ""})
+                  </span>
+                </div>
+                <div className="cv-ss-total-side">
+                  {gtItems.map(({ f, value, prefix, suffix }) => (
+                    <div key={f} className="cv-ss-total-item">
+                      <span className="cv-ss-total-field">{f.trim()}</span>
+                      <span className="cv-ss-total-value">{fmt(value, prefix, suffix)}</span>
+                      {showAvg && <span className="cv-avg-line">avg</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </td>
+          </tr>
+        );
+      }
+
+      // ── Detail Row ──
+      if (spec.kind === "det") {
+        const rowsToReturn = [];
+        if (rowIdx === 0 || rowsToRender[rowIdx - 1].kind !== "det") {
+          rowsToReturn.push(
+            <tr key={`det-header-${isPrintView ? "print-" : ""}${rowIdx}`} className="cv-det-header">
+              {visibleFieldOrder.map((f) => (
+                <th key={`th-${f}`} className={`cv-subgroup-th ${numericFields.has(f) ? "cv-nr" : ""}`}>
+                  {f.trim()}
+                </th>
+              ))}
+            </tr>
+          );
+        }
+        rowsToReturn.push(
+          <tr
+            key={`det-${isPrintView ? "print-" : ""}${rowIdx}`}
+            className="cv-det"
+          >
+            {visibleFieldOrder.map((f) => (
+              <td key={`td-${f}`} className={numericFields.has(f) ? "cv-nr" : ""}>
+                {fmtCell(spec.row[f], f, prefixMap, suffixMap)}
+              </td>
+            ))}
+          </tr>
+        );
+        return rowsToReturn;
+      }
+
+      // ── Subsummary Row ──
+      const collapsed = isCollapsed(spec.groupId);
+      const levelClass = spec.level >= 1 ? "cv-lv2" : "";
+
+      const handleSsClick = () => {
+        if (isPrintView) return;
+        if (collapsed) {
+          setDrillModal({ title: `${spec.field}: ${spec.label}`, rows: spec.rows, totalFields: spec.totalFields });
+        } else {
+          toggleGroup(spec.groupId);
+        }
+      };
+
+      const handleSsChevronClick = (e: React.MouseEvent) => {
+        if (isPrintView) return;
+        e.stopPropagation();
+        toggleGroup(spec.groupId);
+      };
+
+      const count = spec.rows.length;
+      const ssItems = spec.totalFields
+        .filter((tf) => visibleFieldOrder.some((f) => f.trim() === tf.trim() || f === tf))
+        .map((tf) => {
+          const f = visibleFieldOrder.find((vf) => vf.trim() === tf.trim() || vf === tf) ?? tf;
+          const sum = spec.rows.reduce((s, r) => s + (parseFloat(String(r[f] ?? r[tf] ?? "")) || 0), 0);
+          const value = showAvg && count > 0 ? sum / count : sum;
+          const prefix = prefixMap[f] ?? prefixMap[tf] ?? prefixMap[tf.trim()] ?? "";
+          const suffix = suffixMap[f] ?? suffixMap[tf] ?? suffixMap[tf.trim()] ?? "";
+          return { tf, value, prefix, suffix };
+        });
+
+      return (
+        <tr
+          key={`ss-${isPrintView ? "print-" : ""}${spec.groupId}`}
+          className={`cv-ss ${levelClass}`}
+          onClick={handleSsClick}
+          role={isPrintView ? undefined : "button"}
+          tabIndex={isPrintView ? undefined : 0}
+          aria-expanded={isPrintView ? undefined : !collapsed}
+          onKeyDown={isPrintView ? undefined : (e) => {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSsClick(); }
+          }}
+        >
+          <td colSpan={visibleFieldOrder.length}>
+            <div className="cv-ss-row">
+              <div className="cv-ss-label-side">
+                {!isPrintView && (
+                  <span
+                    className="cv-chv"
+                    onClick={handleSsChevronClick}
+                    title={collapsed ? "Expand group" : "Collapse group"}
+                    style={{ cursor: "pointer", flexShrink: 0 }}
+                  >
+                    {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                  </span>
+                )}
+                <span className="cv-ss-label-text">
+                  <strong>{spec.field.trim()}:</strong>&nbsp;{spec.label}
+                  {spec.displayFields.length > 0 && (
+                    <div className="cv-disp-strip">
+                      {spec.displayFields.map((df) => {
+                        const dv = spec.displayValues[df];
+                        const prefix = prefixMap[df] ?? "";
+                        const suffix = suffixMap[df] ?? "";
+                        const displayVal = dv !== undefined && dv !== null
+                          ? `${prefix}${String(dv).trim()}${suffix}` : "—";
+                        return (
+                          <span key={df} className="cv-disp-item">
+                            <span className="cv-disp-label">{df}:</span> {displayVal}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </span>
+              </div>
+              {ssItems.length > 0 && (
+                <div className="cv-ss-total-side">
+                  {ssItems.map(({ tf, value, prefix, suffix }) => (
+                    <div key={tf} className="cv-ss-total-item">
+                      <span className="cv-ss-total-field">{tf.trim()}</span>
+                      <span className="cv-ss-total-value">{fmt(value, prefix, suffix)}</span>
+                      {showAvg && <span className="cv-avg-line">avg</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      );
+    });
+  }, [
+    grandTotals,
+    showAvg,
+    filteredBodyData,
+    prefixMap,
+    suffixMap,
+    visibleFieldOrder,
+    numericFields,
+    isCollapsed,
+    toggleGroup,
+    setDrillModal,
+  ]);
 
   // ── Render subtotal cells ─────────────────────────────────────────────────
   function renderSubtotalCells(spec: Extract<RowSpec, { kind: "ss" }>) {
@@ -629,172 +820,8 @@ export function ClassicReportView({
             <Printer size={12} /> Print
           </button>
         </div>
-      </div>
-
-      {/* ── Table ─────────────────────────────────────────────────────────── */}
-      <div className="cv-scroll-x">
-        <table className="cv-table">
-          <thead>
-            <tr>
-              {visibleFieldOrder.map((f) => (
-                <th key={f} className={numericFields.has(f) ? "cv-nr" : ""}>
-                  {f.trim()}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map((spec, rowIdx) => {
-              // ── Grand Summary ──
-              if (spec.kind === "gs") {
-                // Build grand total display items
-                const gtItems = Object.entries(grandTotals).map(([f, sum]) => {
-                  const value = showAvg && filteredBodyData.length > 0 ? sum / filteredBodyData.length : sum;
-                  const prefix = prefixMap[f] ?? prefixMap[f.trim()] ?? "";
-                  const suffix = suffixMap[f] ?? suffixMap[f.trim()] ?? "";
-                  return { f, value, prefix, suffix };
-                });
-                return (
-                  <tr key="gs" className="cv-gs">
-                    <td colSpan={visibleFieldOrder.length}>
-                      <div className="cv-ss-row">
-                        <div className="cv-ss-label-side">
-                          <span className="cv-ss-label-text">
-                            Grand Total ({filteredBodyData.length} record{filteredBodyData.length !== 1 ? "s" : ""})
-                          </span>
-                        </div>
-                        <div className="cv-ss-total-side">
-                          {gtItems.map(({ f, value, prefix, suffix }) => (
-                            <div key={f} className="cv-ss-total-item">
-                              <span className="cv-ss-total-field">{f.trim()}</span>
-                              <span className="cv-ss-total-value">{fmt(value, prefix, suffix)}</span>
-                              {showAvg && <span className="cv-avg-line">avg</span>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              }
-
-              // ── Detail Row ──
-              if (spec.kind === "det") {
-                const visible = isDetRowVisible(spec.groupId);
-                return (
-                  <tr
-                    key={`det-${rowIdx}`}
-                    className={`cv-det${visible ? "" : " cv-hidden"}`}
-                  >
-                    {visibleFieldOrder.map((f) => (
-                      <td key={f} className={numericFields.has(f) ? "cv-nr" : ""}>
-                        {fmtCell(spec.row[f], f, prefixMap, suffixMap)}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              }
-
-              // ── Subsummary Row ──
-              const collapsed = isCollapsed(spec.groupId);
-              const levelClass = spec.level >= 1 ? "cv-lv2" : "";
-
-              const handleSsClick = () => {
-                if (collapsed) {
-                  setDrillModal({ title: `${spec.field}: ${spec.label}`, rows: spec.rows, totalFields: spec.totalFields });
-                } else {
-                  toggleGroup(spec.groupId);
-                }
-              };
-
-              const handleSsChevronClick = (e: React.MouseEvent) => {
-                e.stopPropagation();
-                toggleGroup(spec.groupId);
-              };
-
-              // Build total items for this subsummary group
-              const count = spec.rows.length;
-              const ssItems = spec.totalFields
-                .filter((tf) => visibleFieldOrder.some((f) => f.trim() === tf.trim() || f === tf))
-                .map((tf) => {
-                  const f = visibleFieldOrder.find((vf) => vf.trim() === tf.trim() || vf === tf) ?? tf;
-                  const sum = spec.rows.reduce((s, r) => s + (parseFloat(String(r[f] ?? r[tf] ?? "")) || 0), 0);
-                  const value = showAvg && count > 0 ? sum / count : sum;
-                  const prefix = prefixMap[f] ?? prefixMap[tf] ?? prefixMap[tf.trim()] ?? "";
-                  const suffix = suffixMap[f] ?? suffixMap[tf] ?? suffixMap[tf.trim()] ?? "";
-                  return { tf, value, prefix, suffix };
-                });
-
-              return (
-                <tr
-                  key={`ss-${spec.groupId}`}
-                  className={`cv-ss ${levelClass}`}
-                  onClick={handleSsClick}
-                  role="button"
-                  tabIndex={0}
-                  aria-expanded={!collapsed}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSsClick(); }
-                  }}
-                >
-                  {/* Single colspan cell — label left, totals right */}
-                  <td colSpan={visibleFieldOrder.length}>
-                    <div className="cv-ss-row">
-                      {/* Left: chevron + label */}
-                      <div className="cv-ss-label-side">
-                        <span
-                          className="cv-chv"
-                          onClick={handleSsChevronClick}
-                          title={collapsed ? "Expand group" : "Collapse group"}
-                          style={{ cursor: "pointer", flexShrink: 0 }}
-                        >
-                          {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
-                        </span>
-                        <span className="cv-ss-label-text">
-                          <strong>{spec.field.trim()}:</strong>&nbsp;{spec.label}
-                          {spec.displayFields.length > 0 && (
-                            <div className="cv-disp-strip">
-                              {spec.displayFields.map((df) => {
-                                const dv = spec.displayValues[df];
-                                const prefix = prefixMap[df] ?? "";
-                                const suffix = suffixMap[df] ?? "";
-                                const displayVal = dv !== undefined && dv !== null
-                                  ? `${prefix}${String(dv).trim()}${suffix}` : "—";
-                                return (
-                                  <span key={df} className="cv-disp-item">
-                                    <span className="cv-disp-label">{df}:</span> {displayVal}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </span>
-                      </div>
-                      {/* Right: totals */}
-                      {ssItems.length > 0 && (
-                        <div className="cv-ss-total-side">
-                          {ssItems.map(({ tf, value, prefix, suffix }) => (
-                            <div key={tf} className="cv-ss-total-item">
-                              <span className="cv-ss-total-field">{tf.trim()}</span>
-                              <span className="cv-ss-total-value">{fmt(value, prefix, suffix)}</span>
-                              {showAvg && <span className="cv-avg-line">avg</span>}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="cv-foot flex items-center justify-between">
-        <span>Classic View · {filteredBodyData.length} records</span>
         {paginate && totalPages > 1 && (
-          <div className="flex items-center gap-2 no-print">
+          <div className="flex items-center gap-2 mt-3 no-print justify-end">
             <button 
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
@@ -814,6 +841,28 @@ export function ClassicReportView({
             </button>
           </div>
         )}
+      </div>
+
+      {/* ── Table ─────────────────────────────────────────────────────────── */}
+      <div className="cv-scroll-x">
+        <table className="cv-table">
+          <tbody>
+            {renderTableRows(visibleRows, false)}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="cv-foot flex items-center justify-between">
+        <span>Classic View · {filteredBodyData.length} records</span>
+      </div>
+
+      {/* Hidden print area containing the entire table (all pages, but respecting collapsed/expanded states) */}
+      <div id="classic-print-area" style={{ display: "none" }}>
+        <table className="cv-table">
+          <tbody>
+            {renderTableRows(visibleRowsList, true)}
+          </tbody>
+        </table>
       </div>
 
       {/* ── Drill-down Modal ────────────────────────────────────────────────── */}

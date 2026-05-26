@@ -346,7 +346,7 @@ export async function fetchFmRecord(
   // console.log(filter);
 
   // Step 3: Prepare find or get request
-  let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records?_offset=1&_limit=5000`;
+  let fetchUrl = `https://${host}/fmi/data/${version}/databases/${database}/layouts/${table}/records?_offset=1&_limit=100000`;
   let method = "GET";
   let body: any = undefined;
 
@@ -361,10 +361,10 @@ export async function fetchFmRecord(
       if (!p_key_field)
         throw new Error("p_key_field is required when p_keys are provided");
       const queries = buildFileMakerQueries(filter || {}, p_key_field, p_keys);
-      body = JSON.stringify({ query: queries, offset: 1, limit: 5000 });
+      body = JSON.stringify({ query: queries, offset: 1, limit: 100000 });
     } else {
       const queries = buildFileMakerQueries(filter || {});
-      body = JSON.stringify({ query: queries, offset: 1, limit: 5000 });
+      body = JSON.stringify({ query: queries, offset: 1, limit: 100000 });
     }
   }
   // console.log("Fetch URL:", fetchUrl);

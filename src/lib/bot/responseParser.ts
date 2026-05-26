@@ -41,10 +41,38 @@ export function extractAssistantDisplayText(raw: string): string {
         return Array.from(new Set(responseLines)).join("\n\n");
       }
 
+      if (Array.isArray(parsed)) {
+        const isInsightArray = parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null && 'id' in parsed[0] && 'group' in parsed[0];
+        if (isInsightArray) {
+          return `I have generated ${parsed.length} insight(s) based on your report data. You can find them on the dashboard.`;
+        }
+
+        const isChartArray = parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null && 'chart_type' in parsed[0];
+        if (isChartArray) {
+          return `I have generated ${parsed.length} chart(s) based on your report data. You can find them on the dashboard.`;
+        }
+
+        if (parsed.every(item => typeof item === 'string')) {
+          return parsed.join("\n\n");
+        }
+
+        return "I have generated the requested items. You can find them on the dashboard.";
+      }
+
       // 2. If it's a raw insight plan, summarize it
       const record = parsed as Record<string, unknown>;
       if (Array.isArray(record.insights)) {
         return (record.response_to_user as string) || `I have generated ${record.insights.length} insight(s) based on your report data. You can find them on the dashboard.`;
+      }
+
+      // Check if it is a single insight object
+      if ('id' in record && 'group' in record && 'statement_template' in record) {
+         return "I have generated 1 insight based on your report data. You can find it on the dashboard.";
+      }
+
+      // Check if it is a single chart object
+      if ('chart_type' in record && 'group_field' in record) {
+         return "I have generated 1 chart based on your report data. You can find it on the dashboard.";
       }
 
       if (typeof record.response === "string") return record.response;

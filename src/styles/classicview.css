@@ -151,7 +151,8 @@
   top: 0;
   z-index: 10;
 }
-.cv-table thead th {
+.cv-table thead th,
+.cv-table th.cv-subgroup-th {
   background: #2d2d2d;
   color: #f5f5f4;
   padding: 7px 10px;
@@ -165,8 +166,10 @@
   /* required for sticky to work inside overflow-x: auto */
   position: sticky;
   top: 0;
+  z-index: 10;
 }
-.cv-table thead th.cv-nr {
+.cv-table thead th.cv-nr,
+.cv-table th.cv-subgroup-th.cv-nr {
   text-align: right;
 }
 
