@@ -237,10 +237,15 @@ export default function Header() {
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    // Use a full page reload instead of router.push so that React state
-    // (including AccessControlContext) is fully cleared. A soft navigation
-    // keeps accountId in memory, causing the login page to redirect back.
-    window.location.href = `/${slug}/login`;
+    // On subdomain deployments (production), the slug is already in the subdomain,
+    // so redirect to /login (not /${slug}/login which creates a double-slug URL).
+    // On localhost, the slug is part of the path, so use /${slug}/login.
+    const isLocalhost = typeof window !== 'undefined' && (
+      window.location.hostname.includes('localhost') ||
+      window.location.hostname.includes('127.0.0.1') ||
+      window.location.hostname.startsWith('192.168.')
+    );
+    window.location.href = isLocalhost ? `/${slug}/login` : '/login';
   };
 
   const displayName = userName || (userEmail ? firstNameFromEmail(userEmail) : "Admin");

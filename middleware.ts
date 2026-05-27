@@ -244,25 +244,22 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Auth Guard: If not logged in and not public route, redirect to login
-  if (!user && !isPublicRoute) {
-    const loginUrl = new URL('/login', request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
   // ── 3. Handle reserved platform subdomains (e.g. "admin") ─────────────────
+  // IMPORTANT: This must run BEFORE the auth guard below, because the admin
+  // page has its own built-in login form and handles auth internally.
   if (RESERVED_SUBDOMAIN_ROUTES[subdomain]) {
-    // If they hit /login on admin subdomain, just redirect to / (which rewrites to /admin)
-    if (pathname === '/login') {
-      return NextResponse.redirect(new URL('/', request.url));
-    }
-
     const rewritePath = RESERVED_SUBDOMAIN_ROUTES[subdomain];
     // Avoid doubling (e.g. admin.domain.com/admin -> /admin/admin)
     const normalizedPath = pathname.startsWith(rewritePath) ? pathname : `${rewritePath}${pathname}`;
     const rewriteUrl = new URL(normalizedPath, request.url);
     rewriteUrl.search = request.nextUrl.search;
     return NextResponse.rewrite(rewriteUrl);
+  }
+
+  // Auth Guard: If not logged in and not public route, redirect to login
+  if (!user && !isPublicRoute) {
+    const loginUrl = new URL('/login', request.url);
+    return NextResponse.redirect(loginUrl);
   }
 
   // ── 4. Block reserved-but-unrouted slugs ──────────────────────────────────

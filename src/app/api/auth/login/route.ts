@@ -103,11 +103,10 @@ export async function POST(req: Request) {
       companySlug: sessionCompanySlug
     });
 
-    const isProd = process.env.NODE_ENV === 'production';
-    const host = req.headers.get('host') || '';
-    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
-
     // Create the response
+    // Note: createSession() already sets the cookie with proper domain via cookieStore.set().
+    // We do NOT set a manual Set-Cookie header here to avoid creating duplicate cookies
+    // (one with domain, one without) which makes logout unreliable.
     const response = NextResponse.json({ 
       success: true, 
       user: { 
@@ -115,18 +114,6 @@ export async function POST(req: Request) {
         accountType: account.account_type 
       } 
     });
-
-    // Manually set the cookie header for maximum reliability in API routes
-    const cookieOptions = [
-      `kibiai_session=${jwt}`,
-      `Max-Age=${60 * 60 * 24 * 30}`,
-      `Path=/`,
-      `HttpOnly`,
-      `SameSite=Lax`,
-      isProd && !isLocalhost ? `Secure` : '',
-    ].filter(Boolean).join('; ');
-
-    response.headers.set('Set-Cookie', cookieOptions);
 
     return response;
 
