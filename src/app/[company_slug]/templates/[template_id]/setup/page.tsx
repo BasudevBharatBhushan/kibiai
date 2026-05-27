@@ -42,7 +42,7 @@ export default function TemplateSetupPage() {
           { label: "Report Templates", href: `/${slug}/templates` },
           { label: "Setup" },
           { label: "Report Builder", href: `/${slug}/templates/${templateId}/configurator` },
-          { label: "Chart Builder", href: `/${slug}/templates/${templateId}/charts` },
+          ...(slug !== "equiparts" ? [{ label: "Chart Builder", href: `/${slug}/templates/${templateId}/charts` }] : []),
         ]);
         setBackHref(`/${slug}/templates`);
       } catch (err: any) {

@@ -306,7 +306,7 @@ function ConfiguratorPageContent({
           { label: "Report Templates", href: `/${slug}/templates` },
           { label: "Setup", href: `/${slug}/templates/${templateId}/setup` },
           { label: "Report Builder" },
-          { label: "Chart Builder", href: `/${slug}/templates/${templateId}/charts` },
+          ...(slug !== "equiparts" ? [{ label: "Chart Builder", href: `/${slug}/templates/${templateId}/charts` }] : []),
         ]);
         setBackHref(`/${slug}/templates`);
 

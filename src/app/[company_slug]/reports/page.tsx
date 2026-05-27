@@ -162,14 +162,16 @@ export default function CompanyReportsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <Link
-                        href={`/${slug}/reports/${report.report_id}/charts`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90"
-                        style={{ background: "#2563eb" }}
-                      >
-                        <BarChart3 size={13} />
-                        Open Charts
-                      </Link>
+                      {slug !== "equiparts" && (
+                        <Link
+                          href={`/${slug}/reports/${report.report_id}/charts`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90"
+                          style={{ background: "#2563eb" }}
+                        >
+                          <BarChart3 size={13} />
+                          Open Charts
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))

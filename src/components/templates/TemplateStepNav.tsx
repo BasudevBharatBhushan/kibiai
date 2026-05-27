@@ -85,7 +85,7 @@ export function TemplateStepNav({
           Report Templates
         </Link>
 
-        {STEPS.map((step, idx) => {
+        {STEPS.filter(s => slug === "equiparts" ? s.key !== "charts" : true).map((step, idx) => {
           const isActive = step.key === activeStep;
           const stepIndex = idx;
           // Determine if step is accessible

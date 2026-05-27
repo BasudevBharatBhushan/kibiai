@@ -1202,15 +1202,17 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
                   <span className="font-semibold text-slate-700">{savedReportName || templateName}</span>
                 </p>
               </div>
-              <button
-                id="view-charts-btn"
-                onClick={chartsView === 'split' ? () => setChartsView('none') : handleViewCharts}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
-                style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
-              >
-                <BarChart3 size={14} />
-                {chartsView === 'split' ? 'Hide Charts' : 'View Charts'}
-              </button>
+              {slug !== "equiparts" && (
+                <button
+                  id="view-charts-btn"
+                  onClick={chartsView === 'split' ? () => setChartsView('none') : handleViewCharts}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
+                  style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
+                >
+                  <BarChart3 size={14} />
+                  {chartsView === 'split' ? 'Hide Charts' : 'View Charts'}
+                </button>
+              )}
             </div>
           )}
         </div>

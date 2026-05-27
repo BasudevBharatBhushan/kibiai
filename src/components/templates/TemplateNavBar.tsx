@@ -70,12 +70,14 @@ export function TemplateNavBar({
           icon: <Zap size={14} />,
           direction: "forward",
         });
-        links.push({
-          label: "Charts",
-          href: `${base}/charts`,
-          icon: <BarChart3 size={14} />,
-          direction: "forward",
-        });
+        if (slug !== "equiparts") {
+          links.push({
+            label: "Charts",
+            href: `${base}/charts`,
+            icon: <BarChart3 size={14} />,
+            direction: "forward",
+          });
+        }
       }
       break;
 
@@ -92,12 +94,14 @@ export function TemplateNavBar({
         icon: <Settings size={14} />,
         direction: "back",
       });
-      links.push({
-        label: "Charts",
-        href: `${base}/charts`,
-        icon: <BarChart3 size={14} />,
-        direction: "forward",
-      });
+      if (slug !== "equiparts") {
+        links.push({
+          label: "Charts",
+          href: `${base}/charts`,
+          icon: <BarChart3 size={14} />,
+          direction: "forward",
+        });
+      }
       break;
 
     case "charts":
