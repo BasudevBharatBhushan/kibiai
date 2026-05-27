@@ -593,7 +593,11 @@ export function ModularChatbot({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setShowPrompts((prev) => !prev);
+                  const willShow = !showPrompts;
+                  setShowPrompts(willShow);
+                  if (willShow && aiSuggestions.length === 0) {
+                    refreshSuggestions();
+                  }
                 }}
                 className={`size-8 rounded-lg border transition-all ${
                   showPrompts
@@ -727,7 +731,7 @@ export function ModularChatbot({
           
           <div className="shrink-0 border-t border-slate-200 bg-white px-4 pb-4 pt-3 relative">
             {/* Floating Suggestion List */}
-            {showPrompts && (suggestedPrompts.length > 0 || aiSuggestions.length > 0) && (
+            {showPrompts && (
               <div className="absolute bottom-[calc(100%+8px)] left-4 right-4 z-[100] flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-4 duration-300">
                 <div className="flex flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_20px_50px_rgba(0,0,0,0.2)] max-h-[300px] overflow-y-auto scrollbar-minimal">
                   <div className="flex items-center justify-between px-2 mb-1.5 sticky top-0 bg-white pb-1 z-10">
@@ -757,25 +761,22 @@ export function ModularChatbot({
                       <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm transition-colors group-hover:bg-indigo-50">
                         <Bot className="size-3 text-indigo-500" />
                       </div>
-                      <span className="truncate">{suggestion}</span>
+                      <span className="whitespace-normal break-words leading-relaxed">{suggestion}</span>
                     </button>
                   ))}
                   
-                  {/* Static Suggested Prompts (if no AI suggestions yet) */}
-                  {aiSuggestions.length === 0 && suggestedPrompts.map((prompt, index) => (
-                    <button
-                      key={`static-${index}`}
-                      onClick={() => selectPrompt(prompt.description)}
-                      className="group flex w-full items-center gap-2.5 rounded-xl border border-transparent bg-slate-50/50 px-3.5 py-2.5 text-left text-xs font-medium text-slate-700 transition-all hover:border-indigo-100 hover:bg-white hover:text-indigo-600 hover:shadow-sm"
-                    >
-                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm transition-colors group-hover:bg-indigo-50">
-                        <HelpCircle className="size-3 text-indigo-500" />
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="truncate">{prompt.title}</span>
-                      </div>
-                    </button>
-                  ))}
+                  {aiSuggestions.length === 0 && loading && (
+                    <div className="flex w-full items-center justify-center py-4 text-xs text-slate-500">
+                      <RotateCw className="size-4 animate-spin mr-2" />
+                      Fetching suggestions...
+                    </div>
+                  )}
+
+                  {aiSuggestions.length === 0 && !loading && (
+                    <div className="flex w-full items-center justify-center py-4 text-xs text-slate-500">
+                      No suggestions available. Click refresh to try again.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -840,7 +841,11 @@ export function ModularChatbot({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setShowPrompts((prev) => !prev);
+                    const willShow = !showPrompts;
+                    setShowPrompts(willShow);
+                    if (willShow && aiSuggestions.length === 0) {
+                      refreshSuggestions();
+                    }
                   }}
                   className={`mb-0.5 size-9 shrink-0 rounded-xl p-0 transition-all ${
                     showPrompts
