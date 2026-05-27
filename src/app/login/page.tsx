@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import kibiaiLogo from "@/assets/kibiai.png";
-import Link from "next/link";
 
 export default function GlobalLoginPage() {
   const [workspace, setWorkspace] = useState("");
@@ -138,9 +137,12 @@ export default function GlobalLoginPage() {
         </form>
 
         <div className="mt-8 text-center text-sm">
-          <Link href="/admin" className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors">
+          <a
+            href={isLocalhost ? "/admin" : `https://admin.${baseDomain}`}
+            className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors"
+          >
             Are you a Platform Admin? Sign in here.
-          </Link>
+          </a>
         </div>
       </div>
     </div>
