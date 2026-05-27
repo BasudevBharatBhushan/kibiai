@@ -97,6 +97,24 @@ async function isValidCompanySlug(slug: string, requestUrl: URL): Promise<boolea
 }
 
 // ---------------------------------------------------------------------------
+// Stale cookie cleanup helper
+// ---------------------------------------------------------------------------
+/**
+ * Attaches Set-Cookie headers to clear the session cookie in ALL domain variants.
+ * This auto-heals browsers with stale subdomain-scoped cookies left from the old
+ * login code that set cookies without a domain attribute.
+ */
+function clearStaleCookies(response: NextResponse): NextResponse {
+  // Clear without domain (matches subdomain-scoped cookie)
+  response.cookies.set(COOKIE_NAME, '', { path: '/', maxAge: 0 });
+  // Clear with root domain (matches domain-scoped cookie)
+  if (BASE_DOMAIN && !BASE_DOMAIN.includes('localhost')) {
+    response.cookies.set(COOKIE_NAME, '', { path: '/', maxAge: 0, domain: `.${BASE_DOMAIN}` });
+  }
+  return response;
+}
+
+// ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
 export async function middleware(request: NextRequest) {
@@ -106,13 +124,24 @@ export async function middleware(request: NextRequest) {
   // ── 0. Session Check ──────────────────────────────────────────────────────
   const sessionCookie = request.cookies.get(COOKIE_NAME)?.value;
   let user: any = null;
+  let staleCookie = false;
   if (sessionCookie) {
     try {
       const { payload } = await jwtVerify(sessionCookie, JWT_SECRET);
       user = payload;
     } catch (e) {
-      // Invalid session, cookie will be ignored
+      // Invalid/expired session — flag for cleanup
+      staleCookie = true;
     }
+  }
+
+  // ── 0.5. Auto-heal stale cookies ──────────────────────────────────────────
+  // If the JWT is invalid/expired, clear all cookie variants immediately.
+  // This fixes browsers that still have the old subdomain-scoped cookie.
+  if (staleCookie) {
+    const response = NextResponse.redirect(new URL(pathname + request.nextUrl.search, request.url));
+    clearStaleCookies(response);
+    return response;
   }
 
   // Define public routes that don't need auth
