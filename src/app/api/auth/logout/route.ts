@@ -1,30 +1,33 @@
-import { NextResponse } from "next/server";
 import { deleteSession } from "@/utils/auth";
 
 export async function POST(req: Request) {
   await deleteSession();
 
-  const response = NextResponse.json({ success: true });
   const domain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
   const host = req.headers.get('host') || '';
   const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
 
-  // We must send TWO separate Set-Cookie headers to cover both cookie variants:
-  //  1. Cookies set WITHOUT a domain attribute (host-specific, older sessions).
-  //  2. Cookies set WITH domain=.kibiai.itsb3.xyz (cross-subdomain sessions).
+  // Build the two Set-Cookie headers we need to clear ALL cookie variants:
+  //   1. No-domain: clears cookies set host-specifically (old sessions before domain fix)
+  //   2. With-domain: clears cookies set with Domain=.kibiai.itsb3.xyz (new sessions)
   //
-  // response.cookies.set() called twice with the same name only keeps the LAST
-  // one (they overwrite each other). Using headers.append() sends both headers.
-
+  // Using raw Response with a Headers tuple array is the ONLY reliable way to
+  // send two Set-Cookie headers in Next.js — NextResponse and headers.append
+  // both deduplicate Set-Cookie by cookie name, dropping one of them.
   const base = `kibiai_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
 
-  // Clear 1: no domain (removes host-specific cookie e.g. equiparts.kibiai.itsb3.xyz)
-  response.headers.append('Set-Cookie', base);
+  const headerTuples: [string, string][] = [
+    ['Content-Type', 'application/json'],
+    ['Set-Cookie', base],  // clears host-specific (no domain) cookie
+  ];
 
-  // Clear 2: with apex domain (removes cross-subdomain cookie .kibiai.itsb3.xyz)
   if (domain && !domain.includes('localhost') && !isLocalhost) {
-    response.headers.append('Set-Cookie', `${base}; Domain=.${domain}`);
+    headerTuples.push(['Set-Cookie', `${base}; Domain=.${domain}`]); // clears domain-scoped cookie
   }
 
-  return response;
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: new Headers(headerTuples),
+  });
 }
+
