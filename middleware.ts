@@ -115,21 +115,12 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── 0.5. Extract subdomain early to determine public routes ────────────────
-  let subdomain: string | null = null;
-  if (hostname.endsWith(`.${BASE_DOMAIN}`)) {
-    subdomain = hostname.slice(0, -(`.${BASE_DOMAIN}`.length)).toLowerCase().trim();
-  }
-
   // Define public routes that don't need auth
   const isPublicRoute = 
     pathname.startsWith('/login') || 
     pathname.match(/^\/[^/]+\/login/) || // Allow /[company_slug]/login for localhost
     pathname.startsWith('/api/auth') ||
-    pathname === '/invalid-subdomain' ||
-    pathname === '/admin' ||
-    pathname === '/admin/' ||
-    (subdomain === 'admin' && pathname === '/');
+    pathname === '/invalid-subdomain';
 
   // ── 1. Skip subdomain logic in dev/localhost environment ──────────────────
   if (
@@ -182,7 +173,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── 2. Apex Domain Check ──────────────────────────────────────────────────
+  // ── 2. Extract subdomain ──────────────────────────────────────────────────
+  // e.g. "acme-corp.domain.com" → subdomain = "acme-corp"
+  //      "domain.com"           → subdomain = null (apex domain)
+  let subdomain: string | null = null;
+
+  if (hostname.endsWith(`.${BASE_DOMAIN}`)) {
+    subdomain = hostname.slice(0, -(`.${BASE_DOMAIN}`.length)).toLowerCase().trim();
+  }
 
   // No subdomain → apex domain
   if (!subdomain) {

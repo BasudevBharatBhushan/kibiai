@@ -240,16 +240,7 @@ export default function Header() {
     // Use a full page reload instead of router.push so that React state
     // (including AccessControlContext) is fully cleared. A soft navigation
     // keeps accountId in memory, causing the login page to redirect back.
-    //
-    // On production subdomains (e.g. equiparts.kibiai.itsb3.xyz), redirecting
-    // to /${slug}/login doubles the slug in the URL path. Instead, redirect to
-    // /login which resolves correctly on the current subdomain. On localhost,
-    // subdomains are not used so we still need the /${slug}/login path.
-    const isLocalhost =
-      window.location.hostname.includes("localhost") ||
-      window.location.hostname.includes("127.0.0.1") ||
-      window.location.hostname.startsWith("192.168.");
-    window.location.href = isLocalhost ? `/${slug}/login` : "/login";
+    window.location.href = `/${slug}/login`;
   };
 
   const displayName = userName || (userEmail ? firstNameFromEmail(userEmail) : "Admin");
