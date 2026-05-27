@@ -116,7 +116,11 @@ export async function POST(req: Request) {
       } 
     });
 
-    // Manually set the cookie header for maximum reliability in API routes
+    // Manually set the cookie header for maximum reliability in API routes.
+    // CRITICAL: In production, set Domain=.{baseDomain} so the cookie is shared
+    // across all subdomains (e.g. equiparts.kibiai.itsb3.xyz) AND can be cleared
+    // by the logout endpoint using the same domain scope.
+    const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
     const cookieOptions = [
       `kibiai_session=${jwt}`,
       `Max-Age=${60 * 60 * 24 * 30}`,
@@ -124,6 +128,7 @@ export async function POST(req: Request) {
       `HttpOnly`,
       `SameSite=Lax`,
       isProd && !isLocalhost ? `Secure` : '',
+      isProd && !isLocalhost && baseDomain ? `Domain=.${baseDomain}` : '',
     ].filter(Boolean).join('; ');
 
     response.headers.set('Set-Cookie', cookieOptions);
