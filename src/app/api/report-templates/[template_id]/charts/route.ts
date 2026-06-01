@@ -44,7 +44,7 @@ export async function GET(
 ) {
   try {
     const session = await getSession();
-    if (!session?.companyId) {
+    if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
@@ -60,14 +60,18 @@ export async function GET(
     }
 
     const supabase = createAdminClient();
-    const { data: template, error: templateError } = await supabase
+    let templateQuery = supabase
       .from("report_templates")
       .select(
-        "report_template_id, report_template_name, report_template_data_json, report_template_insight, report_template_config_json, report_template_setup_json, chart_conversation_id, insight_conversation_id, insight_results"
+        "report_template_id, report_template_name, report_template_data_json, report_template_insight, report_template_config_json, report_template_setup_json, chart_conversation_id, insight_conversation_id, insight_results, company_id"
       )
-      .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
-      .single();
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      templateQuery = templateQuery.eq("company_id", session.companyId);
+    }
+
+    const { data: template, error: templateError } = await templateQuery.single();
 
     // The full preview structure is needed by the admin chart-builder so it can
     // optionally render a side-by-side report preview alongside the dashboard.
@@ -79,13 +83,22 @@ export async function GET(
       );
     }
 
-    const { data: chartTemplates, error: chartsError } = await supabase
+    const targetCompanyId = template.company_id;
+
+    let chartsQuery = supabase
       .from("chart_templates")
       .select(
         "chart_template_id, chart_template_name, chart_template_type, chart_template_setup_json, chart_template_dataset_json, chart_template_canvas_state"
       )
-      .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      chartsQuery = chartsQuery.eq("company_id", session.companyId);
+    } else {
+      chartsQuery = chartsQuery.eq("company_id", targetCompanyId);
+    }
+
+    const { data: chartTemplates, error: chartsError } = await chartsQuery
       .order("created_on", { ascending: true });
 
     if (chartsError) {
@@ -137,7 +150,7 @@ export async function POST(
 ) {
   try {
     const session = await getSession();
-    if (!session?.companyId) {
+    if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
@@ -162,12 +175,16 @@ export async function POST(
     }
 
     const supabase = createAdminClient();
-    const { data: template, error: templateError } = await supabase
+    let templateOwnerQuery = supabase
       .from("report_templates")
-      .select("report_template_id")
-      .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
-      .single();
+      .select("report_template_id, company_id")
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      templateOwnerQuery = templateOwnerQuery.eq("company_id", session.companyId);
+    }
+
+    const { data: template, error: templateError } = await templateOwnerQuery.single();
 
     if (templateError || !template) {
       return NextResponse.json(
@@ -176,8 +193,10 @@ export async function POST(
       );
     }
 
+    const targetCompanyId = template.company_id;
+
     const insertPayload = buildChartTemplateInsertPayload({
-      companyId: session.companyId,
+      companyId: targetCompanyId,
       reportTemplateId: template_id,
       chart: parsed.data.chart,
       layoutMode: parsed.data.layoutMode,
@@ -232,7 +251,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getSession();
-    if (!session?.companyId) {
+    if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
@@ -248,13 +267,34 @@ export async function DELETE(
     }
 
     const supabase = createAdminClient();
+
+    // Resolve template's company_id before deleting (needed for scoping writes)
+    let ownerQuery = supabase
+      .from("report_templates")
+      .select("company_id")
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      ownerQuery = ownerQuery.eq("company_id", session.companyId);
+    }
+
+    const { data: templateOwner, error: ownerError } = await ownerQuery.maybeSingle();
+
+    if (ownerError || !templateOwner) {
+      return NextResponse.json(
+        { success: false, error: "Template not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    const targetCompanyId = templateOwner.company_id;
     
     // 1. Delete all charts for this report template
     const { error: deleteChartsError } = await supabase
       .from("chart_templates")
       .delete()
       .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId);
+      .eq("company_id", targetCompanyId);
 
     if (deleteChartsError) {
       throw deleteChartsError;
@@ -270,7 +310,7 @@ export async function DELETE(
         updated_on: new Date().toISOString(),
       })
       .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId);
+      .eq("company_id", targetCompanyId);
 
     if (updateTemplateError) {
       throw updateTemplateError;

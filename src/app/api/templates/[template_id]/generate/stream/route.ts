@@ -39,7 +39,7 @@ export async function POST(
 ) {
   // 1. Auth
   const session = await getSession();
-  if (!session || !session.companyId) {
+  if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
@@ -63,18 +63,25 @@ export async function POST(
 
   const { runtime_filters, report_header, persist_to_template, config_json } = parsedBody.data;
 
-  // 3. Fetch template from Supabase (company-scoped)
+  // 3. Fetch template from Supabase (company-scoped for regular users only)
   const supabase = createAdminClient();
-  const { data: template, error: fetchError } = await supabase
+  let templateQuery = supabase
     .from("report_templates")
     .select("report_template_setup_json, setup_id, report_template_config_json, report_template_name, company_id")
-    .eq("report_template_id", template_id)
-    .eq("company_id", session.companyId)
-    .single();
+    .eq("report_template_id", template_id);
+
+  if (session.accountType !== "platform_admin") {
+    templateQuery = templateQuery.eq("company_id", session.companyId);
+  }
+
+  const { data: template, error: fetchError } = await templateQuery.single();
 
   if (fetchError || !template) {
     return new Response(JSON.stringify({ error: "Template not found" }), { status: 404 });
   }
+
+  // Resolve the authoritative company_id from the template (critical for platform admins)
+  const targetCompanyId = template.company_id;
 
   // ── Setup JSON with reusable setup_id fallback ─────────────────────────────
   let setupJson = template.report_template_setup_json as any;
@@ -124,12 +131,12 @@ export async function POST(
 
   // 4. Look up the actual user_id FK
   let generatedByUserId: string | null = null;
-  if (session.accountId && session.companyId) {
+  if (session.accountId && targetCompanyId) {
     const { data: userRow } = await supabase
       .from("users")
       .select("user_id")
       .eq("account_id", session.accountId)
-      .eq("company_id", session.companyId)
+      .eq("company_id", targetCompanyId)
       .maybeSingle();
     generatedByUserId = userRow?.user_id ?? null;
   }
@@ -197,7 +204,7 @@ export async function POST(
               updated_on: new Date().toISOString(),
             })
             .eq("report_template_id", template_id)
-            .eq("company_id", session.companyId)
+            .eq("company_id", targetCompanyId)
             .select("report_template_id")
             .single();
 
@@ -222,7 +229,7 @@ export async function POST(
             .from("report_template_versions")
             .insert({
               report_template_id: template_id,
-              company_id: session.companyId,
+              company_id: targetCompanyId,
               version_number: nextVersion,
               config_json: persistedConfigJson,
               preview_data_json: report_structure_json,
@@ -256,7 +263,7 @@ export async function POST(
               updated_on: new Date().toISOString(),
             })
             .eq("report_template_id", template_id)
-            .eq("company_id", session.companyId)
+            .eq("company_id", targetCompanyId)
             .select("report_template_id")
             .single();
 
@@ -268,7 +275,7 @@ export async function POST(
           const { data: saved, error: saveError } = await supabase
             .from("reports")
             .insert({
-              company_id: session.companyId,
+              company_id: targetCompanyId,
               report_template_id: template_id,
               report_name: reportHeading,
               report_config_json: persistedConfigJson,

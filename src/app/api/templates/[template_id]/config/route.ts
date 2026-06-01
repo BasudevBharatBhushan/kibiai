@@ -19,7 +19,7 @@ export async function GET(
 ) {
   try {
     const session = await getSession();
-    if (!session || !session.companyId) {
+    if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -29,14 +29,18 @@ export async function GET(
     }
 
     const supabase = createAdminClient();
-    const { data, error } = await supabase
+    let templateQuery = supabase
       .from("report_templates")
       .select(
         "report_template_id, report_template_name, report_template_setup_json, setup_id, report_template_config_json, report_template_data_json, conversation_id, version_number, report_template_status"
       )
-      .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
-      .single();
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      templateQuery = templateQuery.eq("company_id", session.companyId);
+    }
+
+    const { data, error } = await templateQuery.single();
 
     if (error || !data) {
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
@@ -85,7 +89,7 @@ export async function POST(
 ) {
   try {
     const session = await getSession();
-    if (!session || !session.companyId) {
+    if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -103,18 +107,25 @@ export async function POST(
 
     const { config_json, conversation_id, bump_version, preview_data_json } = parsed.data;
 
-    // Verify the template belongs to this company
+    // Verify the template exists (scoped to company for regular users)
     const supabase = createAdminClient();
-    const { data: existing, error: fetchError } = await supabase
+    let existingQuery = supabase
       .from("report_templates")
-      .select("report_template_id, version_number")
-      .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
-      .single();
+      .select("report_template_id, version_number, company_id")
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      existingQuery = existingQuery.eq("company_id", session.companyId);
+    }
+
+    const { data: existing, error: fetchError } = await existingQuery.single();
 
     if (fetchError || !existing) {
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
     }
+
+    // Use the template's own company_id for all writes (important for platform admins)
+    const targetCompanyId = existing.company_id;
 
     // Build the update payload — only include fields that were provided
     const updatePayload: Record<string, any> = {
@@ -138,7 +149,7 @@ export async function POST(
       .from("report_templates")
       .update(updatePayload)
       .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
+      .eq("company_id", targetCompanyId)
       .select("version_number, updated_on")
       .single();
 

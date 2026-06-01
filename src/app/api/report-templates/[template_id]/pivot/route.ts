@@ -29,7 +29,7 @@ export async function GET(
 ) {
   try {
     const session = await getSession();
-    if (!session?.companyId) {
+    if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -42,14 +42,18 @@ export async function GET(
     }
 
     const supabase = createAdminClient();
-    const { data: template, error } = await supabase
+    let templateQuery = supabase
       .from("report_templates")
       .select(
-        "report_template_id, report_template_name, report_template_data_json, report_template_pivot_metadata_json"
+        "report_template_id, report_template_name, report_template_data_json, report_template_pivot_metadata_json, company_id"
       )
-      .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
-      .single();
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      templateQuery = templateQuery.eq("company_id", session.companyId);
+    }
+
+    const { data: template, error } = await templateQuery.single();
 
     if (error || !template) {
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
@@ -86,7 +90,7 @@ export async function PATCH(
 ) {
   try {
     const session = await getSession();
-    if (!session?.companyId) {
+    if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -105,24 +109,29 @@ export async function PATCH(
     }
 
     const supabase = createAdminClient();
-    const { data: template, error: fetchError } = await supabase
+    let ownerQuery = supabase
       .from("report_templates")
-      .select("report_template_id")
-      .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
-      .single();
+      .select("report_template_id, company_id")
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      ownerQuery = ownerQuery.eq("company_id", session.companyId);
+    }
+
+    const { data: template, error: fetchError } = await ownerQuery.single();
 
     if (fetchError || !template) {
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
     }
 
+    const targetCompanyId = template.company_id;
     const pivotMetadata = normalizePivotMetadata(parsed.data.metadata);
 
     const { error: updateError } = await supabase
       .from("report_templates")
       .update({ report_template_pivot_metadata_json: pivotMetadata })
       .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId);
+      .eq("company_id", targetCompanyId);
 
     if (updateError) {
       return NextResponse.json({ success: false, error: updateError.message }, { status: 500 });

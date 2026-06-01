@@ -25,7 +25,7 @@ export async function PATCH(
 ) {
   try {
     const session = await getSession();
-    if (!session?.companyId) {
+    if (!session || (session.accountType !== "platform_admin" && !session.companyId)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
@@ -67,12 +67,33 @@ export async function PATCH(
 
     console.log("[PATCH /insight-thread] Update Payload:", JSON.stringify(updatePayload, null, 2));
 
+    // Resolve the template's company_id (platform admins may not have session.companyId)
     const supabase = createAdminClient();
+    let ownerQuery = supabase
+      .from("report_templates")
+      .select("company_id")
+      .eq("report_template_id", template_id);
+
+    if (session.accountType !== "platform_admin") {
+      ownerQuery = ownerQuery.eq("company_id", session.companyId);
+    }
+
+    const { data: templateOwner, error: ownerError } = await ownerQuery.maybeSingle();
+
+    if (ownerError || !templateOwner) {
+      console.error("[PATCH /insight-thread] Template not found or company mismatch");
+      return NextResponse.json(
+        { success: false, error: "Template not found" },
+        { status: 404 }
+      );
+    }
+
+    const targetCompanyId = templateOwner.company_id;
     const { data, error } = await supabase
       .from("report_templates")
       .update(updatePayload)
       .eq("report_template_id", template_id)
-      .eq("company_id", session.companyId)
+      .eq("company_id", targetCompanyId)
       .select("report_template_id, insight_conversation_id")
       .single();
 
