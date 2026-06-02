@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Trash2 } from "lucide-react";
+import { Trash2, Search, X } from "lucide-react";
 import { TableConfig, FieldConfig } from "@/components/setup/types";
 
 interface TableCardProps {
@@ -28,6 +28,7 @@ export function TableCard({
 }: TableCardProps) {
   const [isEditingPassword, setIsEditingPassword] = useState(false);
   const [tempPassword, setTempPassword] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleDelete = () => {
     if (confirm(`Delete table '${tableName}' and all its fields?`)) {
@@ -136,7 +137,26 @@ export function TableCard({
 
         {/* Fields table */}
         <div className="tc-fields-header">
-          <strong>Fields ({Object.keys(tableConfig.fields).length})</strong>
+          <div className="tc-fields-header-left">
+            <strong>Fields ({Object.keys(tableConfig.fields).length})</strong>
+          </div>
+          
+          <div className="tc-search-wrapper">
+            <Search size={13} className="tc-search-icon" />
+            <input
+              type="text"
+              className="tc-search-input"
+              placeholder="Search fields or labels..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="tc-search-clear" onClick={() => setSearchQuery("")} title="Clear search">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
           <button className="tc-manage-btn" onClick={onManageFields} title="Update or sync fields from database">
             Update Fields
           </button>
@@ -155,65 +175,87 @@ export function TableCard({
               </tr>
             </thead>
             <tbody>
-              {Object.keys(tableConfig.fields).map((fieldName) => {
-                const field = tableConfig.fields[fieldName];
-                return (
-                  <tr key={fieldName}>
-                    <td className="tc-td-name">
-                      <strong>{fieldName}</strong>
-                    </td>
-                    <td>
-                      <span className={`tc-type-badge tc-type-${field.type}`}>
-                        {field.type}
-                      </span>
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="tc-cell-input"
-                        value={field.label}
-                        onChange={(e) => onUpdateField(fieldName, "label", e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="tc-cell-input tc-cell-short"
-                        value={field.prefix || ""}
-                        placeholder="$"
-                        onChange={(e) => onUpdateField(fieldName, "prefix", e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="tc-cell-input tc-cell-short"
-                        value={field.suffix || ""}
-                        placeholder="%"
-                        onChange={(e) => onUpdateField(fieldName, "suffix", e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="tc-cell-input"
-                        value={field.valuelist || ""}
-                        placeholder="A, B, C"
-                        onChange={(e) => onUpdateField(fieldName, "valuelist", e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <button
-                        className="tc-delete-field-btn"
-                        onClick={() => handleDeleteField(fieldName)}
-                        title="Delete field"
-                      >
-                        ╳
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {(() => {
+                const filteredKeys = Object.keys(tableConfig.fields).filter((fieldName) => {
+                  const field = tableConfig.fields[fieldName];
+                  const query = searchQuery.toLowerCase().trim();
+                  if (!query) return true;
+                  return (
+                    fieldName.toLowerCase().includes(query) ||
+                    (field.label || "").toLowerCase().includes(query)
+                  );
+                });
+
+                if (filteredKeys.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={7} className="tc-td-empty">
+                        No fields match "{searchQuery}"
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return filteredKeys.map((fieldName) => {
+                  const field = tableConfig.fields[fieldName];
+                  return (
+                    <tr key={fieldName}>
+                      <td className="tc-td-name">
+                        <strong>{fieldName}</strong>
+                      </td>
+                      <td>
+                        <span className={`tc-type-badge tc-type-${field.type}`}>
+                          {field.type}
+                        </span>
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="tc-cell-input"
+                          value={field.label}
+                          onChange={(e) => onUpdateField(fieldName, "label", e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="tc-cell-input tc-cell-short"
+                          value={field.prefix || ""}
+                          placeholder="$"
+                          onChange={(e) => onUpdateField(fieldName, "prefix", e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="tc-cell-input tc-cell-short"
+                          value={field.suffix || ""}
+                          placeholder="%"
+                          onChange={(e) => onUpdateField(fieldName, "suffix", e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="tc-cell-input"
+                          value={field.valuelist || ""}
+                          placeholder="A, B, C"
+                          onChange={(e) => onUpdateField(fieldName, "valuelist", e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <button
+                          className="tc-delete-field-btn"
+                          onClick={() => handleDeleteField(fieldName)}
+                          title="Delete field"
+                        >
+                          ╳
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
@@ -439,6 +481,73 @@ export function TableCard({
           .tc-row {
             grid-template-columns: 1fr;
           }
+        }
+
+        .tc-fields-header-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .tc-search-wrapper {
+          position: relative;
+          display: flex;
+          align-items: center;
+          width: 240px;
+        }
+
+        .tc-search-icon {
+          position: absolute;
+          left: 10px;
+          color: #94a3b8;
+          pointer-events: none;
+        }
+
+        .tc-search-input {
+          width: 100%;
+          padding: 6px 30px 6px 28px;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          font-size: 12px;
+          outline: none;
+          color: #0f172a;
+          background: #f8fafc;
+          transition: all 0.2s ease;
+        }
+
+        .tc-search-input:focus {
+          border-color: #636ae8;
+          background: #fff;
+          box-shadow: 0 0 0 2px rgba(99, 106, 232, 0.08);
+        }
+
+        .tc-search-clear {
+          position: absolute;
+          right: 8px;
+          background: none;
+          border: none;
+          color: #94a3b8;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2px;
+          border-radius: 4px;
+          transition: all 0.15s;
+        }
+
+        .tc-search-clear:hover {
+          background: #f1f5f9;
+          color: #475569;
+        }
+
+        .tc-td-empty {
+          padding: 24px !important;
+          text-align: center !important;
+          color: #94a3b8;
+          font-size: 13px;
+          font-style: italic;
+          background: #f8fafc;
         }
       `}</style>
     </div>

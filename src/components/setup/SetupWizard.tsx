@@ -47,7 +47,6 @@ function setupReducer(state: SetupConfig, action: Action): SetupConfig {
       return { ...state, data_fetching_protocol: action.payload };
 
     case "ADD_TABLE": {
-      if (Object.keys(state.tables).length >= 5) return state;
       return {
         ...state,
         tables: { ...state.tables, [action.tableName]: action.tableConfig },
@@ -282,30 +281,50 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
       return;
     }
     
+    setSaveStatus("saving");
+    setSaveError(null);
+    
     // We need to fetch the full setup JSON as the list might only return metadata
     try {
       const res = await fetch(`/api/company/setups/${setup.setup_id}`);
       const data = await res.json();
-      if (data.success && data.setup?.setup_json) {
-        dispatch({ type: "SET_CONFIG", payload: data.setup.setup_json });
-        
-        // Auto-select first table
-        const tableKeys = Object.keys(data.setup.setup_json.tables || {});
-        if (tableKeys.length > 0) {
-          setSelectedView(`table:${tableKeys[0]}`);
-        }
-        
-        // Also update the template's setup_id and local setup_json in the DB
-        await fetch(`/api/company/templates/${templateId}/setup`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            setup_id: setup.setup_id,
-            setup_json: data.setup.setup_json 
-          }),
-        });
+      if (!data.success || !data.setup?.setup_json) {
+        throw new Error(data.error || "Failed to fetch setup configuration.");
       }
-    } catch (error) {
+      
+      dispatch({ type: "SET_CONFIG", payload: data.setup.setup_json });
+      
+      // Auto-select first table
+      const tableKeys = Object.keys(data.setup.setup_json.tables || {});
+      if (tableKeys.length > 0) {
+        setSelectedView(`table:${tableKeys[0]}`);
+      }
+      
+      // Also update the template's setup_id and local setup_json in the DB
+      const patchRes = await fetch(`/api/company/templates/${templateId}/setup`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          setup_id: setup.setup_id,
+          setup_json: data.setup.setup_json 
+        }),
+      });
+      
+      if (!patchRes.ok) {
+        throw new Error("Failed to save setup to report template.");
+      }
+      
+      const patchData = await patchRes.json();
+      if (!patchData.success) {
+        throw new Error(patchData.error || "Failed to save setup to report template.");
+      }
+      
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (error: any) {
+      setSaveStatus("error");
+      setSaveError(error.message || "Failed to load and save setup.");
+      setTimeout(() => setSaveStatus("idle"), 5000);
       console.error("Failed to apply setup:", error);
     }
   };
@@ -541,6 +560,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
 
             {selectedView.startsWith("table:") && config.tables[selectedView.replace("table:", "")] && (
               <TableCard
+                key={selectedView}
                 tableName={selectedView.replace("table:", "")}
                 tableConfig={config.tables[selectedView.replace("table:", "")]}
                 onDelete={() => {

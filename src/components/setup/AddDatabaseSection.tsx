@@ -65,6 +65,15 @@ export function AddDatabaseSection({
   // Add state
   const [addingTable, setAddingTable] = useState(false);
 
+  // Reset fetched layouts, tables, and status when connection parameters or credentials change
+  useEffect(() => {
+    setLayouts([]);
+    setOdataTables([]);
+    setSelectedTable("");
+    setSelectedLayout("");
+    setFetchStatus(null);
+  }, [host, protocol, file, username, password]);
+
   const showStatus = (type: "success" | "error", message: string) => {
     if (statusTimer.current) clearTimeout(statusTimer.current);
     setFetchStatus({ type, message });
@@ -123,7 +132,6 @@ export function AddDatabaseSection({
     if (existingTableNames.includes(selectedTable)) {
       return showStatus("error", `Table '${selectedTable}' already exists.`);
     }
-    if (tableCount >= 5) return showStatus("error", "Maximum 5 databases reached.");
 
     setAddingTable(true);
     try {
@@ -229,8 +237,8 @@ export function AddDatabaseSection({
     <Modal isOpen={true} onClose={onClose} title="Add New Database">
       <div className="flex flex-col gap-5">
         <div className="bg-blue-50/50 text-blue-800 text-xs px-3 py-2 rounded-md border border-blue-100 flex justify-between items-center">
-          <span>Max 5 databases allowed.</span>
-          <span className="font-semibold">{tableCount}/5</span>
+          <span>Configure databases for this report template.</span>
+          <span className="font-semibold">Active: {tableCount}</span>
         </div>
 
         {/* Host and Credentials Form */}
