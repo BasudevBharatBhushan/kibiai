@@ -649,7 +649,10 @@ export function ClassicReportView({
       const handleSsClick = () => {
         if (isPrintView) return;
         if (collapsed) {
-          setDrillModal({ title: `${spec.field}: ${spec.label}`, rows: spec.rows, totalFields: spec.totalFields });
+          const displayTitle = spec.field.trim() === "_date_breakdown"
+            ? spec.label
+            : `${spec.field}: ${spec.label}`;
+          setDrillModal({ title: displayTitle, rows: spec.rows, totalFields: spec.totalFields });
         } else {
           toggleGroup(spec.groupId);
         }
