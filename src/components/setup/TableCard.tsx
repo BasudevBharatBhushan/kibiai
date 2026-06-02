@@ -139,22 +139,24 @@ export function TableCard({
         <div className="tc-fields-header">
           <div className="tc-fields-header-left">
             <strong>Fields ({Object.keys(tableConfig.fields).length})</strong>
-          </div>
-          
-          <div className="tc-search-wrapper">
-            <Search size={13} className="tc-search-icon" />
-            <input
-              type="text"
-              className="tc-search-input"
-              placeholder="Search fields or labels..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button className="tc-search-clear" onClick={() => setSearchQuery("")} title="Clear search">
-                <X size={12} />
-              </button>
-            )}
+            
+            <div className="tc-search-wrapper">
+              <span className="tc-search-icon">
+                <Search size={13} />
+              </span>
+              <input
+                type="text"
+                className="tc-search-input"
+                placeholder="Search fields or labels..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button className="tc-search-clear" onClick={() => setSearchQuery("")} title="Clear search">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
           </div>
 
           <button className="tc-manage-btn" onClick={onManageFields} title="Update or sync fields from database">
@@ -501,6 +503,9 @@ export function TableCard({
           left: 10px;
           color: #94a3b8;
           pointer-events: none;
+          display: flex;
+          align-items: center;
+          z-index: 10;
         }
 
         .tc-search-input {
