@@ -31,22 +31,38 @@ export default function ChartCard({ config }: Props) {
   const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [boostReady, setBoostReady] = useState(boostInitialized);
 
-  // Dynamically import and apply the boost module once per app session
+  // Dynamically import and apply all required Highcharts modules sequentially once per app session
   useEffect(() => {
-    if (boostInitialized) return;
-    import('highcharts/modules/boost').then((mod: any) => {
-      const initBoost = mod.default ?? mod;
-      if (typeof initBoost === 'function') {
-        (initBoost as (h: typeof Highcharts) => void)(Highcharts);
+    if (boostInitialized) {
+      if (!boostReady) setBoostReady(true);
+      return;
+    }
+
+    const loadModules = async () => {
+      try {
+        const mods = [
+          await import('highcharts/modules/boost'),
+          await import('highcharts/highcharts-more'),
+          await import('highcharts/modules/solid-gauge'),
+          await import('highcharts/modules/funnel'),
+        ];
+        
+        for (const mod of mods) {
+          const init = (mod as any).default ?? mod;
+          if (typeof init === 'function') {
+            init(Highcharts);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load Highcharts modules sequentially:', err);
+      } finally {
+        boostInitialized = true;
+        setBoostReady(true);
       }
-      boostInitialized = true;
-      setBoostReady(true);
-    }).catch(() => {
-      // Boost failed to load; still allow charts to render without it
-      boostInitialized = true;
-      setBoostReady(true);
-    });
-  }, []);
+    };
+
+    loadModules();
+  }, [boostReady]);
 
   const opts = useMemo(() => {
     const base = buildOptions(config);

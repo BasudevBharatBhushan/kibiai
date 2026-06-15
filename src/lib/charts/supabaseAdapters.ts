@@ -105,6 +105,10 @@ export function mapAiChartTypeToUiKind(chartType?: string | null): ChartKind {
     case "bar":
     case "column":
       return "column";
+    case "spline":      return "spline";
+    case "areaspline":  return "areaspline";
+    case "gauge":       return "gauge";
+    case "funnel":      return "funnel";
     case "doughnut":
     case "donut":
       return "donut";
@@ -114,8 +118,7 @@ export function mapAiChartTypeToUiKind(chartType?: string | null): ChartKind {
       return "line";
     case "area":
       return "area";
-    case "insight":
-      return "insight";
+    case "insight":     return "insight";
     default:
       return "column";
   }
@@ -128,6 +131,10 @@ export function mapUiKindToTemplateType(kind?: string | null): string {
     case "column":
     case "bar":
       return "Bar";
+    case "spline":      return "Spline";
+    case "areaspline":  return "AreaSpline";
+    case "gauge":       return "Gauge";
+    case "funnel":      return "Funnel";
     case "donut":
     case "doughnut":
       return "Donut";
@@ -137,8 +144,7 @@ export function mapUiKindToTemplateType(kind?: string | null): string {
       return "Line";
     case "area":
       return "Area";
-    case "insight":
-      return "Insight";
+    case "insight":     return "Insight";
     default:
       return "Bar";
   }
@@ -254,8 +260,14 @@ export function buildChartTemplateInsertPayload(args: {
     },
     chart_template_dataset_json: {
       group_field: chart.group_field ?? null,
-      numerical_field: chart.numerical_field ?? null,
+      group_field_time_bucket: chart.group_field_time_bucket ?? null,
+      numerical_fields: chart.numerical_fields ?? (chart.numerical_field ? [chart.numerical_field] : null),
       subgroup_field: chart.subgroup_field ?? null,
+      subgroup_field_time_bucket: chart.subgroup_field_time_bucket ?? null,
+      stacking: chart.stacking ?? null,
+      aggregation_method: chart.aggregation_method ?? chart.mathematical_aggregation_method ?? null,
+      target_field: chart.target_field ?? null,
+      target_value: chart.target_value ?? null,
       filters: chart.filters ?? [],
       chart_type: chart.chart_type,
     },

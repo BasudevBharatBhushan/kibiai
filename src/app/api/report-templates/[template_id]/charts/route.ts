@@ -15,12 +15,19 @@ const chartSchema = z.object({
   chart_title: z.string().min(1),
   chart_type: z.string().min(1),
   isActive: z.union([z.boolean(), z.number(), z.string()]).optional(),
-  numerical_field: z.string().optional(),
+  numerical_fields: z.array(z.string()).optional(),
+  numerical_field: z.string().optional(),             // backward-compat v1
   group_field: z.string().optional(),
+  group_field_time_bucket: z.enum(['day', 'week', 'month', 'quarter', 'year', 'day_of_week']).optional(),
   subgroup_field: z.string().optional(),
+  subgroup_field_time_bucket: z.enum(['day', 'week', 'month', 'quarter', 'year', 'day_of_week']).optional(),
+  stacking: z.enum(['none', 'normal', 'percent']).optional(),
   mathematical_aggregation_method: z
     .enum(["sum", "count", "average", "min", "max"])
-    .optional(),
+    .optional(),                                       // backward-compat v1
+  aggregation_method: z.enum(["sum", "count", "average", "percentage"]).optional(),
+  target_field: z.string().optional(),
+  target_value: z.number().optional(),
   filters: z.array(z.string()).optional(),
   business_insights: z.array(z.string()).optional(),
   insight_plan: z.any().optional(),

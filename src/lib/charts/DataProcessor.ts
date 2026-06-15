@@ -6,6 +6,8 @@ import {
 } from "@/constants/analytics";
 import { executeV3InsightPlan } from '@/lib/insights/v3/scopedExecutor';
 import type { FieldSchema } from '@/lib/insights/fieldSchemaAdapter';
+import { resolveFilterDates } from './filterDateResolver';
+import { bucketDate, TimeBucket } from './timeBucket';
 
 
 // Helper to recursively extract BodyFields from nested data
@@ -178,27 +180,51 @@ export function processData(
       return;
     }
 
-    // 2. Handle Charts
+    // 2. Handle Charts (v2 + backward-compat v1)
     const {
       chart_title,
       chart_type,
-      numerical_field = '',
+      numerical_fields,
+      numerical_field = '',            // v1 backward-compat
       group_field = '',
+      group_field_time_bucket,
       subgroup_field = '',
-      mathematical_aggregation_method: aggMethod,
+      subgroup_field_time_bucket,
+      stacking,
+      target_field,
+      target_value,
+      mathematical_aggregation_method, // v1 backward-compat
+      aggregation_method,              // v2 preferred
       filters: filterCriteriaRaw = []
     } = aiResponse;
 
-    if (!group_field) return;
+    // Resolve aggregation — prefer v2 field, fall back to v1
+    const aggMethod = aggregation_method ?? mathematical_aggregation_method;
+
+    // Build the active numerical fields list — support both v1 (string) and v2 (array)
+    const activeNumericalFields: string[] =
+      numerical_fields && numerical_fields.length > 0
+        ? numerical_fields
+        : numerical_field
+          ? [numerical_field]
+          : [];
+
+    // For gauge charts, group_field is optional
+    if (!group_field && chart_type !== 'gauge') return;
 
     const filters = filterCriteriaRaw.length > 0 ? filterCriteriaRaw : [];
+
+    // Resolve relative date tokens in filter strings (v2 feature)
+    const resolvedFilters = filters.map(rule =>
+      resolveFilterDates(rule, context?.reportStart, context?.reportEnd)
+    );
 
     // --- Filtering ---
     const isViewerMode = !!(context?.reportStart || context?.reportEnd);
     
     // ST-8: Pre-process filters to skip hardcoded absolute date filters in viewer mode.
     // We do this once per chart, not inside the row-by-row filter loop.
-    const activeFilters = filters.filter((rule: string) => {
+    const activeFilters = resolvedFilters.filter((rule: string) => {
       const [field, condition] = rule.split(':').map(s => s.trim());
       const isDateField = field.toLowerCase().includes('date');
       
@@ -282,12 +308,26 @@ export function processData(
     };
 
     const actualGroupField = findActualKey(group_field);
-    const actualNumericalField = findActualKey(numerical_field);
     const actualSubgroupField = findActualKey(subgroup_field);
+
+    // --- Time-bucketed group key functions ---
+    const getGroupKey = (item: any): string => {
+      const raw = item[actualGroupField || group_field];
+      return group_field_time_bucket
+        ? bucketDate(raw, group_field_time_bucket as TimeBucket)
+        : String(raw ?? '');
+    };
+
+    const getSubGroupKey = (item: any): string => {
+      const raw = item[actualSubgroupField || subgroup_field];
+      return subgroup_field_time_bucket
+        ? bucketDate(raw, subgroup_field_time_bucket as TimeBucket)
+        : String(raw ?? '');
+    };
 
     // --- Grouping ---
     const useSubgroups = subgroup_field && subgroup_field.trim() !== "";
-    let labels = [...new Set(filteredData.map(item => item[actualGroupField || group_field]).filter(Boolean))];
+    let labels = [...new Set(filteredData.map(getGroupKey).filter(Boolean))];
     
     if (labels.length === 0) {
       console.warn(`[DataProcessor] No labels found for chart "${chart_title}" using group_field "${group_field}" (Actual: ${actualGroupField})`);
@@ -295,34 +335,39 @@ export function processData(
 
     let allSubgroups = ['default'];
     if (useSubgroups) {
-      allSubgroups = [...new Set(filteredData.map(item => item[actualSubgroupField || subgroup_field]).filter(Boolean))];
+      allSubgroups = [...new Set(filteredData.map(getSubGroupKey).filter(Boolean))];
     }
 
-    const groupedData: Record<string, Record<string, number[]>> = {};
+    // groupedData stores raw row objects so we can look up any numerical field later
+    const groupedData: Record<string, Record<string, any[]>> = {};
 
     filteredData.forEach(item => {
-      const groupKey = item[actualGroupField || group_field];
+      const groupKey = getGroupKey(item);
       if (!groupKey) return;
 
-      const subGroupKey = useSubgroups ? item[actualSubgroupField || subgroup_field] : 'default';
+      const subGroupKey = useSubgroups ? getSubGroupKey(item) : 'default';
       if (useSubgroups && !subGroupKey) return;
-
-      const numVal = parseFloat(item[actualNumericalField || numerical_field]) || 0;
 
       if (!groupedData[groupKey]) groupedData[groupKey] = {};
       if (!groupedData[groupKey][subGroupKey]) groupedData[groupKey][subGroupKey] = [];
       
-      groupedData[groupKey][subGroupKey].push(numVal);
+      groupedData[groupKey][subGroupKey].push(item);
     });
 
     // --- Sorting & Limiting (Top/Bottom N) ---
     if (aiResponse.limit_count || aiResponse.sort_order) {
       const order = aiResponse.sort_order || 'desc';
+      const primaryNumField = activeNumericalFields[0] || '';
+      const actualPrimaryNumField = findActualKey(primaryNumField);
+
       const labelTotals = labels.map(label => {
         let total = 0;
         allSubgroups.forEach(sub => {
-          const values = groupedData[label]?.[sub] || [];
-          if (values.length === 0) return;
+          const items = groupedData[label]?.[sub] || [];
+          if (items.length === 0) return;
+          const values = items.map((it: any) =>
+            parseFloat(it[actualPrimaryNumField || primaryNumField]) || 0
+          );
           if (aggMethod === 'sum') total += values.reduce((a, b) => a + b, 0);
           else if (aggMethod === 'average') total += values.reduce((a, b) => a + b, 0) / values.length;
           else if (aggMethod === 'count') total += values.length;
@@ -337,25 +382,108 @@ export function processData(
       labels = labelTotals.slice(0, limit).map(lt => String(lt.label));
     }
 
-    // --- Aggregation ---
-    const series = allSubgroups.map(subgroup => {
-      const data = labels.map(label => {
-        const values = groupedData[label]?.[subgroup] || [];
-        
-        if (values.length === 0) return 0;
+    // --- Gauge without group_field: aggregate all rows into a single scalar ---
+    if (chart_type === 'gauge' && !group_field) {
+      const gaugeSeriesData: { name: string; data: number[] }[] = [];
 
-        if (aggMethod === 'sum') return values.reduce((a, b) => a + b, 0);
-        if (aggMethod === 'average') return values.reduce((a, b) => a + b, 0) / values.length;
-        if (aggMethod === 'count') return values.length;
-        
-        return values.reduce((a, b) => a + b, 0);
+      for (const numField of activeNumericalFields.length > 0 ? activeNumericalFields : ['']) {
+        const actualNumField = findActualKey(numField);
+        const values: number[] = filteredData.map(
+          (it: any) => parseFloat(it[actualNumField || numField]) || 0
+        );
+
+        let scalar = 0;
+        if (values.length > 0) {
+          if (aggMethod === 'sum' || aggMethod === 'percentage') scalar = values.reduce((a, b) => a + b, 0);
+          else if (aggMethod === 'average') scalar = values.reduce((a, b) => a + b, 0) / values.length;
+          else if (aggMethod === 'count') scalar = values.length;
+          else scalar = values.reduce((a, b) => a + b, 0);
+        }
+
+        gaugeSeriesData.push({ name: numField || 'Value', data: [scalar] });
+      }
+
+      // Compute target_max
+      let computedTargetMax: number | undefined;
+      if (target_field) {
+        const actualTargetField = findActualKey(target_field);
+        computedTargetMax = filteredData.reduce((acc: number, item: any) => {
+          return acc + (parseFloat(item[actualTargetField || target_field]) || 0);
+        }, 0);
+      }
+
+      const W = PROCESSOR_DEFAULTS.LAYOUT_WIDTH;
+      const H = PROCESSOR_DEFAULTS.LAYOUT_HEIGHT;
+      results.push({
+        id: newId,
+        kind: 'gauge',
+        title: chart_title,
+        isActive: activeStatus,
+        supabaseId: aiResponse.supabaseId,
+        categories: [],
+        series: gaugeSeriesData,
+        target_value: target_value ?? computedTargetMax,
+        target_max: computedTargetMax,
+        report_date_range: reportDateRange,
+        layout: { x: (results.length % 2) * W, y: Math.floor(results.length / 2) * H, w: W, h: H, i: newId },
       });
+      return; // skip the generic label-based path below
+    }
 
-      return {
-        name: subgroup === 'default' ? numerical_field || 'Value' : subgroup, 
-        data: data
-      };
-    });
+    // --- Aggregation: outer loop over numerical fields, inner loop over subgroups ---
+    const series: { name: string; data: number[] }[] = [];
+
+    for (const numField of activeNumericalFields.length > 0 ? activeNumericalFields : ['']) {
+      const actualNumField = findActualKey(numField);
+
+      for (const subgroup of allSubgroups) {
+        const data = labels.map(label => {
+          const items: any[] = groupedData[label]?.[subgroup] ?? [];
+          const values: number[] = items.map(
+            (it: any) => parseFloat(it[actualNumField || numField]) || 0
+          );
+
+          if (values.length === 0) return 0;
+          if (aggMethod === 'sum')     return values.reduce((a, b) => a + b, 0);
+          if (aggMethod === 'average') return values.reduce((a, b) => a + b, 0) / values.length;
+          if (aggMethod === 'count')   return values.length;
+          // 'percentage' is resolved after all series are built (requires grand total)
+          return values.reduce((a, b) => a + b, 0); // default to sum for now
+        });
+
+        const seriesName = activeNumericalFields.length > 1
+          ? (subgroup === 'default' ? numField : `${numField} (${subgroup})`)
+          : (subgroup === 'default' ? numField || 'Value' : subgroup);
+
+        series.push({ name: seriesName, data });
+      }
+    }
+
+    // Post-process: convert to percentage if requested
+    // grand_total = sum of all values across all series and all labels
+    if (aggMethod === 'percentage') {
+      const grandTotal = series.reduce(
+        (acc, s) => acc + s.data.reduce((a, b) => a + b, 0),
+        0
+      );
+      if (grandTotal > 0) {
+        series.forEach(s => {
+          s.data = s.data.map(val =>
+            parseFloat(((val / grandTotal) * 100).toFixed(2))
+          );
+        });
+      }
+    }
+
+    // --- Gauge: compute target_max from target_field ---
+    let computedTargetMax: number | undefined;
+    if (chart_type === 'gauge' && target_field) {
+      const actualTargetField = findActualKey(target_field);
+      computedTargetMax = filteredData.reduce((acc, item) => {
+        const v = parseFloat(item[actualTargetField || target_field]) || 0;
+        return acc + v;
+      }, 0);
+    }
 
     // --- Layout ---
     const W = PROCESSOR_DEFAULTS.LAYOUT_WIDTH;
@@ -376,6 +504,9 @@ export function processData(
       supabaseId: aiResponse.supabaseId,
       categories: labels as string[],
       series: series,
+      stacking: stacking,
+      target_value: target_value ?? computedTargetMax,
+      target_max: computedTargetMax,
       filters: activeFilters,
       report_date_range: reportDateRange,
       layout

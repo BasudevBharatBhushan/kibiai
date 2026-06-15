@@ -395,7 +395,7 @@ function ComparisonActions({
   onNewFilter: () => void;
 }) {
   return (
-    <div className="compare-view-actions">
+    <div className="flex items-center gap-2">
       <button
         type="button"
         className="compare-view-action-btn"
@@ -680,13 +680,21 @@ export default function CompareModal({
           <span className="compare-modal-title" title={`Chart Comparison — ${primaryConfig.title}`}>
             Chart Comparison — {primaryConfig.title}
           </span>
-          <button
-            className="compare-modal-close-btn"
-            onClick={onClose}
-            aria-label="Close comparison"
-          >
-            <X size={15} />
-          </button>
+          <div className="ml-auto flex items-center gap-4">
+            {rightPanelState === 'VIEWING' && (
+              <ComparisonActions
+                onPickAnother={handlePickAnother}
+                onNewFilter={handleOpenNewFilter}
+              />
+            )}
+            <button
+              className="compare-modal-close-btn"
+              onClick={onClose}
+              aria-label="Close comparison"
+            >
+              <X size={15} />
+            </button>
+          </div>
         </div>
 
         {/* Split Body */}
@@ -741,11 +749,7 @@ export default function CompareModal({
             )}
 
             {rightPanelState === 'VIEWING' && rightPanelError && (
-              <div className="compare-view-shell">
-                <ComparisonActions
-                  onPickAnother={handlePickAnother}
-                  onNewFilter={handleOpenNewFilter}
-                />
+              <div className="h-full flex flex-col items-center justify-center">
                 <div className="compare-panel-empty">
                   <AlertTriangle
                     size={32}
@@ -763,18 +767,12 @@ export default function CompareModal({
             )}
 
             {rightPanelState === 'VIEWING' && !rightPanelError && comparisonChartConfig && (
-              <div className="compare-view-shell">
-                <ComparisonActions
-                  onPickAnother={handlePickAnother}
-                  onNewFilter={handleOpenNewFilter}
-                />
                 <CompareChartPanel
                   config={comparisonChartConfig}
                   sourceMeta={comparisonSourceMeta}
                   label="Comparison"
                   labelColor="purple"
                 />
-              </div>
             )}
           </div>
         </div>

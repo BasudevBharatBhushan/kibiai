@@ -8,7 +8,12 @@ export function buildChartPredefinedPrompt(
   fieldSchemas: FieldSchema[]
 ): string {
   const fieldList = fieldSchemas.length > 0
-    ? fieldSchemas.map(f => `- Field: "${f.name}", Label: "${f.meaning}", Type: "${f.type}"`).join("\n")
+    ? fieldSchemas.map(f => {
+        const typeHint = f.type === 'date'
+          ? `Type: "date" — use group_field_time_bucket or subgroup_field_time_bucket`
+          : `Type: "${f.type}"`;
+        return `- Field: "${f.name}", Label: "${f.meaning}", ${typeHint}`;
+      }).join("\n")
     : "- No fields available yet";
 
   return `Here are the fields available in the report:\n${fieldList}\n\nPlease use these fields and their exact labels or names when creating chart configurations. You must prefer labels for titles but names or labels for actual grouped/numerical fields.`;

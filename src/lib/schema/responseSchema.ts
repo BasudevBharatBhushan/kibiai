@@ -12,17 +12,20 @@ const BaseChartSchema = {
   filters: z.array(z.string()).optional(),
   limit_count: z.number().optional(),
   sort_order: z.enum(["asc", "desc"]).optional(),
+  group_field_time_bucket: z.enum(['day', 'week', 'month', 'quarter', 'year', 'day_of_week']).optional(),
+  subgroup_field_time_bucket: z.enum(['day', 'week', 'month', 'quarter', 'year', 'day_of_week']).optional(),
+  stacking: z.enum(['none', 'normal', 'percent']).optional(),
+  aggregation_method: z.enum(["sum", "average", "count", "percentage"]).optional(),
 };
 
-// --- CARTESIAN CHARTS (Bar, Line, Area) ---
+// --- CARTESIAN CHARTS (Bar, Line, Area, Spline, AreaSpline) ---
 
-// Bar Chart Schema
+// Bar/Column Chart Schema
 export const BarChartSchema = z
   .object({
     ...BaseChartSchema,
-    numerical_field: z.string().min(1),
+    numerical_fields: z.array(z.string().min(1)).min(1),
     group_field: z.string().min(1),
-    aggregation_method: z.enum(AGGREGATION_METHODS),
     chart_type: z.literal("bar"),
   })
   .strict();
@@ -33,10 +36,9 @@ export type BarChart = z.infer<typeof BarChartSchema>;
 export const LineChartSchema = z
   .object({
     ...BaseChartSchema,
-    numerical_field: z.string().min(1),
+    numerical_fields: z.array(z.string().min(1)).min(1),
     group_field: z.string().min(1), // usually time-based
     subgroup_field: z.string().optional(),
-    aggregation_method: z.enum(AGGREGATION_METHODS),
     chart_type: z.literal("line"),
   })
   .strict();
@@ -47,10 +49,9 @@ export type LineChart = z.infer<typeof LineChartSchema>;
 export const AreaChartSchema = z
   .object({
     ...BaseChartSchema,
-    numerical_field: z.string().min(1),
+    numerical_fields: z.array(z.string().min(1)).min(1),
     group_field: z.string().min(1),
     subgroup_field: z.string().optional(),
-    aggregation_method: z.enum(AGGREGATION_METHODS),
     chart_type: z.literal("area"),
   })
   .strict();
@@ -63,9 +64,9 @@ export type AreaChart = z.infer<typeof AreaChartSchema>;
 export const PieChartSchema = z
   .object({
     ...BaseChartSchema,
-    numerical_field: z.string().min(1),
+    numerical_fields: z.array(z.string().min(1)).min(1),
     group_field: z.string().min(1),
-    aggregation_method: z.enum(PIE_AGGREGATION_METHODS),
+    aggregation_method: z.enum(PIE_AGGREGATION_METHODS).optional(),
     chart_type: z.literal("pie"),
   })
   .strict();
@@ -76,14 +77,25 @@ export type PieChart = z.infer<typeof PieChartSchema>;
 export const DoughnutChartSchema = z
     .object({
         ...BaseChartSchema,
-        numerical_field: z.string().min(1),
+        numerical_fields: z.array(z.string().min(1)).min(1),
         group_field: z.string().min(1),
-        aggregation_method: z.enum(PIE_AGGREGATION_METHODS),
+        aggregation_method: z.enum(PIE_AGGREGATION_METHODS).optional(),
         chart_type: z.literal("doughnut"),
     })
     .strict();
 
 export type DoughnutChart = z.infer<typeof DoughnutChartSchema>;
+
+// --- GAUGE CHART ---
+export const GaugeChartSchema = z.object({
+  ...BaseChartSchema,
+  numerical_fields: z.array(z.string().min(1)).min(1),
+  target_field: z.string().optional(),
+  target_value: z.number().optional(),
+  chart_type: z.literal("gauge"),
+}).strict();
+
+export type GaugeChart = z.infer<typeof GaugeChartSchema>;
 
 // --- INSIGHTS & ANALYSIS ---
 
@@ -113,15 +125,20 @@ export type ChartSuggestion = z.infer<typeof ChartSuggestionSchema>;
 // Report Analysis Schema
 // Helper schema for individual charts within an analysis report
 export const ReportAnalysisChartSchema = z.object({
-  numerical_field: z.string().min(1),
+  numerical_fields: z.array(z.string().min(1)).min(1),
   group_field: z.string().min(1),
-  aggregation_method: z.enum(AGGREGATION_METHODS),
+  aggregation_method: z.enum(AGGREGATION_METHODS).optional(),
   chart_type: z.enum([
     "bar",
     "line",
     "pie",
     "doughnut",
     "area",
+    "column",
+    "spline",
+    "areaspline",
+    "gauge",
+    "funnel",
   ]),
   chart_title: z.string().min(1),
   filters: z.array(z.string()).optional(),
@@ -151,10 +168,10 @@ export const ComparisonLineChartSchema = z.object({
   response_to_user: z.string().min(1),
   chart_title: z.string().min(1),
   chart_type: z.literal("line"),
-  numerical_field: z.string().min(1),
+  numerical_fields: z.array(z.string().min(1)).min(1),
   group_field: z.string().min(1),
   subgroup_field: z.string().min(1),
-  aggregation_method: z.enum(PIE_AGGREGATION_METHODS), 
+  aggregation_method: z.enum(PIE_AGGREGATION_METHODS).optional(),
   filters: z
     .array(z.string().min(1))
     .min(2, "Comparison charts require at least 2 filters"),

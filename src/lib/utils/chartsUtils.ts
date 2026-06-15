@@ -48,7 +48,93 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
       ],
     };
   }
-//non-pie charts confuguration
+
+  // Gauge chart configuration (solidgauge)
+  if (config.kind === 'gauge') {
+    const currentValue = config.series[0]?.data[0] ?? 0;
+    const maxValue = (config.target_max ?? config.target_value ?? (currentValue * 1.5)) || 100;
+
+    return {
+      chart: { type: 'solidgauge', reflow: true },
+      title: { text: undefined },
+      credits: { enabled: false },
+      pane: {
+        center: ['50%', '80%'],
+        size: '140%',
+        startAngle: -90,
+        endAngle: 90,
+        background: [{
+          backgroundColor: '#EEE',
+          innerRadius: '60%',
+          outerRadius: '100%',
+          shape: 'arc',
+        }] as any,
+      },
+      yAxis: {
+        min: 0,
+        max: maxValue as number,
+        stops: [
+          [0.1, '#DF5353'],
+          [0.5, '#DDDF0D'],
+          [0.9, '#55BF3B'],
+        ] as any,
+        lineWidth: 0,
+        tickWidth: 0,
+        minorTickInterval: undefined,
+        tickAmount: 2,
+        title: { text: config.title, y: -70 },
+        labels: { y: 16 },
+      },
+      plotOptions: {
+        solidgauge: {
+          dataLabels: { y: 5, borderWidth: 0, useHTML: true },
+        } as any,
+      },
+      series: [{
+        type: 'solidgauge' as any,
+        name: config.series[0]?.name ?? 'Value',
+        data: [Number(currentValue)],
+        dataLabels: {
+          format: '<div style="text-align:center"><span style="font-size:25px">{y}</span></div>',
+        },
+      }],
+    };
+  }
+
+  // Funnel chart configuration
+  if (config.kind === 'funnel') {
+    const funnelData = config.series[0]?.data.map((val, idx) => ({
+      name: config.categories?.[idx] ?? `Stage ${idx + 1}`,
+      y: Number(val ?? 0),
+    })) ?? [];
+
+    return {
+      chart: { type: 'funnel', reflow: true },
+      title: { text: undefined },
+      credits: { enabled: false },
+      plotOptions: {
+        funnel: {
+          neckWidth: '30%',
+          neckHeight: '25%',
+          dataLabels: {
+            enabled: true,
+            format: '<b>{point.name}</b>: {point.y:,.0f}',
+          },
+        } as any,
+      },
+      series: [{
+        type: 'funnel' as any,
+        name: config.series[0]?.name ?? 'Values',
+        data: funnelData,
+      }],
+    };
+  }
+
+  // Non-pie, non-gauge, non-funnel charts (cartesian: column, bar, line, spline, area, areaspline)
+  const stackingConfig = config.stacking && config.stacking !== 'none'
+    ? { stacking: config.stacking }
+    : {};
+
   return {
     chart: { 
       type: config.kind, 
@@ -84,7 +170,11 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
         dataLabels: {
           enabled: false
         }
-      }
+      },
+      column: stackingConfig as any,
+      bar: stackingConfig as any,
+      area: stackingConfig as any,
+      areaspline: stackingConfig as any,
     },
 
     series: config.series.map(s => ({

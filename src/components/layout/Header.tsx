@@ -17,6 +17,8 @@ import {
   X,
   ChevronDown,
   MoreHorizontal,
+  BarChart2,
+  FileText,
 } from "lucide-react";
 import { useHeader } from "@/context/HeaderContext";
 import { useParams, useRouter, usePathname } from "next/navigation";
@@ -64,65 +66,42 @@ function PlanBadge({ plan }: { plan: string }) {
 
 // ── Compact Breadcrumbs ──────────────────────────────────────────────────────
 // Icon-only summary used when full breadcrumbs would collide with the right-side
-// header actions. Clicking the … reveals the full path in a small popover.
+// header actions. Each middle crumb is displayed as an icon with a tooltip.
 function CompactBreadcrumbs({
   crumbs,
-  expanded,
-  onToggle,
 }: {
   crumbs: { label: string; href?: string }[];
-  expanded: boolean;
-  onToggle: (e: React.MouseEvent) => void;
 }) {
-  const last = crumbs[crumbs.length - 1];
-  const middle = crumbs.slice(0, -1);
+  const getCrumbIcon = (label: string) => {
+    const l = label.toLowerCase();
+    if (l.includes("template")) return <Home className="h-3.5 w-3.5" />;
+    if (l.includes("setup")) return <Settings className="h-3.5 w-3.5" />;
+    if (l.includes("chart")) return <BarChart2 className="h-3.5 w-3.5" />;
+    if (l.includes("report")) return <FileText className="h-3.5 w-3.5" />;
+    if (l.includes("admin")) return <Settings className="h-3.5 w-3.5" />;
+    return <span className="text-[11px] font-bold leading-none">{label.charAt(0).toUpperCase()}</span>;
+  };
 
   return (
-    <div className="relative flex items-center min-w-0">
-      {middle.length > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={onToggle}
-            className="flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
-            title={middle.map(c => c.label).join(" › ")}
-            aria-haspopup="menu"
-            aria-expanded={expanded}
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
-          <ChevronRight className="mx-1.5 h-3 w-3 text-slate-300 shrink-0" />
-        </>
-      )}
-      <span className="text-[13px] font-semibold text-blue-600 truncate max-w-[180px]">
-        {last?.label}
-      </span>
-
-      {expanded && middle.length > 0 && (
-        <div
-          className="absolute top-full left-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[200px]"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {middle.map((crumb, idx) => (
-            <React.Fragment key={idx}>
-              {crumb.href ? (
-                <Link
-                  href={crumb.href}
-                  className="flex items-center gap-2 px-3 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-blue-600"
-                >
-                  <ChevronRight className="h-3 w-3 text-slate-300 shrink-0" />
-                  <span className="truncate">{crumb.label}</span>
-                </Link>
-              ) : (
-                <div className="flex items-center gap-2 px-3 py-2 text-[13px] text-slate-500">
-                  <ChevronRight className="h-3 w-3 text-slate-300 shrink-0" />
-                  <span className="truncate">{crumb.label}</span>
-                </div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
+    <div className="flex items-center min-w-0">
+      {crumbs.map((crumb, idx) => (
+        <React.Fragment key={idx}>
+          {idx > 0 && <ChevronRight className="mx-1.5 h-3 w-3 text-slate-300 shrink-0" />}
+          {crumb.href ? (
+            <Link
+              href={crumb.href}
+              className="flex items-center justify-center h-7 w-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 bg-white border border-slate-200 shadow-sm transition-all shrink-0"
+              title={crumb.label}
+            >
+              {getCrumbIcon(crumb.label)}
+            </Link>
+          ) : (
+            <span className="text-[13px] font-semibold text-blue-600 truncate max-w-[180px]" title={crumb.label}>
+              {crumb.label}
+            </span>
+          )}
+        </React.Fragment>
+      ))}
     </div>
   );
 }
@@ -152,7 +131,6 @@ export default function Header() {
   const breadcrumbNavRef = useRef<HTMLElement>(null);
   const breadcrumbMeasureRef = useRef<HTMLDivElement>(null);
   const [compactBreadcrumbs, setCompactBreadcrumbs] = useState(false);
-  const [crumbsExpanded, setCrumbsExpanded] = useState(false);
 
   const [userName, setUserName] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string>("");
@@ -228,12 +206,7 @@ export default function Header() {
     };
   }, [breadcrumbs, headerActions, collapsed]);
 
-  useEffect(() => {
-    if (!crumbsExpanded) return;
-    const close = () => setCrumbsExpanded(false);
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [crumbsExpanded]);
+
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -398,8 +371,6 @@ export default function Header() {
                   {compactBreadcrumbs ? (
                     <CompactBreadcrumbs
                       crumbs={breadcrumbs}
-                      expanded={crumbsExpanded}
-                      onToggle={(e) => { e.stopPropagation(); setCrumbsExpanded(o => !o); }}
                     />
                   ) : (
                     breadcrumbs.map((crumb, idx) => (
