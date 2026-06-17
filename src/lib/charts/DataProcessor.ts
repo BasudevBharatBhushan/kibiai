@@ -45,6 +45,11 @@ function coerceIsActive(value: unknown): boolean {
   return Boolean(value);
 }
 
+function round2(num: number): number {
+  if (typeof num !== 'number' || isNaN(num)) return 0;
+  return Number(num.toFixed(2));
+}
+
 // Main data processing function
 export function processData(
   rawData: any[],
@@ -219,6 +224,34 @@ export function processData(
       resolveFilterDates(rule, context?.reportStart, context?.reportEnd)
     );
 
+    // Resolves fields like 'totalAmount' back to 'Invoice Total' (or their actual labels in the dataset)
+    const findActualKey = (target: string) => {
+      if (!target) return null;
+      if (bodyData[0] && bodyData[0][target] !== undefined) return target;
+      
+      const lowerTarget = target.toLowerCase().replace(/\s/g, '');
+      if (bodyData[0]) {
+        // 1. Exact match ignoring case/spaces
+        let match = Object.keys(bodyData[0]).find(k => k.toLowerCase().replace(/\s/g, '') === lowerTarget);
+        if (match) return match;
+
+        // 2. Schema lookup (AI uses camelCase safe names, but data uses labels)
+        if (fieldSchemas) {
+          const schema = fieldSchemas.find(s => s.name === target);
+          if (schema) {
+            const meaningLower = schema.meaning.toLowerCase().replace(/\s/g, '');
+            match = Object.keys(bodyData[0]).find(k => k.toLowerCase().replace(/\s/g, '') === meaningLower);
+            if (match) return match;
+
+            const originalLower = schema.originalName.toLowerCase().replace(/\s/g, '');
+            match = Object.keys(bodyData[0]).find(k => k.toLowerCase().replace(/\s/g, '') === originalLower);
+            if (match) return match;
+          }
+        }
+      }
+      return target;
+    };
+
     // --- Filtering ---
     const isViewerMode = !!(context?.reportStart || context?.reportEnd);
     
@@ -253,7 +286,7 @@ export function processData(
           return undefined;
         };
 
-        const rawValue = getFilterVal(field);
+        const rawValue = getFilterVal(findActualKey(field) || field);
         
         if (condition === 'notEmpty') return rawValue !== '' && rawValue !== null && rawValue !== undefined;
         if (condition === 'empty') return rawValue === '' || rawValue === null || rawValue === undefined;
@@ -297,15 +330,7 @@ export function processData(
     }
 
     // --- Resilient Group/Numerical Field Access ---
-    const findActualKey = (target: string) => {
-      if (!target) return null;
-      if (bodyData[0] && bodyData[0][target] !== undefined) return target;
-      const lowerTarget = target.toLowerCase().replace(/\s/g, '');
-      if (bodyData[0]) {
-        return Object.keys(bodyData[0]).find(k => k.toLowerCase().replace(/\s/g, '') === lowerTarget) || target;
-      }
-      return target;
-    };
+
 
     const actualGroupField = findActualKey(group_field);
     const actualSubgroupField = findActualKey(subgroup_field);
@@ -400,16 +425,17 @@ export function processData(
           else scalar = values.reduce((a, b) => a + b, 0);
         }
 
-        gaugeSeriesData.push({ name: numField || 'Value', data: [scalar] });
+        gaugeSeriesData.push({ name: actualNumField || numField || 'Value', data: [round2(scalar)] });
       }
 
       // Compute target_max
       let computedTargetMax: number | undefined;
       if (target_field) {
         const actualTargetField = findActualKey(target_field);
-        computedTargetMax = filteredData.reduce((acc: number, item: any) => {
+        const sum = filteredData.reduce((acc: number, item: any) => {
           return acc + (parseFloat(item[actualTargetField || target_field]) || 0);
         }, 0);
+        computedTargetMax = round2(sum);
       }
 
       const W = PROCESSOR_DEFAULTS.LAYOUT_WIDTH;
@@ -444,16 +470,20 @@ export function processData(
           );
 
           if (values.length === 0) return 0;
-          if (aggMethod === 'sum')     return values.reduce((a, b) => a + b, 0);
-          if (aggMethod === 'average') return values.reduce((a, b) => a + b, 0) / values.length;
-          if (aggMethod === 'count')   return values.length;
+          let val = 0;
+          if (aggMethod === 'sum')     val = values.reduce((a, b) => a + b, 0);
+          else if (aggMethod === 'average') val = values.reduce((a, b) => a + b, 0) / values.length;
+          else if (aggMethod === 'count')   val = values.length;
           // 'percentage' is resolved after all series are built (requires grand total)
-          return values.reduce((a, b) => a + b, 0); // default to sum for now
+          else val = values.reduce((a, b) => a + b, 0); // default to sum for now
+
+          return round2(val);
         });
 
+        const displayField = actualNumField || numField || 'Value';
         const seriesName = activeNumericalFields.length > 1
-          ? (subgroup === 'default' ? numField : `${numField} (${subgroup})`)
-          : (subgroup === 'default' ? numField || 'Value' : subgroup);
+          ? (subgroup === 'default' ? displayField : `${displayField} (${subgroup})`)
+          : (subgroup === 'default' ? displayField : subgroup);
 
         series.push({ name: seriesName, data });
       }
@@ -479,10 +509,11 @@ export function processData(
     let computedTargetMax: number | undefined;
     if (chart_type === 'gauge' && target_field) {
       const actualTargetField = findActualKey(target_field);
-      computedTargetMax = filteredData.reduce((acc, item) => {
+      const sum = filteredData.reduce((acc, item) => {
         const v = parseFloat(item[actualTargetField || target_field]) || 0;
         return acc + v;
       }, 0);
+      computedTargetMax = round2(sum);
     }
 
     // --- Layout ---

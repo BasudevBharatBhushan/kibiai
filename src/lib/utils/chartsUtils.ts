@@ -157,6 +157,7 @@ export function buildOptions(config: ChartConfig): Highcharts.Options {
       visible: true,
       title: { text: 'Value' },
       min: 0,
+      tickPixelInterval: 40,
     },
 
     plotOptions: {

@@ -45,6 +45,7 @@ export default function ChartCard({ config }: Props) {
           await import('highcharts/highcharts-more'),
           await import('highcharts/modules/solid-gauge'),
           await import('highcharts/modules/funnel'),
+          await import('highcharts/modules/no-data-to-display'),
         ];
         
         for (const mod of mods) {
@@ -53,6 +54,12 @@ export default function ChartCard({ config }: Props) {
             init(Highcharts);
           }
         }
+
+        Highcharts.setOptions({
+          lang: {
+            noData: "No data to display"
+          }
+        });
       } catch (err) {
         console.warn('Failed to load Highcharts modules sequentially:', err);
       } finally {
@@ -78,6 +85,13 @@ export default function ChartCard({ config }: Props) {
         spacingRight: CHART_VISUALS.SPACING.RIGHT,
       },
       credits: { enabled: false },
+      noData: {
+        style: {
+          fontWeight: '500',
+          fontSize: '14px',
+          color: '#64748b' // Tailwind slate-500
+        }
+      },
       legend: {
         ...base.legend,
         margin: CHART_VISUALS.LEGEND.MARGIN,
