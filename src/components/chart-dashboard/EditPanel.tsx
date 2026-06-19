@@ -29,11 +29,17 @@ export default function EditPanel() {
 
   const getIcon = (kind: ChartKind) => {
     switch (kind) {
-      case 'pie': return <FiPieChart />;
+      case 'pie':   return <FiPieChart />;
       case 'donut': return <MdOutlineDonutLarge />;
-      case 'line': return <FiActivity />;
-      case 'area': return <FiActivity />;
-      default: return <FiBarChart2 />;
+      case 'line':
+      case 'spline':
+        return <FiActivity />;
+      case 'area':
+      case 'areaspline':
+        return <FiTrendingUp />;
+      case 'gauge':  return <FiCpu />;
+      case 'bar':
+      default:       return <FiBarChart2 />;
     }
   };
 
@@ -94,18 +100,20 @@ export default function EditPanel() {
 
                   {chart.kind !== 'insight' && (
                     <div className="grid grid-cols-3 gap-2 mt-2">
-                      {AVAILABLE_CHART_TYPES.map(k => (
-                        <button
-                          key={k}
-                          onClick={() => updateChartKind(chart.id, k as ChartKind)}
-                          className={`flex flex-col items-center justify-center py-2 px-1 rounded text-xs gap-1 border transition-all ${
-                            chart.kind === k ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 border-slate-100'
-                          }`}
-                        >
-                          {getIcon(k as ChartKind)}
-                          <span className="capitalize">{k === 'column' ? 'bar' : k}</span>
-                        </button>
-                      ))}
+                      {AVAILABLE_CHART_TYPES
+                        .filter(k => !(['gauge', 'funnel'] as string[]).includes(k))
+                        .map(k => (
+                          <button
+                            key={k}
+                            onClick={() => updateChartKind(chart.id, k as ChartKind)}
+                            className={`flex flex-col items-center justify-center py-2 px-1 rounded text-xs gap-1 border transition-all ${
+                              chart.kind === k ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 border-slate-100'
+                            }`}
+                          >
+                            {getIcon(k as ChartKind)}
+                            <span className="capitalize">{k === 'column' ? 'bar' : k}</span>
+                          </button>
+                        ))}
                     </div>
                   )}
                 </div>

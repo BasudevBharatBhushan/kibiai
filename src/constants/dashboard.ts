@@ -48,4 +48,6 @@ export const UI_TEXT = {
 } as const;
 
 // Chart Type Options
-export const AVAILABLE_CHART_TYPES = ['column', 'line', 'area', 'pie', 'donut'] as const;
+export const AVAILABLE_CHART_TYPES = [
+  'column', 'bar', 'line', 'spline', 'area', 'areaspline', 'pie', 'donut', 'gauge', 'funnel'
+] as const;

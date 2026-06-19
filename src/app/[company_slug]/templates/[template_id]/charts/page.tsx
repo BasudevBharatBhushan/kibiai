@@ -475,16 +475,24 @@ function ChartBuilderWorkspace({
             return;
           }
 
-          if (item.chart_type && item.group_field) {
+          if (item.chart_type && (item.group_field || item.chart_type === 'gauge')) {
             chartSchemas.push({
               pKey: createSchemaId(),
               chart_title: item.chart_title ?? "Chart",
               chart_type: item.chart_type,
-              numerical_field: item.numerical_field,
+              numerical_fields: item.numerical_fields,
+              numerical_field: item.numerical_fields?.[0] ?? item.numerical_field,  // v1 compat
               group_field: item.group_field,
+              group_field_time_bucket: item.group_field_time_bucket,
               subgroup_field: item.subgroup_field,
-              mathematical_aggregation_method:
-                item.mathematical_aggregation_method,
+              subgroup_field_time_bucket: item.subgroup_field_time_bucket,
+              stacking: item.stacking,
+              aggregation_method: item.aggregation_method,
+              mathematical_aggregation_method: item.mathematical_aggregation_method,  // v1 compat
+              limit_count: item.limit_count,
+              sort_order: item.sort_order,
+              target_field: item.target_field,
+              target_value: item.target_value,
               filters: item.filters,
               response_to_user: item.response_to_user,
             });
@@ -503,16 +511,24 @@ function ChartBuilderWorkspace({
         return;
       }
 
-      if (parsed.chart_type && parsed.group_field) {
+      if (parsed.chart_type && (parsed.group_field || parsed.chart_type === 'gauge')) {
         const schema: ReportChartSchema = {
           pKey: createSchemaId(),
           chart_title: parsed.chart_title ?? "Chart",
           chart_type: parsed.chart_type,
-          numerical_field: parsed.numerical_field,
+          numerical_fields: parsed.numerical_fields,
+          numerical_field: parsed.numerical_fields?.[0] ?? parsed.numerical_field,  // v1 compat
           group_field: parsed.group_field,
+          group_field_time_bucket: parsed.group_field_time_bucket,
           subgroup_field: parsed.subgroup_field,
-          mathematical_aggregation_method:
-            parsed.mathematical_aggregation_method,
+          subgroup_field_time_bucket: parsed.subgroup_field_time_bucket,
+          stacking: parsed.stacking,
+          aggregation_method: parsed.aggregation_method,
+          mathematical_aggregation_method: parsed.mathematical_aggregation_method,  // v1 compat
+          limit_count: parsed.limit_count,
+          sort_order: parsed.sort_order,
+          target_field: parsed.target_field,
+          target_value: parsed.target_value,
           filters: parsed.filters,
           response_to_user: parsed.response_to_user,
         };

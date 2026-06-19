@@ -1,6 +1,17 @@
 import type { AIInsightItem, InsightResult } from '@/lib/insights/types';
 
-export type ChartKind = 'line' | 'pie' | 'area' | 'column' | 'donut' | 'insight';
+export type ChartKind =
+  | 'line'
+  | 'spline'
+  | 'pie'
+  | 'area'
+  | 'areaspline'
+  | 'column'
+  | 'bar'
+  | 'donut'
+  | 'gauge'
+  | 'funnel'
+  | 'insight';
 
 
 // Data series for charts
@@ -23,6 +34,9 @@ export interface ChartConfig {
     series: ChartDataSeries[];
     limit_count?: number;
     sort_order?: 'asc' | 'desc';
+    stacking?: 'none' | 'normal' | 'percent';
+    target_value?: number;   // for gauge: current goal or hardcoded value
+    target_max?: number;     // for gauge: computed max from target_field
     insights?: string[];
     insight_results?: any[];
     insight_date_range?: {
@@ -61,19 +75,28 @@ export interface InsightContext {
 
 // Report Chart Schema Interface
 export interface ReportChartSchema {
-  pKey: string;                
-  chart_title: string;          
+  pKey: string;
+  chart_title: string;
   chart_type: string;
-  isActive?: string | number | boolean;   
-  supabaseId?: string;        
-  numerical_field?: string;     
-  group_field?: string;        
-  subgroup_field?: string;      
+  isActive?: string | number | boolean;
+  supabaseId?: string;
+  numerical_fields?: string[];          // v2: multi-series array
+  /** @deprecated use numerical_fields. Kept for backward-compatibility with persisted v1 charts. */
+  numerical_field?: string;
+  group_field?: string;
+  group_field_time_bucket?: 'day' | 'week' | 'month' | 'quarter' | 'year' | 'day_of_week';
+  subgroup_field?: string;
+  subgroup_field_time_bucket?: 'day' | 'week' | 'month' | 'quarter' | 'year' | 'day_of_week';
+  stacking?: 'none' | 'normal' | 'percent';
   limit_count?: number;
   sort_order?: 'asc' | 'desc';
-  mathematical_aggregation_method?: 'sum' | 'count' | 'average' | 'min' | 'max'; 
-  filters?: string[];            
-  
+  /** @deprecated use aggregation_method. Kept for backward-compatibility with persisted v1 charts. */
+  mathematical_aggregation_method?: 'sum' | 'count' | 'average' | 'min' | 'max';
+  aggregation_method?: 'sum' | 'count' | 'average' | 'percentage';
+  target_field?: string;    // gauge: benchmark field name from schema
+  target_value?: number;    // gauge: hardcoded goal value
+  filters?: string[];
+
   business_insights?: string[];
   /** v3 AI plan items — used to re-execute insights against fresh data */
   insight_items?: AIInsightItem[];

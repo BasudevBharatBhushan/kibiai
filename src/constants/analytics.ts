@@ -22,12 +22,17 @@ export const INTENT_KEYWORDS = {
     "analyze report"
   ],
   generation: [
-    "chart", 
-    "bar", 
-    "line", 
-    "pie", 
-    "doughnut", 
-    "area"
+    "chart",
+    "bar",
+    "line",
+    "pie",
+    "doughnut",
+    "area",
+    "spline",
+    "areaspline",
+    "gauge",
+    "funnel",
+    "column",
   ],
 } as const;
 
@@ -48,16 +53,22 @@ export const VALIDATION_LIMITS = {
 } as const;
 
 // 4. Aggregation Methods (Tuple for Zod schemas)
-export const AGGREGATION_METHODS = ["sum", "average", "count"] as const;
+export const AGGREGATION_METHODS = ["sum", "average", "count", "percentage"] as const;
 export const PIE_AGGREGATION_METHODS = ["sum", "count"] as const;
 
 // 5. Chart Type Mapping (Legacy/AI -> UI)
 export const CHART_TYPE_MAP: Record<string, string> = {
-  bar: 'column', 
+  bar: 'column',
+  column: 'column',
+  spline: 'spline',
+  areaspline: 'areaspline',
+  gauge: 'gauge',
+  funnel: 'funnel',
   doughnut: 'donut',
+  donut: 'donut',
   pie: 'pie',
   line: 'line',
-  area: 'area'
+  area: 'area',
 };
 
 // 6. AI Configuration
