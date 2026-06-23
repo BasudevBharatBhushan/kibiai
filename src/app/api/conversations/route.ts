@@ -11,6 +11,7 @@ export async function POST(req: Request) {
       conversation_metadata,
       predefined_prompt,
       user_prompt,
+      model,
     } = body;
 
     const result = await sendUserPrompt({
@@ -19,6 +20,7 @@ export async function POST(req: Request) {
       conversation_metadata,
       predefined_prompt,
       user_prompt,
+      model,
     });
 
     return NextResponse.json(result);

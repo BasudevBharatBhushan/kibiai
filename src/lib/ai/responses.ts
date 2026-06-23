@@ -7,6 +7,7 @@ type SendUserPromptParams = {
   conversation_metadata?: Record<string, any>;
   predefined_prompt?: string;
   user_prompt: string;
+  model?: string;
 };
 
 export async function sendUserPrompt({
@@ -15,6 +16,7 @@ export async function sendUserPrompt({
   conversation_metadata,
   predefined_prompt = "",
   user_prompt,
+  model = "gpt-4.1",
 }: SendUserPromptParams) {
   let conversationId = conversation_id;
 
@@ -25,7 +27,7 @@ export async function sendUserPrompt({
   const finalPrompt = `${predefined_prompt}\n${user_prompt}\n\nPlease respond in JSON format.`;
 
   const response = await openai.responses.create({
-    model: "gpt-4.1",
+    model,
     instructions: instruction_set,
     conversation: conversationId,
     store: true,

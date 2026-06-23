@@ -240,8 +240,8 @@ function ChartBuilderWorkspace({
   );
 
   const predefinedPrompt = useMemo(
-    () => buildChartPredefinedPrompt(fieldSchemas),
-    [fieldSchemas]
+    () => buildChartPredefinedPrompt(fieldSchemas, fieldNames),
+    [fieldSchemas, fieldNames]
   );
   const insightPredefinedPrompt = useMemo(
     () => buildInsightPredefinedPrompt(templateName, fieldSchemas).prompt,
@@ -494,6 +494,8 @@ function ChartBuilderWorkspace({
               target_field: item.target_field,
               target_value: item.target_value,
               filters: item.filters,
+              computed_field: item.computed_field,
+              computed_fields: item.computed_fields,
               response_to_user: item.response_to_user,
             });
           }
@@ -530,6 +532,8 @@ function ChartBuilderWorkspace({
           target_field: parsed.target_field,
           target_value: parsed.target_value,
           filters: parsed.filters,
+          computed_field: parsed.computed_field,
+          computed_fields: parsed.computed_fields,
           response_to_user: parsed.response_to_user,
         };
         addNewChartFromAI(schema);
@@ -731,6 +735,7 @@ function ChartBuilderPageContent() {
 
   const [pageData, setPageData] = useState<ChartBuilderResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const loadRef = useRef<(() => Promise<void>) | null>(null);
 
   const augmentedSchemas = useMemo(() => {
     if (!pageData?.schemas) return [];
@@ -855,8 +860,22 @@ function ChartBuilderPageContent() {
       }
     };
 
+    loadRef.current = load;
     load();
   }, [addToast, slug, templateId]);
+
+  // Silently refresh data when user returns to this tab (e.g. after updating
+  // the template in the configurator). Only fires when the page is already loaded
+  // (not during initial load) to avoid duplicate requests.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && pageData && loadRef.current) {
+        loadRef.current();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [pageData]);
 
   useEffect(() => {
     if (!slug || !templateId) return;

@@ -46,6 +46,8 @@ export interface ChartConfig {
     };
     /** Filters applied to this chart's data (after viewer-mode date-filter stripping) */
     filters?: string[];
+    /** Computed (virtual) field definitions — display only, sourced from the AI schema */
+    computed_field_meta?: Array<{ name: string; formula: string }>;
     /** Date range of the currently selected report, shown in every card's subtitle */
     report_date_range?: {
       field?: string;
@@ -64,6 +66,13 @@ export interface ChartConfig {
 // Raw data item interface
 export interface RawDataItem {
   [key: string]: string | number | undefined;
+}
+
+export interface ComputedChartField {
+  name: string;            // virtual column name — use verbatim in numerical_field/numerical_fields
+  formula: string;         // arithmetic using dependency names, e.g. "Total Invoice - Payment Total"
+  dependencies?: string[]; // field names used in the formula; auto-inferred from data keys if omitted
+  type: 'derived';         // row-level only; no aggregate functions allowed
 }
 
 export interface InsightContext {
@@ -96,6 +105,8 @@ export interface ReportChartSchema {
   target_field?: string;    // gauge: benchmark field name from schema
   target_value?: number;    // gauge: hardcoded goal value
   filters?: string[];
+  computed_field?: ComputedChartField;
+  computed_fields?: ComputedChartField[];
 
   business_insights?: string[];
   /** v3 AI plan items — used to re-execute insights against fresh data */

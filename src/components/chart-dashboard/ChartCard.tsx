@@ -115,6 +115,7 @@ export default function ChartCard({ config }: Props) {
             <CardScopeMeta
               dateRange={config.report_date_range}
               filters={config.filters}
+              computedFields={config.computed_field_meta}
             />
           </div>
         </div>

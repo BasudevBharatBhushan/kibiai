@@ -10,6 +10,13 @@ import {
 import { getSession } from "@/utils/auth";
 import { createAdminClient } from "@/utils/supabase/server";
 
+const computedFieldSchema = z.object({
+  name: z.string(),
+  formula: z.string(),
+  dependencies: z.array(z.string()).optional(),
+  type: z.literal('derived'),
+});
+
 const chartSchema = z.object({
   pKey: z.string().min(1),
   chart_title: z.string().min(1),
@@ -29,6 +36,8 @@ const chartSchema = z.object({
   target_field: z.string().optional(),
   target_value: z.number().optional(),
   filters: z.array(z.string()).optional(),
+  computed_field: computedFieldSchema.optional(),
+  computed_fields: z.array(computedFieldSchema).optional(),
   business_insights: z.array(z.string()).optional(),
   insight_plan: z.any().optional(),
   insight_results: z.array(z.any()).optional(),

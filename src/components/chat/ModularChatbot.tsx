@@ -34,6 +34,14 @@ export type Message = {
   text: string;
 };
 
+const MODEL_OPTIONS = [
+  { id: "gpt-4.1", label: "4.1", name: "GPT-4.1" },
+  { id: "gpt-5.4", label: "5.4", name: "GPT-5.4" },
+  { id: "o4-mini", label: "o4m", name: "o4-mini" },
+] as const;
+
+type ModelId = (typeof MODEL_OPTIONS)[number]["id"];
+
 function stripJSONPrefix(str: string): string {
   const trimmed = str.trim();
   if (!trimmed.startsWith("{")) {
@@ -137,6 +145,9 @@ export function ModularChatbot({
   const [loading, setLoading] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<ModelId>("gpt-4.1");
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
   const [includeLatestSetup, setIncludeLatestSetup] = useState(!initialConversationId);
   const [includeLatestConfig, setIncludeLatestConfig] = useState(!initialConversationId);
 
@@ -152,6 +163,17 @@ export function ModularChatbot({
   useEffect(() => {
     if (onLoadingChange) onLoadingChange(loading);
   }, [loading, onLoadingChange]);
+
+  useEffect(() => {
+    if (!showModelPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showModelPicker]);
 
   const hasSplitContext = Boolean(setupPrompt || configPrompt);
   const hasAnyContext = Boolean(predefinedPrompt || setupPrompt || configPrompt);
@@ -248,6 +270,7 @@ export function ModularChatbot({
         }),
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
+        model: selectedModel,
       }).then(res => {
         if (res.conversation_id) {
           setConversationId(res.conversation_id);
@@ -302,6 +325,7 @@ export function ModularChatbot({
           : predefinedPromptRef.current,
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
+        model: selectedModel,
       });
 
       if (res.conversation_id && res.conversation_id !== conversationId) {
@@ -359,6 +383,7 @@ export function ModularChatbot({
         }),
         conversation_metadata: conversationMetadata || {},
         user_prompt: finalPrompt,
+        model: selectedModel,
       };
 
       const res = await apiSendMessage(payload);
@@ -420,6 +445,7 @@ export function ModularChatbot({
             }),
             conversation_metadata: conversationMetadata || {},
             user_prompt: finalPrompt,
+            model: selectedModel,
           };
           const res = await apiSendMessage(retryPayload);
           setConversationId(res.conversation_id);
@@ -487,13 +513,21 @@ export function ModularChatbot({
                 text = text.substring(0, text.length - jsonInstruction.length).trim();
               }
 
-              const chartEndStr = "Please use these fields and their exact labels or names when creating chart configurations. You must prefer labels for titles but names or labels for actual grouped/numerical fields.";
-              const chartEndIdx = text.indexOf(chartEndStr);
-              
+              // Old sentinel (pre-CRITICAL-RULES prompt format) — kept for backward compat
+              // with conversations stored before the prompt was updated.
+              const chartEndStrLegacy = "Please use these fields and their exact labels or names when creating chart configurations. You must prefer labels for titles but names or labels for actual grouped/numerical fields.";
+              // New sentinel — matches the CRITICAL RULES block added to the chart predefined prompt.
+              const chartEndStrNew = "3. A computed_field MUST include \"dependencies\" listing the exact existing field names used in the formula.";
+
+              const chartEndIdx = text.indexOf(chartEndStrLegacy);
+              const chartEndIdxNew = text.indexOf(chartEndStrNew);
+
               const isInsightPredefined = text.includes('"module":') && text.includes('"fields":');
-              
+
               if (chartEndIdx !== -1) {
-                text = text.substring(chartEndIdx + chartEndStr.length).trim();
+                text = text.substring(chartEndIdx + chartEndStrLegacy.length).trim();
+              } else if (chartEndIdxNew !== -1) {
+                text = text.substring(chartEndIdxNew + chartEndStrNew.length).trim();
               } else if (isInsightPredefined) {
                 text = stripJSONPrefix(text);
               } else {
@@ -856,13 +890,54 @@ export function ModularChatbot({
                   <HelpCircle className="size-5" />
                 </Button>
 
+                <div ref={modelPickerRef} className="relative mb-0.5 shrink-0 h-9">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowModelPicker(!showModelPicker);
+                    }}
+                    className={`h-9 rounded-xl px-2.5 text-[11px] font-bold tracking-wide transition-all ${
+                      showModelPicker
+                        ? "bg-indigo-50 text-indigo-600 shadow-inner"
+                        : "bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 shadow-sm"
+                    }`}
+                    title="Select AI model"
+                  >
+                    {MODEL_OPTIONS.find((m) => m.id === selectedModel)?.label}
+                  </button>
+                  {showModelPicker && (
+                    <div className="absolute bottom-full mb-2 left-0 z-200 flex flex-col gap-0.5 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg min-w-[110px]">
+                      {MODEL_OPTIONS.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel(m.id);
+                            setShowModelPicker(false);
+                          }}
+                          className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                            selectedModel === m.id
+                              ? "bg-indigo-50 text-indigo-600"
+                              : "text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className="text-[11px] font-bold">{m.label}</span>
+                          <span className="text-[10px] text-slate-400">{m.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex-1 min-w-0">
                   <TextareaAutosize
                     ref={inputRef}
                     rows={1}
                     minRows={1}
                     maxRows={8}
-                    placeholder="Describe the report you want to build..."
+                    placeholder="Prompt here..."
                     className="chat-textarea text-slate-700 scrollbar-minimal"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}

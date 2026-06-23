@@ -60,8 +60,9 @@ interface DashboardContextType {
   addMultipleChartsFromAI: (schemas: ReportChartSchema[]) => void;
 
   // Layout Operations
-  updateLayout: (newLayout: Layout[]) => void; 
-  applyLayoutPreset: (mode: LayoutMode) => void; 
+  updateLayout: (newLayout: Layout[]) => void;
+  saveLayout: (newLayout: Layout[]) => void;
+  applyLayoutPreset: (mode: LayoutMode) => void;
   resetDashboard: () => Promise<void>;
   deleteAllCharts: () => Promise<void>;
 }
@@ -146,7 +147,11 @@ export function DashboardProvider({
     // not on every re-render caused by internal state changes (context, layoutMode, canvasState).
     const schemasChanged = initialSchemas !== prevSchemasRef.current;
     const datasetChanged = initialDataset !== prevDatasetRef.current;
-    if (hasInitialized.current && !schemasChanged && !datasetChanged) {
+    // Also detect changes in data size (indicates new data even if not caught by reference comparison)
+    const schemaSizeChanged = initialSchemas.length !== prevSchemasRef.current?.length;
+    const datasetSizeChanged = initialDataset.length !== prevDatasetRef.current?.length;
+
+    if (hasInitialized.current && !schemasChanged && !datasetChanged && !schemaSizeChanged && !datasetSizeChanged) {
       return;
     }
     prevSchemasRef.current = initialSchemas;
@@ -346,35 +351,32 @@ export function DashboardProvider({
 
   // --- ACTIONS ---
 
-  // 1. React-Grid-Layout Change Handler (Drag/Resize)
+  // 1a. React-Grid-Layout sync handler — keeps local state in sync with grid positions.
+  //     Does NOT trigger a DB save (called on every onLayoutChange including auto-reflow).
   const updateLayout = useCallback((newLayout: Layout[]) => {
     if (isViewerMode) return;
-
     setAllCharts(prevCharts => {
-      let hasChanges = false;
       const layoutMap = new Map(newLayout.map(l => [l.i, l]));
+      return prevCharts.map(c => {
+        const l = layoutMap.get(c.id);
+        if (!l) return c;
+        return { ...c, layout: { ...l, i: c.id } };
+      });
+    });
+  }, [isViewerMode]);
 
+  // 1b. Explicit save — called only on onDragStop / onResizeStop (deliberate user action).
+  const saveLayout = useCallback((newLayout: Layout[]) => {
+    if (isViewerMode) return;
+    setAllCharts(prevCharts => {
+      const layoutMap = new Map(newLayout.map(l => [l.i, l]));
       const nextCharts = prevCharts.map(c => {
         const l = layoutMap.get(c.id);
-        if (!l) return c; 
-
-        if (
-          l.x !== c.layout?.x || 
-          l.y !== c.layout?.y || 
-          l.w !== c.layout?.w || 
-          l.h !== c.layout?.h
-        ) {
-          hasChanges = true;
-          return { ...c, layout: { ...l, i: c.id } };
-        }
-        return c;
+        if (!l) return c;
+        return { ...c, layout: { ...l, i: c.id } };
       });
-
-      if (hasChanges) {
-        triggerAutoSave(nextCharts, visibleChartIds, activeLayout); 
-        return nextCharts;
-      }
-      return prevCharts;
+      triggerAutoSave(nextCharts, visibleChartIds, activeLayout);
+      return nextCharts;
     });
   }, [triggerAutoSave, visibleChartIds, activeLayout, isViewerMode]);
 
@@ -465,10 +467,12 @@ export function DashboardProvider({
         layoutMode: 'grid',
         charts: []
       });
-      window.location.reload();
-    } else {
-      window.location.reload();
     }
+
+    // Update local state without page reload
+    setAllCharts([]);
+    setVisibleChartIds(new Set());
+    setActiveLayout('grid');
   };
 
   const deleteAllCharts = async () => {
@@ -476,7 +480,10 @@ export function DashboardProvider({
     if (templateId) {
       if (window.confirm('Are you sure you want to delete all charts and insights? This cannot be undone.')) {
         await apiClient.delete(`/api/report-templates/${templateId}/charts`);
-        window.location.reload();
+        // Update local state without page reload
+        setAllCharts([]);
+        setVisibleChartIds(new Set());
+        setActiveLayout('grid');
       }
     }
   };
@@ -484,6 +491,11 @@ export function DashboardProvider({
 
   // 6. Add a single AI-generated chart schema into the dashboard
   const addNewChartFromAI = useCallback((schema: ReportChartSchema) => {
+    // Clear the flag that prevents auto-generation after user-initiated deletion
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('userDeletedAllCharts');
+    }
+
     const processed = processData(dataset, [schema], context, fieldSchemas);
     if (!processed.length) return;
 
@@ -532,6 +544,11 @@ export function DashboardProvider({
 
   // 7. Add multiple AI-generated charts at once (Scenario 4: report analysis)
   const addMultipleChartsFromAI = useCallback((schemas: ReportChartSchema[]) => {
+    // Clear the flag that prevents auto-generation after user-initiated deletion
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('userDeletedAllCharts');
+    }
+
     if (!schemas.length) return;
     const processed = processData(dataset, schemas, context, fieldSchemas);
     if (!processed.length) return;
@@ -606,6 +623,7 @@ export function DashboardProvider({
     addNewChartFromAI,
     addMultipleChartsFromAI,
     updateLayout,
+    saveLayout,
     applyLayoutPreset,
     resetDashboard,
     deleteAllCharts

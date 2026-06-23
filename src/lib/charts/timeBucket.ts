@@ -1,8 +1,8 @@
 export type TimeBucket = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'day_of_week';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**
  * Buckets a raw date string value into a display label based on the requested bucket.
@@ -41,4 +41,30 @@ export function bucketDate(rawValue: string | undefined | null, bucket: TimeBuck
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
+}
+
+/**
+ * Sorts time-bucketed label strings into chronological order.
+ * Handles the cases where lexicographic order diverges from calendar order
+ * (month abbreviations, day-of-week names). Other bucket formats (day, week,
+ * quarter, year) already sort correctly as strings.
+ */
+export function sortTimeLabels(labels: string[], bucket: TimeBucket): string[] {
+  if (bucket === 'month') {
+    return [...labels].sort((a, b) => {
+      const [ayear, amon] = a.split('-');
+      const [byear, bmon] = b.split('-');
+      const yearDiff = parseInt(ayear, 10) - parseInt(byear, 10);
+      if (yearDiff !== 0) return yearDiff;
+      return MONTH_NAMES.indexOf(amon) - MONTH_NAMES.indexOf(bmon);
+    });
+  }
+  if (bucket === 'day_of_week') {
+    return [...labels].sort(
+      (a, b) => DAY_NAMES.indexOf(a) - DAY_NAMES.indexOf(b)
+    );
+  }
+  // day ("2025-01-15"), week ("2025-W01"), quarter ("2025-Q1"), year ("2025")
+  // all sort correctly with standard lexicographic order.
+  return [...labels].sort();
 }

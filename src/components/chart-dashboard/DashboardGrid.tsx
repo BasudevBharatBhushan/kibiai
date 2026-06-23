@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
-import { FiGrid, FiColumns, FiList, FiSidebar, FiRotateCcw } from 'react-icons/fi';
+import { FiGrid, FiColumns, FiList, FiSidebar, FiRotateCcw, FiTrash2 } from 'react-icons/fi';
 import { useDashboard } from '@/context/DashboardContext';
 import { GRID_CONFIG, UI_TEXT } from '@/constants/dashboard';
 import type { LayoutMode } from '@/constants/dashboard';
@@ -25,17 +25,23 @@ export default function DashboardGrid() {
 
 // Inner Dashboard Component
 function DashboardInner() {
-  const { 
-    activeCharts, 
+  const {
+    activeCharts,
     currentLayouts,
     layoutMode,
     isMounted,
     applyLayoutPreset,
     updateLayout,
+    saveLayout,
     resetDashboard,
     isViewerMode,
     isEditOpen,
   } = useDashboard();
+
+  // Track active breakpoint so we only sync layout state at lg (the breakpoint we persist).
+  // onLayoutChange fires for all breakpoints; at md/sm the grid auto-compacts which must
+  // not overwrite the saved lg positions.
+  const [currentBreakpoint, setCurrentBreakpoint] = useState<string>('lg');
 
   if (!isMounted) return null;
 
@@ -47,13 +53,25 @@ function DashboardInner() {
         {!isViewerMode && (
         <div className="w-full flex items-center justify-between bg-white border border-slate-200 rounded-xl shadow-sm p-3 mb-6 sticky top-4 z-10">
           <div className="flex items-center gap-3">
-            <button 
+            <button
               onClick={() => {
                 if (window.confirm(UI_TEXT.CONFIRM_RESET)) resetDashboard();
               }}
-              className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-all shadow-sm active:scale-95 flex items-center gap-2">
+              className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all shadow-sm active:scale-95 flex items-center gap-2">
               <FiRotateCcw size={14} />
               <span>Reset</span>
+            </button>
+
+            <button
+              onClick={() => {
+                if (window.confirm('Are you sure you want to delete all charts?')) {
+                  sessionStorage.setItem('userDeletedAllCharts', 'true');
+                  resetDashboard();
+                }
+              }}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-500 hover:border-slate-300 transition-all active:scale-95 flex items-center gap-2">
+              <FiTrash2 size={14} />
+              <span>Delete All</span>
             </button>
           </div>
 
@@ -98,7 +116,13 @@ function DashboardInner() {
             cols={GRID_CONFIG.cols}
             rowHeight={GRID_CONFIG.rowHeight}
             margin={GRID_CONFIG.margin}
-            onLayoutChange={updateLayout}
+            compactType={null}
+            onBreakpointChange={(bp: string) => setCurrentBreakpoint(bp)}
+            onLayoutChange={(layout: import('react-grid-layout').Layout[]) => {
+              if (currentBreakpoint === 'lg') updateLayout(layout);
+            }}
+            onDragStop={(layout: import('react-grid-layout').Layout[]) => saveLayout(layout)}
+            onResizeStop={(layout: import('react-grid-layout').Layout[]) => saveLayout(layout)}
             draggableHandle={isViewerMode ? undefined : ".dragHandle"}
             isDraggable={!isViewerMode}
             isResizable={!isViewerMode}

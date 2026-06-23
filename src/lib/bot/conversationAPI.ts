@@ -9,6 +9,7 @@ export interface SendMessagePayload {
   conversation_metadata?: Record<string, unknown>;
   predefined_prompt?: string;
   user_prompt: string;
+  model?: string;
 }
 
 // Send a message to the conversation API

@@ -1,4 +1,4 @@
-import { ChartConfig, ChartKind, ReportChartSchema, InsightContext } from './ChartTypes';
+import { ChartConfig, ChartKind, ComputedChartField, ReportChartSchema, InsightContext } from './ChartTypes';
 import { v4 as uuidv4 } from 'uuid';
 import {
   PROCESSOR_DEFAULTS,
@@ -7,7 +7,7 @@ import {
 import { executeV3InsightPlan } from '@/lib/insights/v3/scopedExecutor';
 import type { FieldSchema } from '@/lib/insights/fieldSchemaAdapter';
 import { resolveFilterDates } from './filterDateResolver';
-import { bucketDate, TimeBucket } from './timeBucket';
+import { bucketDate, TimeBucket, sortTimeLabels } from './timeBucket';
 
 
 // Helper to recursively extract BodyFields from nested data
@@ -200,7 +200,9 @@ export function processData(
       target_value,
       mathematical_aggregation_method, // v1 backward-compat
       aggregation_method,              // v2 preferred
-      filters: filterCriteriaRaw = []
+      filters: filterCriteriaRaw = [],
+      computed_field,
+      computed_fields,
     } = aiResponse;
 
     // Resolve aggregation — prefer v2 field, fall back to v1
@@ -252,25 +254,71 @@ export function processData(
       return target;
     };
 
-    // --- Filtering ---
-    const isViewerMode = !!(context?.reportStart || context?.reportEnd);
-    
-    // ST-8: Pre-process filters to skip hardcoded absolute date filters in viewer mode.
-    // We do this once per chart, not inside the row-by-row filter loop.
-    const activeFilters = resolvedFilters.filter((rule: string) => {
-      const [field, condition] = rule.split(':').map(s => s.trim());
-      const isDateField = field.toLowerCase().includes('date');
-      
-      if (isDateField && isViewerMode) {
-        const condValue = condition.replace(/[>=|<=|>|<|==]/g, '').trim();
-        const isAbsoluteDate = !isNaN(new Date(condValue).getTime());
-        if (isAbsoluteDate) {
-          console.log(`[DataProcessor] Skipping hardcoded date filter "${rule}" for chart "${chart_title}" in viewer mode.`);
-          return false; // Remove from active filters
+    // --- Computed Field Evaluation (before filtering) ---
+    // Evaluate row-level virtual columns so they can be used in filters.
+    // Uses new Function() with positional args to handle field names that contain spaces.
+    const allComputedFields: ComputedChartField[] = [
+      ...(computed_fields ?? []),
+      ...(computed_field ? [computed_field] : []),
+    ];
+
+    if (allComputedFields.length > 0 && bodyData.length > 0) {
+      const dataKeys = Object.keys(bodyData[0]);
+
+      for (const cf of allComputedFields) {
+        // Auto-infer dependencies from data keys when not provided by AI.
+        // Match data field names against the formula as substrings, longest-first
+        // to avoid "Total" matching inside "Invoice Total".
+        const deps: string[] = (cf.dependencies && cf.dependencies.length > 0)
+          ? cf.dependencies
+          : dataKeys
+              .filter(k => cf.formula.includes(k))
+              .sort((a, b) => b.length - a.length);
+
+        if (deps.length === 0) {
+          console.warn(`[DataProcessor] Computed field "${cf.name}": no dependencies found in formula "${cf.formula}"`);
+          bodyData.forEach(row => { row[cf.name] = 0; });
+          continue;
+        }
+
+        const resolvedKeys = deps.map(dep => findActualKey(dep) ?? dep);
+
+        // Sort by descending length before substitution to prevent partial matches
+        const sortedDeps = deps
+          .map((dep, i) => ({ dep, idx: i }))
+          .sort((a, b) => b.dep.length - a.dep.length);
+
+        let rewrittenFormula = cf.formula;
+        for (const { dep, idx } of sortedDeps) {
+          rewrittenFormula = rewrittenFormula.split(dep).join(`__arg${idx}__`);
+        }
+
+        let evalFn: ((...args: number[]) => number) | null = null;
+        try {
+          const argNames = deps.map((_, i) => `__arg${i}__`);
+          evalFn = new Function(...argNames, `return (${rewrittenFormula});`) as (...args: number[]) => number;
+        } catch (err) {
+          console.warn(`[DataProcessor] Failed to compile computed field "${cf.name}": ${err}`);
+          continue;
+        }
+
+        for (const row of bodyData) {
+          try {
+            const args = resolvedKeys.map(key => parseFloat(String(row[key] ?? 0)) || 0);
+            const result = evalFn(...args);
+            row[cf.name] = isFinite(result) ? result : 0;
+          } catch {
+            row[cf.name] = 0;
+          }
         }
       }
-      return true;
-    });
+    }
+
+    // --- Filtering ---
+    // All resolved filters are applied as-is. Absolute date filters are intentional
+    // (e.g. user requesting "only 2025 data"). Relative tokens (REPORT_START, TODAY - X)
+    // handle context-sensitive filtering and are already resolved above.
+    const activeFilters = resolvedFilters;
 
     const filteredData = bodyData.filter(item => {
       return activeFilters.every((rule: string) => {
@@ -286,8 +334,15 @@ export function processData(
           return undefined;
         };
 
-        const rawValue = getFilterVal(findActualKey(field) || field);
-        
+        const resolvedFilterKey = findActualKey(field) || field;
+        const rawValue = getFilterVal(resolvedFilterKey);
+
+        // If the field doesn't exist in this row at all (not a raw column and not a
+        // computed-field virtual column written above), skip this filter rule rather
+        // than evaluating undefined values — which would cause NaN comparisons that
+        // silently drop every row and produce a blank chart.
+        if (rawValue === undefined) return true;
+
         if (condition === 'notEmpty') return rawValue !== '' && rawValue !== null && rawValue !== undefined;
         if (condition === 'empty') return rawValue === '' || rawValue === null || rawValue === undefined;
         
@@ -353,7 +408,13 @@ export function processData(
     // --- Grouping ---
     const useSubgroups = subgroup_field && subgroup_field.trim() !== "";
     let labels = [...new Set(filteredData.map(getGroupKey).filter(Boolean))];
-    
+
+    // Sort time-bucketed labels chronologically when no explicit value-sort is requested.
+    // Value-based sort (limit_count / sort_order) runs below and will override this if present.
+    if (group_field_time_bucket && !aiResponse.sort_order && !aiResponse.limit_count) {
+      labels = sortTimeLabels(labels, group_field_time_bucket as TimeBucket);
+    }
+
     if (labels.length === 0) {
       console.warn(`[DataProcessor] No labels found for chart "${chart_title}" using group_field "${group_field}" (Actual: ${actualGroupField})`);
     }
@@ -450,6 +511,9 @@ export function processData(
         series: gaugeSeriesData,
         target_value: target_value ?? computedTargetMax,
         target_max: computedTargetMax,
+        computed_field_meta: allComputedFields.length > 0
+          ? allComputedFields.map(cf => ({ name: cf.name, formula: cf.formula }))
+          : undefined,
         report_date_range: reportDateRange,
         layout: { x: (results.length % 2) * W, y: Math.floor(results.length / 2) * H, w: W, h: H, i: newId },
       });
@@ -539,6 +603,9 @@ export function processData(
       target_value: target_value ?? computedTargetMax,
       target_max: computedTargetMax,
       filters: activeFilters,
+      computed_field_meta: allComputedFields.length > 0
+        ? allComputedFields.map(cf => ({ name: cf.name, formula: cf.formula }))
+        : undefined,
       report_date_range: reportDateRange,
       layout
     });

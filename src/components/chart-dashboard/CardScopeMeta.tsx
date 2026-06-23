@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FiCalendar, FiFilter } from 'react-icons/fi';
+import { FiCalendar, FiFilter, FiZap } from 'react-icons/fi';
 
 type DateRange = {
   field?: string;
@@ -12,6 +12,7 @@ type DateRange = {
 type Props = {
   dateRange?: DateRange;
   filters?: string[];
+  computedFields?: Array<{ name: string; formula: string }>;
 };
 
 function formatDate(iso: string): string {
@@ -37,12 +38,13 @@ function prettifyRule(rule: string): string {
   return `${field}: ${rawCondition}`;
 }
 
-export function CardScopeMeta({ dateRange, filters }: Props) {
+export function CardScopeMeta({ dateRange, filters, computedFields }: Props) {
   const hasDates = !!(dateRange?.start && dateRange?.end);
   const visibleFilters = (filters ?? []).filter(Boolean);
   const hasFilters = visibleFilters.length > 0;
+  const hasComputed = (computedFields ?? []).length > 0;
 
-  if (!hasDates && !hasFilters) return null;
+  if (!hasDates && !hasFilters && !hasComputed) return null;
 
   const prettyFilters = visibleFilters.map(prettifyRule);
   const filterSummary = prettyFilters.join(' · ');
@@ -51,25 +53,15 @@ export function CardScopeMeta({ dateRange, filters }: Props) {
     <div className="flex items-center gap-2 mt-0.5 text-[11px] leading-tight text-slate-500 font-medium min-w-0">
       {hasDates && (
         <span
-          className="inline-flex items-center gap-1 shrink-0"
+          className="inline-flex items-center shrink-0 cursor-default"
           title={
             dateRange?.field
-              ? `Report data window: ${formatDate(dateRange!.start)} to ${formatDate(dateRange!.end)} (${dateRange.field})`
-              : `Report data window: ${formatDate(dateRange!.start)} to ${formatDate(dateRange!.end)}`
+              ? `Report window: ${formatDate(dateRange!.start)} → ${formatDate(dateRange!.end)} (${dateRange.field})`
+              : `Report window: ${formatDate(dateRange!.start)} → ${formatDate(dateRange!.end)}`
           }
         >
           <FiCalendar size={10} className="text-slate-400" />
-          <span>
-            {formatDate(dateRange!.start)} — {formatDate(dateRange!.end)}
-          </span>
-          {dateRange?.field && (
-            <span className="text-slate-400">({dateRange.field})</span>
-          )}
         </span>
-      )}
-
-      {hasDates && hasFilters && (
-        <span className="text-slate-300" aria-hidden="true">·</span>
       )}
 
       {hasFilters && (
@@ -79,6 +71,18 @@ export function CardScopeMeta({ dateRange, filters }: Props) {
         >
           <FiFilter size={10} className="text-slate-400 shrink-0" />
           <span className="truncate">{filterSummary}</span>
+        </span>
+      )}
+
+      {hasComputed && (
+        <span
+          className="inline-flex items-center gap-1 min-w-0"
+          title={computedFields!.map(cf => `${cf.name} = ${cf.formula}`).join(' · ')}
+        >
+          <FiZap size={10} className="text-violet-400 shrink-0" />
+          <span className="truncate text-violet-500">
+            {computedFields!.map(cf => cf.name).join(', ')}
+          </span>
         </span>
       )}
     </div>

@@ -138,6 +138,7 @@ beforeAll(async () => {
         numerical_field:               (dataset.numerical_field               as string) ?? undefined,
         mathematical_aggregation_method: (dataset.mathematical_aggregation_method as any) ?? undefined,
       } satisfies ReportChartSchema;
+      return targetChart;
     });
 
     console.log(`[template-2342f0f0] Loaded ${liveSchemas.length} chart schema(s) from DB.`);
