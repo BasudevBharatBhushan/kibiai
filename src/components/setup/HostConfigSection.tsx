@@ -6,6 +6,8 @@ interface HostConfigSectionProps {
   onHostChange: (val: string) => void;
   onProtocolChange: (val: "data-api" | "o-data-api") => void;
   disabled?: boolean;
+  isSql?: boolean;
+  apiKey?: string;
 }
 
 export function HostConfigSection({
@@ -14,14 +16,23 @@ export function HostConfigSection({
   onHostChange,
   onProtocolChange,
   disabled = false,
+  isSql = false,
+  apiKey = "",
 }: HostConfigSectionProps) {
   return (
     <div className="hcs-section">
       <div className="hcs-db-selector">
-        <div className="hcs-db-option active" title="FileMaker">
+        <div className={`hcs-db-option ${!isSql ? 'active' : ''}`} title="FileMaker">
           <img
             src="https://www.productivecomputing.com/wp-content/uploads/2024/05/Claris-Filemaker-icon-color-dark_1200.png"
             alt="FileMaker"
+            className="hcs-db-logo"
+          />
+        </div>
+        <div className={`hcs-db-option ${isSql ? 'active' : ''}`} title="SQLite">
+          <img
+            src="https://www.sqlite.org/images/sqlite370_banner.gif"
+            alt="SQLite"
             className="hcs-db-logo"
           />
         </div>
@@ -47,40 +58,45 @@ export function HostConfigSection({
             className="hcs-db-logo"
           />
         </div>
-        <div className="hcs-db-option disabled" title="Firebase (Support coming soon)">
-          <img
-            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSBsWMuMzWCJ6vJrKqYjqMTinRWvtS5GsjoSA&s"
-            alt="Firebase"
-            className="hcs-db-logo"
-          />
-        </div>
       </div>
-      
+
       <div className="hcs-form-row">
         <div className="hcs-form-group">
           <input
             id="setup-host"
             type="text"
             className="hcs-input"
-            placeholder="Host address (e.g. kibiz.smtech.cloud)"
+            placeholder={isSql ? "Server URL (e.g. https://api.example.com/sqlite)" : "Host address (e.g. kibiz.smtech.cloud)"}
             value={host}
             onChange={(e) => onHostChange(e.target.value)}
             disabled={disabled}
           />
         </div>
 
-        <div className="hcs-form-group hcs-protocol-group">
-          <select
-            id="setup-protocol"
-            className="hcs-select"
-            value={protocol}
-            onChange={(e) => onProtocolChange(e.target.value as "data-api" | "o-data-api")}
-            disabled={disabled}
-          >
-            <option value="data-api">Data API</option>
-            <option value="o-data-api">OData API</option>
-          </select>
-        </div>
+        {isSql ? (
+          <div className="hcs-form-group hcs-protocol-group">
+            <input
+              type="password"
+              className="hcs-input"
+              placeholder="API Key"
+              value={apiKey}
+              disabled
+            />
+          </div>
+        ) : (
+          <div className="hcs-form-group hcs-protocol-group">
+            <select
+              id="setup-protocol"
+              className="hcs-select"
+              value={protocol}
+              onChange={(e) => onProtocolChange(e.target.value as "data-api" | "o-data-api")}
+              disabled={disabled}
+            >
+              <option value="data-api">Data API</option>
+              <option value="o-data-api">OData API</option>
+            </select>
+          </div>
+        )}
       </div>
 
       <style jsx>{`

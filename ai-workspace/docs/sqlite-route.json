@@ -1,0 +1,199 @@
+{
+"info": {
+"name": "SQLite Bun Reporting Server",
+"description": "Postman collection for the Bun SQLite read-only HTTP server.",
+"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+"variable": [
+    {
+"key": "baseUrl",
+"value": "https://kiflow.kibizsystems.com/sqlite"
+    },
+    {
+"key": "apiKey",
+"value": "123456"
+    }
+  ],
+"item": [
+    {
+"name": "Health Check",
+"request": {
+"method": "GET",
+"header": [],
+"url": {
+"raw": "{{baseUrl}}/health",
+"host": ["{{baseUrl}}"],
+"path": ["health"]
+        },
+"description": "No auth required. Confirms the server is reachable."
+      },
+"response": []
+    },
+    {
+"name": "Query - Unauthorized",
+"request": {
+"method": "POST",
+"header": [
+          {
+"key": "Content-Type",
+"value": "application/json"
+          }
+        ],
+"body": {
+"mode": "raw",
+"raw": "{\n\"sql\": \"SELECT 1 AS value\",\n\"params\": []\n}",
+"options": {
+"raw": {
+"language": "json"
+            }
+          }
+        },
+"url": {
+"raw": "{{baseUrl}}/query",
+"host": ["{{baseUrl}}"],
+"path": ["query"]
+        },
+"description": "Expected response: 401 Unauthorized."
+      },
+"response": []
+    },
+    {
+"name": "Query - Parameterized SELECT",
+"request": {
+"method": "POST",
+"header": [
+          {
+"key": "Authorization",
+"value": "Bearer {{apiKey}}"
+          },
+          {
+"key": "Content-Type",
+"value": "application/json"
+          }
+        ],
+"body": {
+"mode": "raw",
+"raw": "{\n\"sql\": \"SELECT ? AS value WHERE ? = ?\",\n\"params\": [123, 1, 1]\n}",
+"options": {
+"raw": {
+"language": "json"
+            }
+          }
+        },
+"url": {
+"raw": "{{baseUrl}}/query",
+"host": ["{{baseUrl}}"],
+"path": ["query"]
+        },
+"description": "Expected response: rows with value 123, rowCount 1, columns [\"value\"]."
+      },
+"response": []
+    },
+    {
+"name": "Query - Empty Result With Columns",
+"request": {
+"method": "POST",
+"header": [
+          {
+"key": "Authorization",
+"value": "Bearer {{apiKey}}"
+          },
+          {
+"key": "Content-Type",
+"value": "application/json"
+          }
+        ],
+"body": {
+"mode": "raw",
+"raw": "{\n\"sql\": \"SELECT 1 AS value WHERE 0\",\n\"params\": []\n}",
+"options": {
+"raw": {
+"language": "json"
+            }
+          }
+        },
+"url": {
+"raw": "{{baseUrl}}/query",
+"host": ["{{baseUrl}}"],
+"path": ["query"]
+        },
+"description": "Expected response: rows [], rowCount 0, columns [\"value\"]."
+      },
+"response": []
+    },
+    {
+"name": "Query - Forbidden Mutation",
+"request": {
+"method": "POST",
+"header": [
+          {
+"key": "Authorization",
+"value": "Bearer {{apiKey}}"
+          },
+          {
+"key": "Content-Type",
+"value": "application/json"
+          }
+        ],
+"body": {
+"mode": "raw",
+"raw": "{\n\"sql\": \"DROP TABLE invoices\",\n\"params\": []\n}",
+"options": {
+"raw": {
+"language": "json"
+            }
+          }
+        },
+"url": {
+"raw": "{{baseUrl}}/query",
+"host": ["{{baseUrl}}"],
+"path": ["query"]
+        },
+"description": "Expected response: 403 Only SELECT and WITH queries are allowed."
+      },
+"response": []
+    },
+    {
+"name": "Schema Discovery",
+"request": {
+"method": "GET",
+"header": [
+          {
+"key": "Authorization",
+"value": "Bearer {{apiKey}}"
+          }
+        ],
+"url": {
+"raw": "{{baseUrl}}/schema",
+"host": ["{{baseUrl}}"],
+"path": ["schema"]
+        },
+"description": "Returns user tables/views with columns, indexes, and foreign keys."
+      },
+"response": []
+    },
+    {
+"name": "CORS Preflight",
+"request": {
+"method": "OPTIONS",
+"header": [
+          {
+"key": "Origin",
+"value": "http://localhost:3000"
+          },
+          {
+"key": "Access-Control-Request-Method",
+"value": "POST"
+          }
+        ],
+"url": {
+"raw": "{{baseUrl}}/query",
+"host": ["{{baseUrl}}"],
+"path": ["query"]
+        },
+"description": "Expected response: 204 with CORS headers."
+      },
+"response": []
+    }
+  ]
+}

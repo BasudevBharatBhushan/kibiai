@@ -7,9 +7,18 @@
       "Bash(npx tsc *)",
       "Bash(npx vitest *)",
       "Bash(xargs grep -l \"FileMaker.*Data.*API\\\\|buildFilter\\\\|query.*build\")",
-      "Bash(xargs grep -l \"generate.*report\\\\|report.*generate\")"
+      "Bash(xargs grep -l \"generate.*report\\\\|report.*generate\")",
+      "Bash(git stash *)",
+      "Bash(git checkout *)",
+      "Bash(npx eslint *)",
+      "mcp__supabase__get_project_url",
+      "mcp__supabase__list_tables"
     ]
   },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ],
   "disabledMcpjsonServers": [
     "code-review-graph"
   ]

@@ -210,6 +210,8 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
   const [savedSetups, setSavedSetups] = useState<SavedSetup[]>([]);
   const [isLoadingSetups, setIsLoadingSetups] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isSql, setIsSql] = useState(false);
+  const [sqlApiKey, setSqlApiKey] = useState("");
 
   // Modal no longer opens by default on mount
   useEffect(() => {
@@ -234,8 +236,16 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           
           if (data.template.report_template_setup_json) {
             const existing = data.template.report_template_setup_json;
-            if (existing?.host !== undefined || Object.keys(existing?.tables || {}).length > 0) {
-              dispatch({ type: "SET_CONFIG", payload: existing });
+            const isSqlSetup = existing?.data_source_type === 'sql';
+            if (isSqlSetup) {
+              setIsSql(true);
+              setSqlApiKey(existing?.connection?.apiKey ?? "");
+            }
+            if (existing?.host !== undefined || existing?.connection?.host !== undefined || Object.keys(existing?.tables || {}).length > 0) {
+              dispatch({ type: "SET_CONFIG", payload: isSqlSetup
+                ? { ...existing, host: existing?.connection?.host ?? "", data_fetching_protocol: "data-api" }
+                : existing
+              });
             
               // Auto-select the first table if exists, else relationships if exists, else add_database
               const tableKeys = Object.keys(existing.tables || {});
@@ -528,6 +538,8 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
             onHostChange={(val) => dispatch({ type: "SET_HOST", payload: val })}
             onProtocolChange={(val) => dispatch({ type: "SET_PROTOCOL", payload: val })}
             disabled={tableNames.length > 0}
+            isSql={isSql}
+            apiKey={sqlApiKey}
           />
 
           {/* Dynamic detail view */}
@@ -563,6 +575,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
                 key={selectedView}
                 tableName={selectedView.replace("table:", "")}
                 tableConfig={config.tables[selectedView.replace("table:", "")]}
+                isSql={isSql}
                 onDelete={() => {
                   dispatch({ type: "DELETE_TABLE", tableName: selectedView.replace("table:", "") });
                   const remaining = tableNames.filter(t => t !== selectedView.replace("table:", ""));

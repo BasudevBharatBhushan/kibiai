@@ -5,10 +5,32 @@ import "@/styles/classicview.css";
 import { ChevronDown, ChevronRight, X, Printer, ChevronLeft } from "lucide-react";
 import type { ReportMetadata } from "@/lib/utils/reportMetadata";
 import { formatDisplayDate } from "@/lib/utils/reportMetadata";
+import type {
+  NestedReport,
+  NestedGroupNode,
+  DrilldownResult,
+} from "@/lib/sql/structureAdapter";
+import { LARGE_ROW_THRESHOLD } from "@/lib/sql/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Drill-down request emitted to the parent in nested mode.
+ * `groupPath` is reconstructed from the clicked subsummary's groupId.
+ * Exported so SA-9 (ReportPreview) can type its drill callback.
+ */
+export interface DrillRequest {
+  groupPath: Array<{ field: string; label: string }>;
+  count: number;
+}
+
+/** Drill-down result the parent resolves to (SA-7 shape). */
+export type DrillResult = DrilldownResult;
+
+// NestedGroupNode now carries optional totalFields and bodyRows directly
+// (added in Task 0 of SA-9). No local extension type needed.
 
 interface ClassicReportViewProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,6 +42,12 @@ interface ClassicReportViewProps {
   metadata?: ReportMetadata;
   /** Active field→value filter selections (controlled by parent via ClassicViewSettings) */
   activeFilters?: Record<string, string>;
+  /** Rendering mode. 'flat' (default) = existing FileMaker path, unchanged. */
+  mode?: "flat" | "nested";
+  /** Pre-computed nested SQL report payload (required when mode === 'nested'). */
+  nestedData?: NestedReport;
+  /** Async drill-down handler invoked for collapsed drillable leaf groups (nested mode). */
+  onDrillDown?: (req: DrillRequest) => Promise<DrillResult>;
 }
 
 interface SubsummaryDef {
@@ -115,6 +143,12 @@ interface DrillModalProps {
   numericFields: Set<string>;
   totalFields: string[];
   onClose: () => void;
+  /** Nested mode: show a loading state while drill rows are fetched. */
+  loading?: boolean;
+  /** Nested mode: show an error message instead of the table. */
+  error?: string;
+  /** Nested mode: pre-computed totals (label → sum); used instead of reducing rows. */
+  totals?: Record<string, number>;
 }
 
 function DrillModal({
@@ -126,6 +160,9 @@ function DrillModal({
   numericFields,
   totalFields,
   onClose,
+  loading = false,
+  error,
+  totals,
 }: DrillModalProps) {
   // Keyboard: close on Escape
   useEffect(() => {
@@ -140,14 +177,19 @@ function DrillModal({
     };
   }, [onClose]);
 
-  // Compute footers (totals for numeric/total columns)
+  // Compute footers (totals for numeric/total columns).
+  // Nested mode supplies `totals` directly; flat mode reduces the rows as before.
   const footerTotals = useMemo(() => {
     const t: Record<string, number> = {};
     for (const f of totalFields) {
-      t[f.trim()] = rows.reduce((s, r) => s + (parseFloat(String(r[f.trim()] ?? "")) || 0), 0);
+      const key = f.trim();
+      t[key] =
+        totals !== undefined
+          ? totals[f] ?? totals[key] ?? 0
+          : rows.reduce((s, r) => s + (parseFloat(String(r[key] ?? "")) || 0), 0);
     }
     return t;
-  }, [totalFields, rows]);
+  }, [totalFields, rows, totals]);
 
   const footerEntries = Object.entries(footerTotals);
 
@@ -159,8 +201,16 @@ function DrillModal({
           <div>
             <p className="cv-dd-title">{title}</p>
             <div className="cv-dd-meta">
-              <span><strong>{rows.length}</strong> record{rows.length !== 1 ? "s" : ""}</span>
-              {footerEntries.map(([f, v]) => {
+              <span>
+                {loading ? (
+                  "Loading…"
+                ) : (
+                  <>
+                    <strong>{rows.length}</strong> record{rows.length !== 1 ? "s" : ""}
+                  </>
+                )}
+              </span>
+              {!loading && !error && footerEntries.map(([f, v]) => {
                 const prefix = prefixMap[f] ?? "";
                 const suffix = suffixMap[f] ?? "";
                 return (
@@ -178,7 +228,11 @@ function DrillModal({
 
         {/* Body */}
         <div className="cv-dd-body">
-          {rows.length === 0 ? (
+          {loading ? (
+            <div className="cv-dd-empty">Loading records…</div>
+          ) : error ? (
+            <div className="cv-dd-empty">{error}</div>
+          ) : rows.length === 0 ? (
             <div className="cv-dd-empty">No records found</div>
           ) : (
             <table className="cv-dd-tbl">
@@ -205,7 +259,7 @@ function DrillModal({
         </div>
 
         {/* Footer totals */}
-        {footerEntries.length > 0 && (
+        {!loading && !error && footerEntries.length > 0 && (
           <div className="cv-dd-foot">
             {footerEntries.map(([f, v]) => {
               const prefix = prefixMap[f] ?? "";
@@ -236,7 +290,11 @@ export function ClassicReportView({
   dateBreakdown,
   metadata,
   activeFilters: activeFiltersProp = {},
+  mode = "flat",
+  nestedData,
+  onDrillDown,
 }: ClassicReportViewProps) {
+  const isNested = mode === "nested" && !!nestedData;
   // ── Parse JSON structure ──────────────────────────────────────────────────
   const titleHeader = useMemo(
     () => jsonData.find((x) => "TitleHeader" in x)?.TitleHeader,
@@ -245,11 +303,20 @@ export function ClassicReportView({
   const bodyItem = useMemo(() => jsonData.find((x) => "Body" in x)?.Body, [jsonData]);
   const bodyData: Record<string, unknown>[] = useMemo(() => bodyItem?.BodyField ?? [], [bodyItem]);
   const fieldOrder: string[] = useMemo(
-    () => bodyItem?.BodyFieldOrder ?? Object.keys(bodyData[0] ?? {}),
-    [bodyItem, bodyData]
+    () =>
+      isNested && nestedData
+        ? nestedData.fieldOrder
+        : bodyItem?.BodyFieldOrder ?? Object.keys(bodyData[0] ?? {}),
+    [isNested, nestedData, bodyItem, bodyData]
   );
-  const prefixMap: Record<string, string> = useMemo(() => bodyItem?.FieldPrefix ?? {}, [bodyItem]);
-  const suffixMap: Record<string, string> = useMemo(() => bodyItem?.FieldSuffix ?? {}, [bodyItem]);
+  const prefixMap: Record<string, string> = useMemo(
+    () => (isNested && nestedData ? nestedData.fieldPrefix : bodyItem?.FieldPrefix ?? {}),
+    [isNested, nestedData, bodyItem]
+  );
+  const suffixMap: Record<string, string> = useMemo(
+    () => (isNested && nestedData ? nestedData.fieldSuffix : bodyItem?.FieldSuffix ?? {}),
+    [isNested, nestedData, bodyItem]
+  );
 
   // BodySortOrder: [{Column, Order}] — same structure the print view already uses
   const bodySortOrder: Array<{ Column: string; Order: string }> = useMemo(
@@ -308,12 +375,28 @@ export function ClassicReportView({
     () => fieldOrder.filter((f) => !hiddenFields.has(f) && !hiddenFields.has(f.trim())),
     [fieldOrder, hiddenFields]
   );
+  // Nested mode: find the first available leaf body row to refine numeric alignment.
+  const nestedSampleRow = useMemo<Record<string, unknown> | undefined>(() => {
+    if (!isNested || !nestedData) return undefined;
+    const findSample = (
+      nodes: NestedGroupNode[] | undefined
+    ): Record<string, unknown> | undefined => {
+      if (!nodes) return undefined;
+      for (const node of nodes) {
+        if (node.bodyRows && node.bodyRows.length > 0) return node.bodyRows[0];
+        const child = findSample(node.children as NestedGroupNode[] | undefined);
+        if (child) return child;
+      }
+      return undefined;
+    };
+    return findSample(nestedData.groups as NestedGroupNode[]);
+  }, [isNested, nestedData]);
+
   const numericFields = useMemo(() => {
     const set = new Set<string>();
-    if (bodyData.length === 0) return set;
-    const sample = bodyData[0];
+    const sample = isNested ? nestedSampleRow : bodyData[0];
     for (const f of fieldOrder) {
-      const v = sample[f];
+      const v = sample?.[f];
       const prefix = prefixMap[f] ?? "";
       if (prefix === "$" || /total|sum|price|cost|amount|qty|quantity/i.test(f)) {
         set.add(f);
@@ -326,7 +409,7 @@ export function ClassicReportView({
       }
     }
     return set;
-  }, [bodyData, visibleFieldOrder, fieldOrder, prefixMap]);
+  }, [bodyData, visibleFieldOrder, fieldOrder, prefixMap, isNested, nestedSampleRow]);
 
   // ── Filters — driven by parent (ClassicViewSettings) ─────────────────────
   const filteredBodyData = useMemo(() => {
@@ -409,10 +492,67 @@ export function ClassicReportView({
     title: string;
     rows: Record<string, unknown>[];
     totalFields: string[];
+    /** Nested mode only: per-drill field order, totals, loading and error states. */
+    fieldOrder?: string[];
+    totals?: Record<string, number>;
+    loading?: boolean;
+    error?: string;
   } | null>(null);
 
+  // Monotonic token to ignore stale async drill results (e.g. user re-clicks).
+  const drillReqId = React.useRef(0);
+
+  // ── Nested-mode async drill-down ────────────────────────────────────────────
+  // Reconstructs groupPath from groupId ("root|field:label|field:label"),
+  // optionally confirms for very large groups, then fetches detail rows.
+  const handleNestedDrill = useCallback(
+    async (groupId: string, count: number, title: string, totalFields: string[]) => {
+      if (!onDrillDown) return;
+
+      if (count > LARGE_ROW_THRESHOLD) {
+        const proceed = window.confirm(
+          `This group has ${count.toLocaleString("en-US")} rows and may freeze the view. Load anyway?`
+        );
+        if (!proceed) return;
+      }
+
+      // Reconstruct groupPath: skip the leading "root" segment, parse "field:label".
+      const groupPath = groupId
+        .split("|")
+        .slice(1)
+        .map((seg) => {
+          const idx = seg.indexOf(":");
+          return idx === -1
+            ? { field: seg, label: "" }
+            : { field: seg.slice(0, idx), label: seg.slice(idx + 1) };
+        });
+
+      const reqId = ++drillReqId.current;
+      setDrillModal({ title, rows: [], totalFields, loading: true });
+
+      try {
+        const result = await onDrillDown({ groupPath, count });
+        if (drillReqId.current !== reqId) return; // stale — a newer drill superseded this one
+        setDrillModal({
+          title,
+          rows: result.bodyRows,
+          totalFields: result.totalFields,
+          fieldOrder: result.fieldOrder,
+          totals: result.totals,
+        });
+      } catch (err) {
+        if (drillReqId.current !== reqId) return;
+        const message = err instanceof Error ? err.message : "Failed to load records.";
+        setDrillModal({ title, rows: [], totalFields, error: message });
+      }
+    },
+    [onDrillDown]
+  );
+
   // ── Grand totals ──────────────────────────────────────────────────────────
+  // Nested mode: return the pre-computed grandTotals directly (no reduction).
   const grandTotals = useMemo(() => {
+    if (isNested && nestedData) return nestedData.grandTotals;
     const totals: Record<string, number> = {};
     for (const f of trailingSummaryFields) {
       totals[f.trim()] = sortedBodyData.reduce(
@@ -421,7 +561,13 @@ export function ClassicReportView({
       );
     }
     return totals;
-  }, [trailingSummaryFields, sortedBodyData]);
+  }, [isNested, nestedData, trailingSummaryFields, sortedBodyData]);
+
+  // Record count used for the grand-summary row / averages.
+  const grandTotalCount = useMemo(
+    () => (isNested && nestedData ? nestedData.grandTotalCount : filteredBodyData.length),
+    [isNested, nestedData, filteredBodyData]
+  );
 
   // ── Build rows recursively ────────────────────────────────────────────────
   type RowSpec =
@@ -435,6 +581,12 @@ export function ClassicReportView({
         totalFields: string[];
         rows: Record<string, unknown>[];
         displayValues: Record<string, unknown>;
+        /** Nested mode: pre-computed totals (label → sum); undefined in flat mode. */
+        totals?: Record<string, number>;
+        /** Nested mode: pre-computed row count; undefined in flat mode. */
+        count?: number;
+        /** Nested mode: true when this leaf has no rendered children/body rows (drillable). */
+        drillable?: boolean;
       }
     | { kind: "det"; groupId: string; row: Record<string, unknown> }
     | { kind: "gs" };
@@ -474,7 +626,7 @@ export function ClassicReportView({
     [effectiveSubsummaries]
   );
 
-  const rows = useMemo(() => {
+  const flatRows = useMemo(() => {
     if (!sortedBodyData.length) return [];
     const allRows = buildRows(sortedBodyData, 0, "root");
     if (trailingSummaryFields.length > 0) {
@@ -482,6 +634,64 @@ export function ClassicReportView({
     }
     return allRows;
   }, [sortedBodyData, buildRows, trailingSummaryFields]);
+
+  // ── Nested mode adapter ─────────────────────────────────────────────────────
+  // Walks nestedData.groups and emits the SAME RowSpec[] the flat buildRows
+  // produces, so the rest of the renderer is reused verbatim. The groupId
+  // convention `${parentId}|${field}:${label}` matches the flat path so
+  // isCollapsed/toggleGroup/isRowVisible work unchanged.
+  const nestedRows = useMemo<RowSpec[]>(() => {
+    if (!isNested || !nestedData) return [];
+    const out: RowSpec[] = [];
+
+    const walk = (nodes: NestedGroupNode[], level: number, parentId: string) => {
+      for (const node of nodes) {
+        const labelStr = String(node.value ?? "").trim() || "(blank)";
+        // field segment uses the node label (mirrors flat where field === group label).
+        const groupId = `${parentId}|${node.label}:${labelStr}`;
+        const hasChildren = !!node.children && node.children.length > 0;
+        const hasBodyRows = !!node.bodyRows && node.bodyRows.length > 0;
+        // A leaf without children and without body rows stays drillable.
+        const drillable = !hasChildren && !hasBodyRows;
+
+        out.push({
+          kind: "ss",
+          groupId,
+          level,
+          label: labelStr,
+          field: node.label,
+          displayFields: Object.keys(node.display ?? {}),
+          totalFields: node.totalFields ?? Object.keys(node.totals ?? {}),
+          rows: node.bodyRows ?? [],
+          displayValues: node.display ?? {},
+          totals: node.totals ?? {},
+          count: node.count,
+          drillable,
+        });
+
+        if (hasChildren) {
+          walk(node.children as NestedGroupNode[], level + 1, groupId);
+        } else if (hasBodyRows) {
+          for (const row of node.bodyRows!) {
+            out.push({ kind: "det", groupId, row });
+          }
+        }
+        // drillable leaf: emit no det rows.
+      }
+    };
+
+    walk(nestedData.groups as NestedGroupNode[], 0, "root");
+
+    if (nestedData.grandTotalFields.length > 0) {
+      out.push({ kind: "gs" });
+    }
+    return out;
+  }, [isNested, nestedData]);
+
+  const rows = useMemo(
+    () => (isNested ? nestedRows : flatRows),
+    [isNested, nestedRows, flatRows]
+  );
 
   // ── Visibility helper ─────────────────────────────────────────────────────
   const isRowVisible = useCallback(
@@ -584,7 +794,7 @@ export function ClassicReportView({
       // ── Grand Summary ──
       if (spec.kind === "gs") {
         const gtItems = Object.entries(grandTotals).map(([f, sum]) => {
-          const value = showAvg && filteredBodyData.length > 0 ? sum / filteredBodyData.length : sum;
+          const value = showAvg && grandTotalCount > 0 ? sum / grandTotalCount : sum;
           const prefix = prefixMap[f] ?? prefixMap[f.trim()] ?? "";
           const suffix = suffixMap[f] ?? suffixMap[f.trim()] ?? "";
           return { f, value, prefix, suffix };
@@ -595,7 +805,7 @@ export function ClassicReportView({
               <div className="cv-ss-row">
                 <div className="cv-ss-label-side">
                   <span className="cv-ss-label-text">
-                    Grand Total ({filteredBodyData.length} record{filteredBodyData.length !== 1 ? "s" : ""})
+                    Grand Total ({grandTotalCount} record{grandTotalCount !== 1 ? "s" : ""})
                   </span>
                 </div>
                 <div className="cv-ss-total-side">
@@ -646,12 +856,27 @@ export function ClassicReportView({
       const collapsed = isCollapsed(spec.groupId);
       const levelClass = spec.level >= 1 ? "cv-lv2" : "";
 
+      // Nested mode carries pre-computed count; flat mode uses the in-memory rows.
+      const count = spec.count ?? spec.rows.length;
+      // A nested drillable leaf is an ss node with no rendered children/body rows.
+      const isNestedDrillLeaf = isNested && spec.drillable === true;
+
       const handleSsClick = () => {
         if (isPrintView) return;
+        const displayTitle = spec.field.trim() === "_date_breakdown"
+          ? spec.label
+          : `${spec.field}: ${spec.label}`;
+        if (isNested) {
+          // Drillable leaf → async fetch. Non-leaf (has children) → toggle.
+          if (isNestedDrillLeaf) {
+            handleNestedDrill(spec.groupId, count, displayTitle, spec.totalFields);
+          } else {
+            toggleGroup(spec.groupId);
+          }
+          return;
+        }
+        // Flat mode: behave exactly as today (in-memory DrillModal).
         if (collapsed) {
-          const displayTitle = spec.field.trim() === "_date_breakdown"
-            ? spec.label
-            : `${spec.field}: ${spec.label}`;
           setDrillModal({ title: displayTitle, rows: spec.rows, totalFields: spec.totalFields });
         } else {
           toggleGroup(spec.groupId);
@@ -664,12 +889,15 @@ export function ClassicReportView({
         toggleGroup(spec.groupId);
       };
 
-      const count = spec.rows.length;
       const ssItems = spec.totalFields
         .filter((tf) => visibleFieldOrder.some((f) => f.trim() === tf.trim() || f === tf))
         .map((tf) => {
           const f = visibleFieldOrder.find((vf) => vf.trim() === tf.trim() || vf === tf) ?? tf;
-          const sum = spec.rows.reduce((s, r) => s + (parseFloat(String(r[f] ?? r[tf] ?? "")) || 0), 0);
+          // Nested mode: read the pre-computed total; flat mode: reduce the rows.
+          const sum =
+            spec.totals !== undefined
+              ? spec.totals[tf] ?? spec.totals[tf.trim()] ?? spec.totals[f] ?? 0
+              : spec.rows.reduce((s, r) => s + (parseFloat(String(r[f] ?? r[tf] ?? "")) || 0), 0);
           const value = showAvg && count > 0 ? sum / count : sum;
           const prefix = prefixMap[f] ?? prefixMap[tf] ?? prefixMap[tf.trim()] ?? "";
           const suffix = suffixMap[f] ?? suffixMap[tf] ?? suffixMap[tf.trim()] ?? "";
@@ -708,11 +936,13 @@ export function ClassicReportView({
                   {spec.label}
                   {collapsed && (
                     <span style={{ color: "#78716c", fontWeight: "normal", fontSize: "11px", marginLeft: "6px" }}>
-                      {effectiveSubsummaries[spec.level + 1] ? (() => {
-                        const nextField = effectiveSubsummaries[spec.level + 1].SubsummaryFields[0];
-                        const countItems = new Set(spec.rows.map(r => String(r[nextField] ?? "").trim())).size;
-                        return `(${countItems} ${nextField.trim()}${countItems !== 1 ? 's' : ''}, ${spec.rows.length} record${spec.rows.length !== 1 ? 's' : ''})`;
-                      })() : `(${spec.rows.length} record${spec.rows.length !== 1 ? 's' : ''})`}
+                      {isNested
+                        ? `(${count} record${count !== 1 ? "s" : ""})`
+                        : effectiveSubsummaries[spec.level + 1] ? (() => {
+                            const nextField = effectiveSubsummaries[spec.level + 1].SubsummaryFields[0];
+                            const countItems = new Set(spec.rows.map(r => String(r[nextField] ?? "").trim())).size;
+                            return `(${countItems} ${nextField.trim()}${countItems !== 1 ? 's' : ''}, ${spec.rows.length} record${spec.rows.length !== 1 ? 's' : ''})`;
+                          })() : `(${spec.rows.length} record${spec.rows.length !== 1 ? 's' : ''})`}
                     </span>
                   )}
                   {spec.displayFields.length > 0 && (
@@ -751,6 +981,7 @@ export function ClassicReportView({
     });
   }, [
     grandTotals,
+    grandTotalCount,
     showAvg,
     filteredBodyData,
     prefixMap,
@@ -761,6 +992,8 @@ export function ClassicReportView({
     toggleGroup,
     setDrillModal,
     effectiveSubsummaries,
+    isNested,
+    handleNestedDrill,
   ]);
 
   // ── Render subtotal cells ─────────────────────────────────────────────────
@@ -808,7 +1041,11 @@ export function ClassicReportView({
   }
 
   // ── JSX ───────────────────────────────────────────────────────────────────
-  if (!bodyData.length) {
+  // Flat mode: empty when no body rows. Nested mode: empty when no groups.
+  const hasContent = isNested
+    ? !!nestedData && nestedData.groups.length > 0
+    : bodyData.length > 0;
+  if (!hasContent) {
     return (
       <div className="cv-wrap" style={{ padding: "32px", textAlign: "center", color: "#78716c" }}>
         No data available.
@@ -846,7 +1083,7 @@ export function ClassicReportView({
             <span key={i} className="cv-meta-chip">{f}</span>
           ))}
           <span className="cv-meta-chip">
-            <strong>{filteredBodyData.length}</strong> record{filteredBodyData.length !== 1 ? "s" : ""}
+            <strong>{grandTotalCount}</strong> record{grandTotalCount !== 1 ? "s" : ""}
           </span>
           <span className="cv-meta-chip">
             {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
@@ -891,7 +1128,7 @@ export function ClassicReportView({
       </div>
 
       <div className="cv-foot flex items-center justify-between">
-        <span>Classic View · {filteredBodyData.length} records</span>
+        <span>Classic View · {grandTotalCount} records</span>
       </div>
 
       {/* Hidden print area containing the entire table (all pages, but respecting collapsed/expanded states) */}
@@ -904,18 +1141,42 @@ export function ClassicReportView({
       </div>
 
       {/* ── Drill-down Modal ────────────────────────────────────────────────── */}
-      {drillModal && (
-        <DrillModal
-          title={drillModal.title}
-          rows={drillModal.rows}
-          fieldOrder={fieldOrder}
-          prefixMap={prefixMap}
-          suffixMap={suffixMap}
-          numericFields={numericFields}
-          totalFields={drillModal.totalFields.length > 0 ? drillModal.totalFields : allTotalFields}
-          onClose={() => setDrillModal(null)}
-        />
-      )}
+      {drillModal && (() => {
+        // Nested mode uses the drill's own fieldOrder/totals; flat reuses report-level.
+        const modalFieldOrder = drillModal.fieldOrder ?? fieldOrder;
+        const modalNumeric =
+          drillModal.fieldOrder
+            ? (() => {
+                const set = new Set<string>();
+                const sample = drillModal.rows[0];
+                for (const f of modalFieldOrder) {
+                  const prefix = prefixMap[f] ?? "";
+                  const v = sample?.[f];
+                  if (prefix === "$" || /total|sum|price|cost|amount|qty|quantity/i.test(f)) {
+                    set.add(f);
+                  } else if (v !== undefined && !isNaN(parseFloat(String(v))) && String(v).trim() !== "") {
+                    set.add(f);
+                  }
+                }
+                return set;
+              })()
+            : numericFields;
+        return (
+          <DrillModal
+            title={drillModal.title}
+            rows={drillModal.rows}
+            fieldOrder={modalFieldOrder}
+            prefixMap={prefixMap}
+            suffixMap={suffixMap}
+            numericFields={modalNumeric}
+            totalFields={drillModal.totalFields.length > 0 ? drillModal.totalFields : allTotalFields}
+            totals={drillModal.totals}
+            loading={drillModal.loading}
+            error={drillModal.error}
+            onClose={() => setDrillModal(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

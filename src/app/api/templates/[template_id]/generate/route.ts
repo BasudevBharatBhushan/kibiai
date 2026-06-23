@@ -110,12 +110,28 @@ export async function POST(
         : {}),
     };
 
-    // 5. Delegate to existing generate-report engine
+    // 5. Delegate to the appropriate engine based on data_source_type.
+    //    SQL setups (data_source_type === 'sql') route to the SQL engine.
+    //    All other setups (FileMaker, no discriminator) route to the existing
+    //    FM engine — the FM path is byte-for-byte identical to before.
     const baseUrl = req.nextUrl.origin;
-    const engineRes = await fetch(`${baseUrl}/api/generate-report`, {
+    const isSql = (setupJson as Record<string, unknown>)?.data_source_type === "sql";
+    const engineUrl = isSql
+      ? `${baseUrl}/api/sql-report/generate`
+      : `${baseUrl}/api/generate-report`;
+
+    const engineBody = isSql
+      ? JSON.stringify({
+          report_setup: setupJson,
+          report_config: configJson,
+          view_mode: "collapsed",
+        })
+      : JSON.stringify({ report_setup: setupJson, report_config: configJson });
+
+    const engineRes = await fetch(engineUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ report_setup: setupJson, report_config: configJson }),
+      body: engineBody,
     });
 
     if (!engineRes.ok) {
@@ -130,8 +146,18 @@ export async function POST(
 
     const engineResult = await engineRes.json();
 
-    if (engineResult.status !== "ok" || !engineResult.report_structure_json) {
+    // Both FM and SQL engines use status === 'ok'; FM also requires report_structure_json.
+    // SQL engine may return report_structure_json as null for stub modes (drilldown / expand_all).
+    if (engineResult.status !== "ok") {
       console.error("[generate] engine result error:", engineResult.detail || engineResult.error);
+      return NextResponse.json(
+        { success: false, error: engineResult.detail || engineResult.error || "Engine returned no report data." },
+        { status: 500 }
+      );
+    }
+
+    if (!engineResult.report_structure_json) {
+      console.error("[generate] engine result error: missing report_structure_json");
       return NextResponse.json(
         { success: false, error: engineResult.detail || engineResult.error || "Engine returned no report data." },
         { status: 500 }

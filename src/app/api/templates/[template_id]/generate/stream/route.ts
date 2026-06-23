@@ -151,11 +151,28 @@ export async function POST(
       try {
         enqueue(sseEvent("log", { message: "Connecting to report engine…" }));
 
+        // Branch on data_source_type: SQL setups route to the SQL engine;
+        // all other setups (FileMaker, no discriminator) use the existing FM
+        // engine — the FM path is byte-for-byte identical to before.
         const baseUrl = req.nextUrl.origin;
-        const engineRes = await fetch(`${baseUrl}/api/generate-report`, {
+        const isSql =
+          (setupJson as Record<string, unknown>)?.data_source_type === "sql";
+        const engineUrl = isSql
+          ? `${baseUrl}/api/sql-report/generate`
+          : `${baseUrl}/api/generate-report`;
+
+        const engineBody = isSql
+          ? JSON.stringify({
+              report_setup: setupJson,
+              report_config: configJson,
+              view_mode: "collapsed",
+            })
+          : JSON.stringify({ report_setup: setupJson, report_config: configJson });
+
+        const engineRes = await fetch(engineUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ report_setup: setupJson, report_config: configJson }),
+          body: engineBody,
         });
 
         if (!engineRes.ok) {
@@ -166,6 +183,7 @@ export async function POST(
 
         const engineResult = await engineRes.json();
 
+        // Both FM and SQL engines use status === 'ok'; require report_structure_json.
         if (engineResult.status !== "ok" || !engineResult.report_structure_json) {
           throw new Error(engineResult.detail || engineResult.error || "Engine returned no report data.");
         }
@@ -173,6 +191,9 @@ export async function POST(
         const { processing_logs = [] } = engineResult;
         const report_structure_json = sanitizeJsonForPostgres(engineResult.report_structure_json);
         const stitch_result = engineResult.stitch_result ?? null; // cached for client-side soft reloads
+        // SQL collapsed engine also emits a nested NestedReport payload.
+        // Pass it through so ReportPreview can detect and wire the nested viewer.
+        const nested_report = engineResult.nested ?? null;
         const persistedConfigJson = sanitizeJsonForPostgres(configJson);
 
         // Replay the processing_logs progressively
@@ -247,6 +268,7 @@ export async function POST(
           enqueue(sseEvent("done", {
             report_structure_json,
             stitch_result,
+            nested_report,
             report_name: reportHeading,
             version_id: savedRecordId,
             report_id: null,
@@ -294,6 +316,7 @@ export async function POST(
           enqueue(sseEvent("done", {
             report_structure_json,
             stitch_result,
+            nested_report,
             report_name: reportHeading,
             report_id: savedRecordId,
             version_id: null,

@@ -14,6 +14,7 @@ interface TableCardProps {
   onUpdateField: (fieldName: string, property: keyof FieldConfig, value: string) => void;
   onDeleteField: (fieldName: string) => void;
   onManageFields: () => void;
+  isSql?: boolean;
 }
 
 export function TableCard({
@@ -25,6 +26,7 @@ export function TableCard({
   onUpdateField,
   onDeleteField,
   onManageFields,
+  isSql = false,
 }: TableCardProps) {
   const [isEditingPassword, setIsEditingPassword] = useState(false);
   const [tempPassword, setTempPassword] = useState("");
@@ -84,56 +86,73 @@ export function TableCard({
               onBlur={(e) => {
                 const newName = e.target.value.trim();
                 if (newName && newName !== tableName) onRename(newName);
-                else e.target.value = tableName; // reset if invalid
+                else e.target.value = tableName;
               }}
             />
           </div>
-          <div className="tc-field-group">
-            <label className="tc-label">Layout Name</label>
-            <input
-              type="text"
-              className="tc-input"
-              value={tableConfig.layout ?? ""}
-              onChange={(e) => onUpdateProperty("layout", e.target.value)}
-              placeholder="Layout name"
-            />
-          </div>
-          <div className="tc-field-group">
-            <label className="tc-label">File</label>
-            <input
-              type="text"
-              className="tc-input"
-              value={tableConfig.file}
-              onChange={(e) => onUpdateProperty("file", e.target.value)}
-            />
-          </div>
+          {isSql ? (
+            <div className="tc-field-group">
+              <label className="tc-label">Physical Table Name</label>
+              <input
+                type="text"
+                className="tc-input"
+                value={(tableConfig as unknown as Record<string, unknown>)['physical'] as string ?? ""}
+                readOnly
+                placeholder="e.g. invoice_line_item"
+              />
+            </div>
+          ) : (
+            <>
+              <div className="tc-field-group">
+                <label className="tc-label">Layout Name</label>
+                <input
+                  type="text"
+                  className="tc-input"
+                  value={tableConfig.layout ?? ""}
+                  onChange={(e) => onUpdateProperty("layout", e.target.value)}
+                  placeholder="Layout name"
+                />
+              </div>
+              <div className="tc-field-group">
+                <label className="tc-label">File</label>
+                <input
+                  type="text"
+                  className="tc-input"
+                  value={tableConfig.file}
+                  onChange={(e) => onUpdateProperty("file", e.target.value)}
+                />
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="tc-row">
-          <div className="tc-field-group">
-            <label className="tc-label">Username</label>
-            <input
-              type="text"
-              className="tc-input"
-              value={tableConfig.username}
-              onChange={(e) => onUpdateProperty("username", e.target.value)}
-            />
+        {!isSql && (
+          <div className="tc-row">
+            <div className="tc-field-group">
+              <label className="tc-label">Username</label>
+              <input
+                type="text"
+                className="tc-input"
+                value={tableConfig.username}
+                onChange={(e) => onUpdateProperty("username", e.target.value)}
+              />
+            </div>
+            <div className="tc-field-group">
+              <label className="tc-label">Password</label>
+              <input
+                type="password"
+                className="tc-input"
+                value={isEditingPassword ? tempPassword : (tableConfig.password ? "••••••••" : "")}
+                onFocus={handlePasswordFocus}
+                onBlur={handlePasswordBlur}
+                onChange={(e) => setTempPassword(e.target.value)}
+                placeholder={isEditingPassword ? "Type new to change" : "Password"}
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="tc-field-group" />
           </div>
-          <div className="tc-field-group">
-            <label className="tc-label">Password</label>
-            <input
-              type="password"
-              className="tc-input"
-              value={isEditingPassword ? tempPassword : (tableConfig.password ? "••••••••" : "")}
-              onFocus={handlePasswordFocus}
-              onBlur={handlePasswordBlur}
-              onChange={(e) => setTempPassword(e.target.value)}
-              placeholder={isEditingPassword ? "Type new to change" : "Password"}
-              autoComplete="new-password"
-            />
-          </div>
-          <div className="tc-field-group" />{/* spacer */}
-        </div>
+        )}
 
         {/* Fields table */}
         <div className="tc-fields-header">

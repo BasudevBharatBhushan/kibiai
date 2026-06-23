@@ -17,12 +17,20 @@ import {
 import DOMPurify from "dompurify";
 import type { ReportMetadata } from "@/lib/utils/reportMetadata";
 import { formatDisplayDate } from "@/lib/utils/reportMetadata";
+import type { NestedReport, NestedGroupNode } from "@/lib/sql/structureAdapter";
 
 interface DynamicReportProps {
   jsonData: any[];
   previewMode?: boolean;
   /** Date range + filter sentences rendered as a subheader under the main heading */
   metadata?: ReportMetadata;
+  /**
+   * Rendering mode. `'flat'` (default) runs the existing FileMaker flat path
+   * unchanged. `'nested'` walks a pre-built `NestedReport` tree (SQL source).
+   */
+  mode?: "flat" | "nested";
+  /** Pre-built nested report tree (required when `mode === 'nested'`). */
+  nestedData?: NestedReport;
 }
 
 // --- CONFIGURATION ---
@@ -183,7 +191,7 @@ const ExpandedReportView = ({ htmlContent, onClose }: { htmlContent: string, onC
 
 
 // --- MAIN COMPONENT ---
-const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = false, metadata }) => {
+const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = false, metadata, mode = "flat", nestedData }) => {
   const [reportHtml, setReportHtml] = useState<string>("");
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -214,15 +222,17 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
 
   // 1. Generate HTML — deferred to post-paint so the loading state renders first
   useEffect(() => {
-    if (jsonData?.length > 0) {
+    const hasFlatData = jsonData?.length > 0;
+    const hasNestedData = mode === "nested" && !!nestedData;
+    if (hasFlatData || hasNestedData) {
       if (!previewMode) setIsCalculating(true);
       const id = setTimeout(() => {
-        const html = generateDynamicReport(jsonData, metadata);
+        const html = generateDynamicReport(jsonData, metadata, mode, nestedData);
         setReportHtml(DOMPurify.sanitize(html));
       }, 0);
       return () => clearTimeout(id);
     }
-  }, [jsonData, metadata]);
+  }, [jsonData, metadata, mode, nestedData]);
 
   // 2. Inject HTML then schedule pagination.
   //    - innerHTML is injected in a double-RAF so React paints the loading state first.
@@ -811,8 +821,110 @@ function generateScopeSubheader(metadata?: ReportMetadata): string {
   return `<div class="report-scope">${parts.join('')}</div>`;
 }
 
-function generateDynamicReport(jsonData: any[], metadata?: ReportMetadata): string {
-  
+// ---------------------------------------------------------------------------
+// Shared body-table rendering (used by BOTH the flat and nested paths).
+//
+// `getFieldAlignment` + `renderBodyTableHtml` are lifted to module scope so the
+// emitted markup is byte-identical regardless of path. The flat path sorts rows
+// first then calls renderBodyTableHtml; the nested path passes pre-sorted SQL
+// leaf rows directly (no re-sort).
+// ---------------------------------------------------------------------------
+
+function getFieldAlignment(fieldName: string, sampleValue: unknown): "left" | "right" | "center" {
+    const currencyPrefixes = ['$', '€', '£', '₹', '¥', '₩', '₽', '₦', '₪'];
+    const fieldHasCurrency = currencyPrefixes.some(prefix =>
+        fieldName.includes(prefix) || (sampleValue != null && String(sampleValue).trim().startsWith(prefix))
+    );
+
+    if (fieldHasCurrency) return 'right';
+    if (sampleValue) {
+        const trimmedValue = String(sampleValue).trim();
+        if (/[a-zA-Z]/.test(trimmedValue)) return 'left';
+        const numericTest = trimmedValue.replace(/[%\s,]/g, '');
+        if (!isNaN(parseFloat(numericTest)) && isFinite(Number(numericTest))) return 'center';
+        if (!isNaN(Date.parse(trimmedValue))) return 'center';
+    }
+    return 'left';
+}
+
+/**
+ * Emit the `<table class="body-table">…</table>` markup for a set of already-
+ * sorted rows. This is the exact HTML the flat path used to emit inline; it is
+ * extracted verbatim so both paths share identical column / prefix-suffix /
+ * alignment / empty-cell handling.
+ */
+function renderBodyTableHtml(
+    rows: Record<string, unknown>[],
+    fieldOrder: string[],
+    opts: {
+        prefixMap: Record<string, string>;
+        suffixMap: Record<string, string>;
+        sortKeys?: string[];
+        tableHeading: string;
+    }
+): string {
+    const { prefixMap, suffixMap, sortKeys = [], tableHeading } = opts;
+
+    const displayFields = fieldOrder && fieldOrder.length > 0
+        ? fieldOrder
+        : (rows[0] ? Object.keys(rows[0]).filter(key => !sortKeys.includes(key)) : []);
+
+    let html = `<table class="body-table" data-table-heading="${tableHeading}"><thead><tr>`;
+    displayFields.forEach((field: string) => {
+        const sampleValue = rows[0]?.[field];
+        const fullSample = (prefixMap[field] || '') + ((sampleValue as string | number | undefined) || '');
+        const align = getFieldAlignment(field, fullSample);
+        html += `<th style="text-align: ${align}">${field.trim()}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    rows.forEach((row) => {
+        html += '<tr>';
+        displayFields.forEach((field: string) => {
+            const trimmedField = field.trim();
+            const prefix = prefixMap[field] || prefixMap[trimmedField] || '';
+            const suffix = suffixMap[trimmedField] || '';
+
+            let cellValue: unknown = row[field];
+            if (cellValue !== undefined && cellValue !== null && cellValue !== '') {
+                const cellStr = String(cellValue);
+                const isDate = !isNaN(Date.parse(cellStr)) && isNaN(Number(cellValue));
+                if (!isDate) {
+                    const num = parseFloat(cellStr);
+                    if (!isNaN(num)) {
+                        if (prefix === '$' || /total|sum|price|cost/i.test(field)) {
+                            cellValue = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        }
+                    }
+                }
+            }
+            const displayVal = (cellValue !== undefined && cellValue !== null) ? String(cellValue).trim() : '';
+            const hasData = displayVal !== '' && displayVal !== '--';
+            const fullVal = hasData ? (prefix + displayVal + suffix) : displayVal;
+            const align = getFieldAlignment(field, fullVal);
+            html += `<td style="text-align: ${align}">${fullVal}</td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function generateDynamicReport(
+  jsonData: any[],
+  metadata?: ReportMetadata,
+  mode: "flat" | "nested" = "flat",
+  nestedData?: NestedReport,
+): string {
+
+  // --- NESTED (SQL) PATH ---------------------------------------------------
+  // When mode === 'nested' and nestedData is present, build the report from
+  // the pre-computed group tree, reusing the SAME markup shapes as the flat
+  // path. Everything below this branch is the UNCHANGED flat path.
+  if (mode === "nested" && nestedData) {
+    return generateNestedReportFromTree(nestedData, metadata);
+  }
+
   // 1. Parser for Sorting
   function parseSortValue(val: any): number | string {
       if (val === null || val === undefined || val === "") return -Infinity; 
@@ -857,23 +969,6 @@ function generateDynamicReport(jsonData: any[], metadata?: ReportMetadata): stri
           (result[currentValue[trimmedKey]] = result[currentValue[trimmedKey]] || []).push(currentValue);
           return result;
       }, {});
-  }
-
-  function getFieldAlignment(fieldName: string, sampleValue: any) {
-      const currencyPrefixes = ['$', '€', '£', '₹', '¥', '₩', '₽', '₦', '₪'];
-      const fieldHasCurrency = currencyPrefixes.some(prefix =>
-          fieldName.includes(prefix) || (sampleValue && sampleValue.toString().trim().startsWith(prefix))
-      );
-
-      if (fieldHasCurrency) return 'right';
-      if (sampleValue) {
-          const trimmedValue = sampleValue.toString().trim();
-          if (/[a-zA-Z]/.test(trimmedValue)) return 'left';
-          const numericTest = trimmedValue.replace(/[%\s,]/g, '');
-          if (!isNaN(parseFloat(numericTest)) && isFinite(numericTest as any)) return 'center';
-          if (!isNaN(Date.parse(trimmedValue))) return 'center';
-      }
-      return 'left';
   }
 
   const titleHeader = jsonData.find(item => 'TitleHeader' in item);
@@ -1022,44 +1117,15 @@ function generateDynamicReport(jsonData: any[], metadata?: ReportMetadata): stri
           });
       }
 
-      let html = `<table class="body-table" data-table-heading="${tableData_}"><thead><tr>`;
-      displayFields.forEach((field: string) => {
-          const sampleValue = sortedData[0]?.[field];
-          const fullSample = (prefixMap[field] || '') + (sampleValue || '');
-          const align = getFieldAlignment(field, fullSample);
-          html += `<th style="text-align: ${align}">${field.trim()}</th>`;
+      // HTML emission is shared with the nested path via renderBodyTableHtml so
+      // the markup stays byte-identical. The flat path passes its already-sorted
+      // rows + the resolved displayFields (as fieldOrder).
+      return renderBodyTableHtml(sortedData, displayFields, {
+          prefixMap,
+          suffixMap,
+          sortKeys,
+          tableHeading: tableData_,
       });
-      html += '</tr></thead><tbody>';
-
-      sortedData.forEach((row) => {
-          html += '<tr>';
-          displayFields.forEach((field: string) => {
-              const trimmedField = field.trim();
-              const prefix = prefixMap[field] || prefixMap[trimmedField] || '';
-              const suffix = suffixMap[trimmedField] || '';
-              
-              let cellValue = row[field];
-              if (cellValue !== undefined && cellValue !== null && cellValue !== '') {
-                  const isDate = !isNaN(Date.parse(cellValue)) && isNaN(cellValue);
-                  if (!isDate) {
-                      const num = parseFloat(cellValue);
-                      if (!isNaN(num)) {
-                          if (prefix === '$' || /total|sum|price|cost/i.test(field)) {
-                              cellValue = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                          }
-                      }
-                  }
-              }
-              const displayVal = (cellValue !== undefined && cellValue !== null) ? String(cellValue).trim() : '';
-              const hasData = displayVal !== '' && displayVal !== '--';
-              const fullVal = hasData ? (prefix + displayVal + suffix) : displayVal;
-              const align = getFieldAlignment(field, fullVal);
-              html += `<td style="text-align: ${align}">${fullVal}</td>`;
-          });
-          html += '</tr>';
-      });
-      html += '</tbody></table>';
-      return html;
   }
 
   function generateTrailingSummary(summaryFields: string[], bodyData: any[]) {
@@ -1102,4 +1168,144 @@ function generateDynamicReport(jsonData: any[], metadata?: ReportMetadata): stri
 
   reportHtml += '</div>';
   return reportHtml;
+}
+
+// ===========================================================================
+// NESTED (SQL) REPORT GENERATION
+//
+// Walks a pre-built NestedReport tree and emits the SAME HTML shapes / class
+// names the flat path emits (title-header, subsummary level-N + subsummary-
+// header + subsummary-display + subsummary-content, section-totals, body-table,
+// trailing-summary). Because every element/class matches, dynamicreport.css,
+// the A4 pagination (runPagination/updateVisibility) and PDF/Excel export keep
+// working with NO changes.
+//
+// All totals/counts are PRE-COMPUTED by the SQL adapter — nothing is recomputed
+// here. Leaf bodyRows are already SQL-ordered, so they are NOT re-sorted.
+// ===========================================================================
+
+function generateNestedReportFromTree(nestedData: NestedReport, metadata?: ReportMetadata): string {
+    const prefixMap = nestedData.fieldPrefix || {};
+    const suffixMap = nestedData.fieldSuffix || {};
+
+    // Title — same template as the flat generateTitleHeader (fed nestedData.title).
+    function generateTitleHeaderNested(mainHeading: string): string {
+        const scopeHtml = generateScopeSubheader(metadata);
+        return `
+      <div class="title-header">
+          <div></div>
+          <div>
+             <h1>${mainHeading}</h1>
+             <h2></h2>
+             ${scopeHtml}
+          </div>
+      </div>`;
+    }
+
+    // Section totals — mirrors the flat generateSectionTotals exactly
+    // (label-keyed Record<string, number> drops straight in).
+    function generateSectionTotalsNested(totals: Record<string, number>): string {
+        let html = '<div class="section-totals"><div class="totals-title">Totals</div><div class="totals-grid">';
+        for (const [field, total] of Object.entries(totals)) {
+            const trimmedField = field.trim();
+            const prefix = prefixMap[field] || prefixMap[trimmedField] || '';
+            const suffix = suffixMap[trimmedField] || '';
+            const formattedTotal = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            html += `
+          <div class="total-item">
+              <span class="total-label">Total ${field}:</span>
+              <span class="total-value">${prefix}${formattedTotal}${suffix}</span>
+          </div>`;
+        }
+        html += '</div></div>';
+        return html;
+    }
+
+    // Recursive group walker — emits the SAME subsummary block the flat
+    // generateNestedSubsummaries emits (template copied from flat lines ~964-974).
+    function walkNode(node: NestedGroupNode, level: number): string {
+        // Display row — mirrors the flat displayFields loop.
+        let displayInfo = '';
+        for (const [field, rawValue] of Object.entries(node.display ?? {})) {
+            const trimmedField = field.trim();
+            const prefix = prefixMap[field] || prefixMap[trimmedField] || '';
+            const suffix = suffixMap[trimmedField] || '';
+            const displayVal = (rawValue !== undefined && rawValue !== null) ? String(rawValue).trim() : '';
+            const hasData = displayVal !== '' && displayVal !== '--';
+            const fullVal = hasData ? `${prefix}${displayVal}${suffix}` : displayVal;
+            displayInfo += `<span class="display-item"><span class="display-label">${field}:</span> <span class="display-value">${fullVal}</span></span>`;
+        }
+
+        // Group header value — mirror the flat path's prefix/suffix + 'N/A' fallback.
+        // The group field's prefix/suffix is keyed by its label in fieldPrefix/Suffix.
+        const groupFieldPrefix = prefixMap[node.label] || prefixMap[node.label.trim()] || '';
+        const groupFieldSuffix = suffixMap[node.label.trim()] || '';
+        const trimmedGroupVal = (node.value !== undefined && node.value !== null) ? String(node.value).trim() : '';
+        const hasGroupData = trimmedGroupVal !== '' && trimmedGroupVal !== '--';
+        const fullGroupVal = hasGroupData ? `${groupFieldPrefix}${trimmedGroupVal}${groupFieldSuffix}` : (trimmedGroupVal || 'N/A');
+
+        // Content: either a body table (leaf) or recurse into children, plus totals.
+        let content = '';
+        if (node.bodyRows) {
+            // Leaf — render SQL-ordered rows directly (no re-sort).
+            const heading = `${node.label.trim()}-${trimmedGroupVal}`;
+            content += renderBodyTableHtml(node.bodyRows, nestedData.fieldOrder, {
+                prefixMap,
+                suffixMap,
+                tableHeading: heading,
+            });
+        } else if (node.children) {
+            for (const child of node.children) {
+                content += walkNode(child, level + 1);
+            }
+        }
+
+        const totalsHtml = (node.totals && Object.keys(node.totals).length > 0)
+            ? generateSectionTotalsNested(node.totals)
+            : '';
+
+        return `
+          <div class="subsummary level-${level}">
+              <h${level + 3} class="subsummary-header">
+                  <span class="field-name">${node.label.trim()}</span>: ${fullGroupVal}
+              </h${level + 3}>
+              ${displayInfo ? `<div class="subsummary-display">${displayInfo}</div>` : ''}
+              <div class="subsummary-content">
+                  ${content}
+                  ${totalsHtml}
+              </div>
+          </div>`;
+    }
+
+    // Grand total — same template as the flat generateTrailingSummary, fed the
+    // pre-computed nestedData.grandTotals / grandTotalFields (no recompute).
+    function generateTrailingSummaryNested(): string {
+        const fields = nestedData.grandTotalFields ?? [];
+        if (fields.length === 0) return '';
+
+        let html = '<div class="trailing-summary"><h3>Grand Total</h3><table>';
+        for (const field of fields) {
+            const trimmedField = field.trim();
+            const prefix = prefixMap[field] || prefixMap[trimmedField] || '';
+            const suffix = suffixMap[trimmedField] || '';
+            const total = nestedData.grandTotals?.[field] ?? 0;
+            const formattedTotal = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            html += `<tr><td>Total ${field}</td><td>${prefix}${formattedTotal}${suffix}</td></tr>`;
+        }
+        html += '</table></div>';
+        return html;
+    }
+
+    let reportHtml = '<div class="dynamic-report" id="dynamic-printable-report">';
+    reportHtml += `<div class="current-date">Date: ${new Date().toLocaleDateString()}</div>`;
+    reportHtml += generateTitleHeaderNested(nestedData.title);
+
+    for (const root of nestedData.groups ?? []) {
+        reportHtml += walkNode(root, 0);
+    }
+
+    reportHtml += generateTrailingSummaryNested();
+
+    reportHtml += '</div>';
+    return reportHtml;
 }

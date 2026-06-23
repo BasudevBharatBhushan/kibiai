@@ -90,21 +90,49 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: "setup_json is required" }, { status: 400 });
     }
 
-    // Validate required top-level keys
-    if (
-      !setup_json.host ||
-      !setup_json.data_fetching_protocol ||
-      typeof setup_json.tables !== "object" ||
-      !Array.isArray(setup_json.relationships)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Invalid setup_json structure. Must include: host, data_fetching_protocol, tables (object), relationships (array).",
-        },
-        { status: 422 }
-      );
+    // Source-aware validation: SQL setups and FM setups have different required keys.
+    // The FM branch is UNCHANGED from before — only wrapped in an else.
+    if (setup_json.data_source_type === "sql") {
+      // SQL setup validation
+      const hasConnectionType =
+        setup_json.connection_type === "sqlite" ||
+        (typeof setup_json.connection_type === "string" && setup_json.connection_type.length > 0);
+      const hasConnection =
+        setup_json.connection &&
+        typeof setup_json.connection === "object" &&
+        typeof (setup_json.connection as Record<string, unknown>).host === "string" &&
+        typeof (setup_json.connection as Record<string, unknown>).apiKey === "string";
+      const hasTables =
+        setup_json.tables && typeof setup_json.tables === "object";
+      const hasRelationships = Array.isArray(setup_json.relationships);
+
+      if (!hasConnectionType || !hasConnection || !hasTables || !hasRelationships) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Invalid SQL setup_json structure. Must include: connection_type (string), connection.host (string), connection.apiKey (string), tables (object), relationships (array).",
+          },
+          { status: 422 }
+        );
+      }
+    } else {
+      // FM validation — UNCHANGED
+      if (
+        !setup_json.host ||
+        !setup_json.data_fetching_protocol ||
+        typeof setup_json.tables !== "object" ||
+        !Array.isArray(setup_json.relationships)
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Invalid setup_json structure. Must include: host, data_fetching_protocol, tables (object), relationships (array).",
+          },
+          { status: 422 }
+        );
+      }
     }
 
     const adminClient = createAdminClient();

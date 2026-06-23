@@ -18,6 +18,7 @@ import { useToast } from "@/context/ToastContext";
 import { useHeader } from "@/context/HeaderContext";
 import { ModularChatbot } from "@/components/chat/ModularChatbot";
 import { REPORTS_SYSTEM_INSTRUCTION } from "@/constants/reportsSystemInstruction";
+import { SQL_REPORTS_SYSTEM_INSTRUCTION } from "@/constants/sqlReportsSystemInstruction";
 import { apiClient } from "@/utils/apiClient";
 import { sanitizeReportConfig } from "@/lib/utils/sanitizeReportConfig";
 import type { ClassicViewSettings } from "@/components/report-builder/ClassicViewSettingsSection";
@@ -388,7 +389,20 @@ function ConfiguratorPageContent({
             const structured = event.report_structure_json;
             if (structured) {
               setHasPreviewData(true);
-              dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+              // SQL collapsed engine also emits nested_report (NestedReport).
+              // When present, wrap both so ReportPreview can detect nested mode
+              // while still having the FM scaffold available.
+              if (event.nested_report) {
+                dispatch({
+                  type: "SET_REPORT_PREVIEW",
+                  payload: {
+                    report_structure_json: structured,
+                    nested_report: event.nested_report,
+                  },
+                });
+              } else {
+                dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+              }
               // Cache raw stitch rows so soft-reloads can re-run generateReportStructure client-side
               if (event.stitch_result) {
                 dispatch({ type: "SET_STITCH_RESULT", payload: event.stitch_result });
@@ -542,7 +556,11 @@ function ConfiguratorPageContent({
               autoInitialize={!hasPreviewData && !!state.setup}
               showAiSuggestions={true}
               showSetupCheckbox={true}
-              instructionSet={REPORTS_SYSTEM_INSTRUCTION}
+              instructionSet={
+                (state.setup as unknown as Record<string, unknown>)?.data_source_type === "sql"
+                  ? SQL_REPORTS_SYSTEM_INSTRUCTION
+                  : REPORTS_SYSTEM_INSTRUCTION
+              }
               setupPrompt={setupPrompt}
               configPrompt={configPrompt}
               formatPrompt={formatPrompt}
