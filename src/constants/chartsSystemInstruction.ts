@@ -116,7 +116,7 @@ NON-NEGOTIABLE DESIGN CONSTRAINTS
 
 2. DATE-AGNOSTIC TITLES: Never put specific dates, years, quarters, or time ranges in chart_title.
 
-3. EXCLUDE ZERO VALUES: Always add a filter to exclude rows where the numerical field is zero or empty, unless the user explicitly asks to include zero values or asks for "all" records. Use the filter format: "<numerical_field>: >0". For computed fields, apply the filter on the computed field name (e.g. "Amount Due: >0").
+3. ZERO VALUE FILTERING (OPTIONAL): Only exclude rows with zero/empty values if the user explicitly requests it (e.g., "omit zero values", "exclude blanks", "show only non-zero"). By default, include all rows to preserve data context for multi-field comparisons and tracking incomplete transactions. When filtering is requested, use the format: "<numerical_field>: >0". For computed fields, apply on the computed field name (e.g., "Amount Due: >0").
 
 4. NEVER HALLUCINATE FIELD NAMES: Every value in numerical_fields, group_field, subgroup_field, and target_field MUST be either:
    a) An exact field "name" or "Label" from the schema context provided to you, OR

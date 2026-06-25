@@ -96,7 +96,7 @@ export const PROMPT_INSTRUCTIONS = {
     - filters are REQUIRED
     - Always include:
       - "<subgroup_field>: notEmpty"
-      - "<numerical_field>: >0"
+    - DO NOT add zero-value filters unless the user explicitly requests them
     Return a SINGLE chart configuration JSON.
   `,
 } as const;
