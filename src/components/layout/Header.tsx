@@ -109,7 +109,7 @@ function CompactBreadcrumbs({
 // ── Header Component ─────────────────────────────────────────────────────────
 export default function Header() {
   const { company, isLoading: companyLoading } = useCompany();
-  const { breadcrumbs, headerActions } = useHeader();
+  const { breadcrumbs, headerActions, subtitle } = useHeader();
   const { isSuperAdmin } = useAccessControl();
   const params  = useParams();
   const router  = useRouter();
@@ -367,29 +367,36 @@ export default function Header() {
             {!pathname?.includes("/generate") && breadcrumbs.length > 0 && (
               <>
                 {/* Visible breadcrumbs — compact or full based on collision check */}
-                <div className="flex items-center overflow-hidden min-w-0">
-                  {compactBreadcrumbs ? (
-                    <CompactBreadcrumbs
-                      crumbs={breadcrumbs}
-                    />
-                  ) : (
-                    breadcrumbs.map((crumb, idx) => (
-                      <React.Fragment key={idx}>
-                        {idx > 0 && <ChevronRight className="mx-2 h-3 w-3 text-slate-300 shrink-0" />}
-                        {crumb.href ? (
-                          <Link
-                            href={crumb.href}
-                            className="text-[13px] font-medium text-slate-400 hover:text-blue-600 transition-colors whitespace-nowrap"
-                          >
-                            {crumb.label}
-                          </Link>
-                        ) : (
-                          <span className="text-[13px] font-semibold text-blue-600 whitespace-nowrap truncate max-w-[200px]">
-                            {crumb.label}
-                          </span>
-                        )}
-                      </React.Fragment>
-                    ))
+                <div className="flex flex-col justify-center overflow-hidden min-w-0">
+                  <div className="flex items-center overflow-hidden min-w-0">
+                    {compactBreadcrumbs ? (
+                      <CompactBreadcrumbs
+                        crumbs={breadcrumbs}
+                      />
+                    ) : (
+                      breadcrumbs.map((crumb, idx) => (
+                        <React.Fragment key={idx}>
+                          {idx > 0 && <ChevronRight className="mx-2 h-3 w-3 text-slate-300 shrink-0" />}
+                          {crumb.href ? (
+                            <Link
+                              href={crumb.href}
+                              className="text-[13px] font-medium text-slate-400 hover:text-blue-600 transition-colors whitespace-nowrap"
+                            >
+                              {crumb.label}
+                            </Link>
+                          ) : (
+                            <span className="text-[13px] font-semibold text-blue-600 whitespace-nowrap truncate max-w-[200px]">
+                              {crumb.label}
+                            </span>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </div>
+                  {subtitle && !collapsed && (
+                    <p className="text-[10px] italic text-slate-400 truncate max-w-[300px] mt-0.5 leading-none">
+                      {subtitle}
+                    </p>
                   )}
                 </div>
 

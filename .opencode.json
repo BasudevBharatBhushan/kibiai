@@ -1,8 +1,9 @@
 {
   "mcpServers": {
-    "code-review-graph": {
-      "command": "code-review-graph",
+    "graphify": {
+      "command": "npx",
       "args": [
+        "graphify",
         "serve"
       ],
       "type": "stdio",

@@ -107,7 +107,7 @@ function ConfiguratorPageContent({
 }) {
   const { state, dispatch } = useReport();
   const { addToast } = useToast();
-  const { setBreadcrumbs, setBackHref, setHeaderActions, resetHeader } = useHeader();
+  const { setBreadcrumbs, setBackHref, setHeaderActions, setSubtitle, resetHeader } = useHeader();
   const router = useRouter();
 
   const [isChatOpen, setIsChatOpen] = useState(true);
@@ -252,7 +252,10 @@ function ConfiguratorPageContent({
 
   // Separate unmount-only cleanup so breadcrumbs are NOT wiped on every toggle
   useLayoutEffect(() => {
-    return () => setHeaderActions(null);
+    return () => {
+      setHeaderActions(null);
+      setSubtitle(null);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -271,6 +274,7 @@ function ConfiguratorPageContent({
 
         const { data } = res;
         setTemplateName(data.template_name || "Configurator");
+        setSubtitle(data.template_name || null);
 
         if (!data.has_setup) {
           addToast("warning", "Setup Required", "Please complete the Setup Wizard first.");
@@ -314,11 +318,29 @@ function ConfiguratorPageContent({
         // Load existing preview directly from report_template_data_json when available.
         if (data.preview_data_json) {
           setHasPreviewData(true);
-          // Check if it's the new wrapped format with stitch_result
-          if (data.preview_data_json.report_structure_json) {
-            dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json.report_structure_json });
-            if (data.preview_data_json.stitch_result) {
-              dispatch({ type: "SET_STITCH_RESULT", payload: data.preview_data_json.stitch_result });
+          const pvd = data.preview_data_json as Record<string, unknown>;
+          // Check if it's the new wrapped format with report_structure_json
+          if (pvd.report_structure_json) {
+            // Reconstruct the SQL wrapper payload if nested_report was saved alongside
+            const previewPayload = pvd.nested_report
+              ? { report_structure_json: pvd.report_structure_json, nested_report: pvd.nested_report }
+              : pvd.report_structure_json;
+            dispatch({ type: "SET_REPORT_PREVIEW", payload: previewPayload });
+            if (pvd.stitch_result) {
+              dispatch({ type: "SET_STITCH_RESULT", payload: pvd.stitch_result });
+            }
+            // SQL grouped reports always load in collapsed mode — auto-set collapseBody
+            // so the toggle checkbox reflects the actual visual state on initial load.
+            if (
+              pvd.nested_report &&
+              Array.isArray((pvd.nested_report as Record<string, unknown>).groups) &&
+              ((pvd.nested_report as Record<string, unknown>).groups as unknown[]).length > 0
+            ) {
+              setClassicSettings((prev) => ({ ...prev, collapseBody: true }));
+              dispatch({
+                type: "UPDATE_CLASSIC_SETTINGS",
+                payload: { collapseBody: true },
+              });
             }
           } else {
             dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
@@ -338,7 +360,7 @@ function ConfiguratorPageContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
-  const fetchLivePreview = useCallback(async (configOverride?: any) => {
+  const fetchLivePreview = useCallback(async (configOverride?: any, confirmLarge = false) => {
     if (!templateId) return;
 
     dispatch({ type: "SET_PROCESSING_LOGS", payload: [] });
@@ -351,6 +373,7 @@ function ConfiguratorPageContent({
         body: JSON.stringify({
           persist_to_template: true,
           ...(configOverride ? { config_json: configOverride } : {}),
+          ...(confirmLarge ? { confirm_large: true } : {}),
         }),
       });
 
@@ -400,6 +423,19 @@ function ConfiguratorPageContent({
                     nested_report: event.nested_report,
                   },
                 });
+                // SQL grouped reports always load in collapsed mode (body rows are
+                // fetched on demand). Auto-set collapseBody so the toggle reflects
+                // the actual visual state from the start.
+                if (
+                  event.nested_report.groups &&
+                  event.nested_report.groups.length > 0
+                ) {
+                  setClassicSettings((prev) => ({ ...prev, collapseBody: true }));
+                  dispatch({
+                    type: "UPDATE_CLASSIC_SETTINGS",
+                    payload: { collapseBody: true },
+                  });
+                }
               } else {
                 dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
               }
@@ -408,6 +444,17 @@ function ConfiguratorPageContent({
                 dispatch({ type: "SET_STITCH_RESULT", payload: event.stitch_result });
               }
             }
+          } else if (event.type === "warn_large") {
+            reader.cancel();
+            dispatch({ type: "SET_LOADING", payload: false });
+            const rowCount: number = event.row_count ?? 0;
+            const confirmed = window.confirm(
+              `This report would return ${rowCount.toLocaleString()} rows which exceeds the 30,000-row preview limit.\n\nDo you want to load all rows anyway? This may take longer.`
+            );
+            if (confirmed) {
+              await fetchLivePreview(configOverride, true);
+            }
+            return;
           } else if (event.type === "error") {
             throw new Error(event.message || "Report generation failed.");
           }

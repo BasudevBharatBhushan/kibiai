@@ -52,11 +52,12 @@ export function ReportConfigurator({
   const slug = params?.company_slug as string | undefined;
   const templateId = params?.template_id as string | undefined;
   const abortRef = useRef<AbortController | null>(null);
+  const hardReloadRef = useRef<(confirmLarge?: boolean) => Promise<void>>();
 
   // ---------------------------------------------------------------------------
   // Hard reload: saves config to DB then re-fetches via SSE stream
   // ---------------------------------------------------------------------------
-  const hardReload = useCallback(async () => {
+  const hardReload = useCallback(async (confirmLarge = false) => {
     if (!state.templateId) return;
 
     // Cancel any previous in-flight stream
@@ -84,6 +85,7 @@ export function ReportConfigurator({
           body: JSON.stringify({
             persist_to_template: true,
             config_json: state.config,
+            ...(confirmLarge ? { confirm_large: true } : {}),
           }),
           signal: controller.signal,
         }
@@ -120,11 +122,46 @@ export function ReportConfigurator({
           } else if (event.type === "done") {
             const structured = event.report_structure_json;
             if (structured) {
-              dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+              // SQL engine also emits nested_report — wrap both so ReportPreview
+              // can detect nested mode while still having the FM scaffold.
+              if (event.nested_report) {
+                dispatch({
+                  type: "SET_REPORT_PREVIEW",
+                  payload: {
+                    report_structure_json: structured,
+                    nested_report: event.nested_report,
+                  },
+                });
+                // SQL grouped reports always load collapsed — auto-set collapseBody
+                // so the toggle reflects the actual visual state from the start.
+                if (
+                  event.nested_report.groups &&
+                  event.nested_report.groups.length > 0
+                ) {
+                  dispatch({
+                    type: "UPDATE_CLASSIC_SETTINGS",
+                    payload: { collapseBody: true },
+                  });
+                }
+              } else {
+                dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
+              }
             }
             // Snapshot the config so future soft reloads have a baseline
             dispatch({ type: "SET_LAST_GENERATED_CONFIG", payload: state.config });
             addToast("success", "Updated", "Configuration saved and preview updated.");
+          } else if (event.type === "warn_large") {
+            reader.cancel();
+            setIsSaving(false);
+            dispatch({ type: "SET_LOADING", payload: false });
+            const rowCount: number = event.row_count ?? 0;
+            const confirmed = window.confirm(
+              `This report would return ${rowCount.toLocaleString()} rows which exceeds the 30,000-row preview limit.\n\nDo you want to load all rows anyway? This may take longer.`
+            );
+            if (confirmed) {
+              await hardReloadRef.current?.(true);
+            }
+            return;
           } else if (event.type === "error") {
             throw new Error(event.message || "Report generation failed.");
           }
@@ -140,6 +177,8 @@ export function ReportConfigurator({
       dispatch({ type: "SET_LOADING", payload: false });
     }
   }, [state.templateId, state.config, dispatch, addToast]);
+
+  hardReloadRef.current = hardReload;
 
   // ---------------------------------------------------------------------------
   // Soft reload: re-renders preview client-side without hitting the backend

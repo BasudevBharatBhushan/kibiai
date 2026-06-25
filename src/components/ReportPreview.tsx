@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useRef } from "react";
 import { useReport } from "@/context/ReportContext";
+import { useHeader } from "@/context/HeaderContext";
 import DynamicReport from "@/components/DynamicReportPreview";
 import { ClassicReportView } from "@/components/report-viewer/ClassicReportView";
 import type { DrillRequest, DrillResult } from "@/components/report-viewer/ClassicReportView";
@@ -54,6 +55,151 @@ interface SqlExpandApiResponse {
   error?: string;
 }
 
+// ---------------------------------------------------------------------------
+// FlatRowTable — renders a plain scrollable table for no-group expand_all results.
+// Caps display pool at FLAT_ROW_DISPLAY_LIMIT rows; paginates within that pool
+// when paginate=true.
+// ---------------------------------------------------------------------------
+// Matches the DB-level LARGE_ROW_THRESHOLD — all fetched rows go into the pool.
+// Pagination (100 rows/page) keeps rendering fast even at this size.
+const FLAT_ROW_DISPLAY_LIMIT = 30_000;
+const FLAT_PAGE_SIZE = 100;
+
+function FlatRowTable({
+  rows,
+  fieldOrder,
+  totalRowCount,
+  paginate = false,
+  title,
+}: {
+  rows: Record<string, unknown>[];
+  fieldOrder: string[];
+  totalRowCount?: number;
+  paginate?: boolean;
+  title?: string;
+}) {
+  const [page, setPage] = useState(0);
+
+  const columns = fieldOrder.length > 0 ? fieldOrder : Object.keys(rows[0] ?? {});
+  // The pool is capped at FLAT_ROW_DISPLAY_LIMIT for browser performance.
+  const pool = rows.slice(0, FLAT_ROW_DISPLAY_LIMIT);
+  // dbTotal is the real count from the DB COUNT query (before any LIMIT).
+  const dbTotal = totalRowCount ?? rows.length;
+  // Any rows beyond the pool are truncated server-side or display-side.
+  const anyCapped = dbTotal > pool.length;
+
+  const totalPages = paginate ? Math.max(1, Math.ceil(pool.length / FLAT_PAGE_SIZE)) : 1;
+  // Reset to page 0 if pool changes (new report generated).
+  const safePageIndex = Math.min(page, totalPages - 1);
+  const pageRows = paginate
+    ? pool.slice(safePageIndex * FLAT_PAGE_SIZE, (safePageIndex + 1) * FLAT_PAGE_SIZE)
+    : pool;
+
+  const rowStart = paginate ? safePageIndex * FLAT_PAGE_SIZE + 1 : 1;
+  const rowEnd = paginate ? Math.min((safePageIndex + 1) * FLAT_PAGE_SIZE, pool.length) : pool.length;
+
+  const countLabel = anyCapped
+    ? `Showing ${pool.length.toLocaleString()} of ${dbTotal.toLocaleString()} total rows`
+    : `${pool.length.toLocaleString()} rows`;
+
+  return (
+    <div className="w-full bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden min-h-[600px] flex flex-col">
+      {/* Header bar — all info + pagination + export icon */}
+      <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center gap-3 shrink-0">
+        {/* Left: record counts */}
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className="text-xs font-semibold text-slate-700">
+            {title ? `${title} · ` : ""}{dbTotal.toLocaleString()} records
+          </span>
+          {anyCapped && (
+            <span className="text-[10px] text-amber-600 font-medium mt-0.5">
+              Only {pool.length.toLocaleString()} loaded for preview — export Excel for the full dataset
+            </span>
+          )}
+        </div>
+
+        {/* Center: pagination controls */}
+        {paginate && totalPages > 1 && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={safePageIndex === 0}
+              className="px-2 py-1 text-xs rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ‹ Prev
+            </button>
+            <span className="text-xs text-slate-600 font-medium tabular-nums px-1">
+              {safePageIndex + 1} / {totalPages}
+              <span className="text-slate-400 font-normal ml-1">({rowStart.toLocaleString()}–{rowEnd.toLocaleString()})</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={safePageIndex === totalPages - 1}
+              className="px-2 py-1 text-xs rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next ›
+            </button>
+          </div>
+        )}
+
+        {/* Right: export icon button */}
+        {anyCapped && (
+          <button
+            type="button"
+            disabled
+            title="Export full data to Excel (coming soon)"
+            className="p-1.5 rounded-lg border border-slate-300 bg-white text-slate-500 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 hover:bg-slate-50"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* Scrollable table */}
+      <div className="overflow-auto flex-1">
+        <table className="w-full text-xs border-collapse">
+          <thead className="sticky top-0 z-10">
+            <tr>
+              {columns.map((col) => (
+                <th
+                  key={col}
+                  className="bg-slate-800 text-slate-50 px-3 py-2 text-left font-semibold border border-slate-700 whitespace-nowrap text-xs"
+                >
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.map((row, i) => (
+              <tr
+                key={i}
+                className={(safePageIndex * FLAT_PAGE_SIZE + i) % 2 === 0 ? "bg-white" : "bg-slate-50"}
+              >
+                {columns.map((col) => (
+                  <td
+                    key={col}
+                    className="px-3 py-2 border border-slate-200 text-slate-700 text-xs break-words"
+                    title={String(row[col] ?? "")}
+                  >
+                    {String(row[col] ?? "")}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 interface ReportPreviewProps {
   /** Optional pre-built metadata. When omitted, metadata is derived from ReportContext. */
   metadata?: ReportMetadata;
@@ -76,6 +222,7 @@ export function ReportPreview({
   activeFilters = {},
 }: ReportPreviewProps = {}) {
   const { state } = useReport();
+  const { subtitle: templateName } = useHeader();
   const rawData: unknown = state.reportPreview;
 
   const configToUse = state.lastGeneratedConfig || state.config;
@@ -161,8 +308,12 @@ export function ReportPreview({
     );
   }
 
-  // In nested mode with no groups, show empty state.
+  // In nested mode with no groups, show flat table when rows exist, else empty state.
   if (isNested && (!nestedData || nestedData.groups.length === 0)) {
+    const flatRows = nestedData?.flatRows;
+    if (flatRows && flatRows.length > 0) {
+      return <FlatRowTable rows={flatRows} fieldOrder={nestedData?.fieldOrder ?? []} totalRowCount={nestedData?.totalRowCount} paginate={classicSettings?.paginate ?? false} title={templateName ?? nestedData?.title} />;
+    }
     return (
       <div className="flex items-center justify-center h-full text-slate-400 bg-white border border-slate-200 min-h-[600px]">
         No preview data available or data is empty.

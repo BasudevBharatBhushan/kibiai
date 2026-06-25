@@ -14,6 +14,8 @@ interface HeaderContextType {
   setBackHref: (href: string | null) => void;
   headerActions: ReactNode;
   setHeaderActions: (node: ReactNode) => void;
+  subtitle: string | null;
+  setSubtitle: (text: string | null) => void;
   resetHeader: () => void;
 }
 
@@ -23,6 +25,7 @@ export function HeaderProvider({ children }: { children: ReactNode }) {
   const [breadcrumbs, setBreadcrumbsState] = useState<BreadcrumbItem[]>([]);
   const [backHref, setBackHrefState] = useState<string | null>(null);
   const [headerActions, setHeaderActionsState] = useState<ReactNode>(null);
+  const [subtitle, setSubtitleState] = useState<string | null>(null);
 
   const setBreadcrumbs = useCallback((items: BreadcrumbItem[]) => {
     setBreadcrumbsState(items);
@@ -36,14 +39,19 @@ export function HeaderProvider({ children }: { children: ReactNode }) {
     setHeaderActionsState(node);
   }, []);
 
+  const setSubtitle = useCallback((text: string | null) => {
+    setSubtitleState(text);
+  }, []);
+
   const resetHeader = useCallback(() => {
     setBreadcrumbsState([]);
     setBackHrefState(null);
     setHeaderActionsState(null);
+    setSubtitleState(null);
   }, []);
 
   return (
-    <HeaderContext.Provider value={{ breadcrumbs, setBreadcrumbs, backHref, setBackHref, headerActions, setHeaderActions, resetHeader }}>
+    <HeaderContext.Provider value={{ breadcrumbs, setBreadcrumbs, backHref, setBackHref, headerActions, setHeaderActions, subtitle, setSubtitle, resetHeader }}>
       {children}
     </HeaderContext.Provider>
   );

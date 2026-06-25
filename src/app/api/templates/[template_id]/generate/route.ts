@@ -3,6 +3,7 @@ import { getSession } from "@/utils/auth";
 import { createAdminClient } from "@/utils/supabase/server";
 import { sanitizeJsonForPostgres } from "@/lib/utils/sanitizeJsonForPostgres";
 import { z } from "zod";
+import type { NestedReport } from "@/lib/sql/structureAdapter";
 
 // ── Zod Schema ────────────────────────────────────────────────────────────────
 const generateBodySchema = z.object({
@@ -120,17 +121,28 @@ export async function POST(
       ? `${baseUrl}/api/sql-report/generate`
       : `${baseUrl}/api/generate-report`;
 
+    const sqlGroupCount = isSql
+      ? Object.keys((configJson as Record<string, unknown>)?.group_by_fields ?? {}).length
+      : 0;
+    const sqlViewMode = sqlGroupCount > 0 ? "collapsed" : "expand_all";
+
     const engineBody = isSql
       ? JSON.stringify({
           report_setup: setupJson,
           report_config: configJson,
-          view_mode: "collapsed",
+          view_mode: sqlViewMode,
         })
       : JSON.stringify({ report_setup: setupJson, report_config: configJson });
 
+    // Forward the session cookie so the engine route can authenticate.
+    const cookieHeader = req.headers.get("cookie") ?? "";
+
     const engineRes = await fetch(engineUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+      },
       body: engineBody,
     });
 
@@ -156,7 +168,11 @@ export async function POST(
       );
     }
 
-    if (!engineResult.report_structure_json) {
+    // SQL reports (nested !== null) always return report_structure_json from the engine.
+    // For non-SQL (FM) reports, require report_structure_json.
+    const nestedReport: NestedReport | null = (engineResult.nested as NestedReport) ?? null;
+
+    if (!engineResult.report_structure_json && !nestedReport) {
       console.error("[generate] engine result error: missing report_structure_json");
       return NextResponse.json(
         { success: false, error: engineResult.detail || engineResult.error || "Engine returned no report data." },
@@ -164,8 +180,23 @@ export async function POST(
       );
     }
 
-    const reportStructureJson = sanitizeJsonForPostgres(engineResult.report_structure_json);
+    const reportStructureJson = sanitizeJsonForPostgres(
+      engineResult.report_structure_json ?? []
+    );
     const persistedConfigJson = sanitizeJsonForPostgres(configJson);
+
+    // Cap flat SQL reports (no groups, flatRows present) to 3000 rows.
+    const nestedToSave: NestedReport | null = (() => {
+      if (!nestedReport) return null;
+      if (
+        nestedReport.flatRows &&
+        nestedReport.groups.length === 0 &&
+        nestedReport.flatRows.length > 3000
+      ) {
+        return { ...nestedReport, flatRows: nestedReport.flatRows.slice(0, 3000) };
+      }
+      return nestedReport;
+    })();
 
     // 6. Extract report heading from TitleHeader for use as report name
     const titleHeaderItem = Array.isArray(reportStructureJson)
@@ -194,13 +225,17 @@ export async function POST(
     let savedReportId: string | null = null;
     let savedVersionId: string | null = null;
 
+    const templateDataToSave = nestedToSave
+      ? { report_structure_json: reportStructureJson, nested_report: nestedToSave }
+      : reportStructureJson;
+
     if (persist_to_template) {
       // ── ADMIN CONFIGURATOR: persist preview + create a template version ──────
       const { data: updatedTemplate, error: updateError } = await supabase
         .from("report_templates")
         .update({
           report_template_config_json: persistedConfigJson,
-          report_template_data_json: reportStructureJson,
+          report_template_data_json: templateDataToSave,
           updated_on: new Date().toISOString(),
         })
         .eq("report_template_id", template_id)
@@ -234,7 +269,7 @@ export async function POST(
           company_id: targetCompanyId,
           version_number: nextVersion,
           config_json: persistedConfigJson,
-          preview_data_json: reportStructureJson,
+          preview_data_json: templateDataToSave,
           changed_by_user_id: generatedByUserId,
         })
         .select("version_id")
@@ -247,10 +282,14 @@ export async function POST(
       }
     } else {
       // ── USER GENERATE: create a reports record (history) ───────────────────
+      const userGenerateTemplateData = nestedToSave
+        ? { report_structure_json: reportStructureJson, stitch_result: null, nested_report: nestedToSave }
+        : reportStructureJson;
+
       const { data: updatedTemplate, error: updateTemplateError } = await supabase
         .from("report_templates")
         .update({
-          report_template_data_json: reportStructureJson,
+          report_template_data_json: userGenerateTemplateData,
           updated_on: new Date().toISOString(),
         })
         .eq("report_template_id", template_id)
@@ -266,6 +305,10 @@ export async function POST(
         );
       }
 
+      const reportDataToSave = nestedToSave
+        ? { report_structure_json: reportStructureJson, nested_report: nestedToSave }
+        : reportStructureJson;
+
       const { data: saved, error: saveError } = await supabase
         .from("reports")
         .insert({
@@ -273,7 +316,7 @@ export async function POST(
           report_template_id: template_id,
           report_name: reportHeading,
           report_config_json: persistedConfigJson,
-          report_data_json: reportStructureJson,
+          report_data_json: reportDataToSave,
           generated_by_user_id: generatedByUserId,
         })
         .select("report_id")

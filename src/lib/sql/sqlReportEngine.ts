@@ -355,7 +355,12 @@ async function runExpandAll(
   logs.push(`[${viewMode}] Row count: ${rowCount}`);
 
   // ── Step 2: 30k guard ─────────────────────────────────────────────────────
-  if (rowCount > LARGE_ROW_THRESHOLD && !confirmLarge) {
+  // Flat reports (no groups) are always capped at LARGE_ROW_THRESHOLD at the
+  // query level (Step 4), so there is no need to warn or prompt the user.
+  // Grouped expand_all / print reports keep the existing warn → confirm flow.
+  const isFlatReport = numLevels === 0;
+
+  if (!isFlatReport && rowCount > LARGE_ROW_THRESHOLD && !confirmLarge) {
     logs.push(
       `[${viewMode}] Row count ${rowCount} exceeds threshold ${LARGE_ROW_THRESHOLD}; returning warn_large:true`,
     );
@@ -367,9 +372,15 @@ async function runExpandAll(
     };
   }
 
-  if (rowCount > LARGE_ROW_THRESHOLD) {
+  if (!isFlatReport && rowCount > LARGE_ROW_THRESHOLD) {
     logs.push(
       `[${viewMode}] Row count ${rowCount} exceeds threshold but confirmLarge=true; proceeding`,
+    );
+  }
+
+  if (isFlatReport && rowCount > LARGE_ROW_THRESHOLD) {
+    logs.push(
+      `[${viewMode}] Flat report: ${rowCount} total rows — capping detail query at ${LARGE_ROW_THRESHOLD}; grand totals reflect full dataset`,
     );
   }
 
@@ -406,9 +417,17 @@ async function runExpandAll(
   }
 
   // ── Step 4: full detail query (no group filter) ────────────────────────────
+  // For flat reports, cap at LARGE_ROW_THRESHOLD at the DB level so we never
+  // pull an unbounded result set. Grand totals remain correct because they come
+  // from buildGrandSummaryQuery (Step 5) which has no limit.
   let detailQuery;
   try {
-    detailQuery = buildDetailQuery(config, setup);
+    detailQuery = buildDetailQuery(
+      config,
+      setup,
+      undefined,
+      isFlatReport ? LARGE_ROW_THRESHOLD : undefined,
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -463,6 +482,7 @@ async function runExpandAll(
     levelRows,
     detailResult.rows,
     grandRow,
+    rowCount,
   );
   logs.push(`[${viewMode}] Expanded nested report assembled (${nested.groups.length} root group(s))`);
 

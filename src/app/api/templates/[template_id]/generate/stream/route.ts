@@ -3,6 +3,7 @@ import { getSession } from "@/utils/auth";
 import { createAdminClient } from "@/utils/supabase/server";
 import { sanitizeJsonForPostgres } from "@/lib/utils/sanitizeJsonForPostgres";
 import { z } from "zod";
+import type { NestedReport } from "@/lib/sql/structureAdapter";
 
 export const maxDuration = 300; // Vercel Pro max; set to 800 only on Enterprise
 
@@ -17,6 +18,7 @@ const streamBodySchema = z.object({
   report_header: z.string().optional(),
   persist_to_template: z.boolean().optional(), // true = admin configurator update
   config_json: z.record(z.string(), z.any()).optional(),
+  confirm_large: z.boolean().optional(), // user opted-in to fetch >30k rows
 });
 
 // ── Helper: encode a single SSE frame ─────────────────────────────────────────
@@ -61,7 +63,7 @@ export async function POST(
     return new Response(JSON.stringify({ error: parsedBody.error.message }), { status: 400 });
   }
 
-  const { runtime_filters, report_header, persist_to_template, config_json } = parsedBody.data;
+  const { runtime_filters, report_header, persist_to_template, config_json, confirm_large } = parsedBody.data;
 
   // 3. Fetch template from Supabase (company-scoped for regular users only)
   const supabase = createAdminClient();
@@ -161,17 +163,32 @@ export async function POST(
           ? `${baseUrl}/api/sql-report/generate`
           : `${baseUrl}/api/generate-report`;
 
+        // For SQL reports: use "collapsed" when groups are defined, otherwise fall
+        // back to "expand_all" so flat configs (no group_by_fields) still return rows.
+        const sqlGroupCount = isSql
+          ? Object.keys((configJson as Record<string, unknown>)?.group_by_fields ?? {}).length
+          : 0;
+        const sqlViewMode = sqlGroupCount > 0 ? "collapsed" : "expand_all";
+
         const engineBody = isSql
           ? JSON.stringify({
               report_setup: setupJson,
               report_config: configJson,
-              view_mode: "collapsed",
+              view_mode: sqlViewMode,
+              confirm_large: confirm_large ?? false,
             })
           : JSON.stringify({ report_setup: setupJson, report_config: configJson });
 
+        // Forward the session cookie so the engine route can authenticate.
+        // Without this, server-side fetch has no cookies and getSession() returns null.
+        const cookieHeader = req.headers.get("cookie") ?? "";
+
         const engineRes = await fetch(engineUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+          },
           body: engineBody,
         });
 
@@ -183,6 +200,17 @@ export async function POST(
 
         const engineResult = await engineRes.json();
 
+        // SQL expand_all: when row count exceeds 30k, send a warn_large event so the
+        // client can offer the user a "View anyway" option instead of hard-erroring.
+        if (isSql && engineResult.warn_large) {
+          const count: number = engineResult.row_count ?? 0;
+          enqueue(sseEvent("warn_large", {
+            row_count: count,
+            message: `This report would return ${count.toLocaleString()} rows which exceeds the 30,000-row preview limit.`,
+          }));
+          return;
+        }
+
         // Both FM and SQL engines use status === 'ok'; require report_structure_json.
         if (engineResult.status !== "ok" || !engineResult.report_structure_json) {
           throw new Error(engineResult.detail || engineResult.error || "Engine returned no report data.");
@@ -193,7 +221,7 @@ export async function POST(
         const stitch_result = engineResult.stitch_result ?? null; // cached for client-side soft reloads
         // SQL collapsed engine also emits a nested NestedReport payload.
         // Pass it through so ReportPreview can detect and wire the nested viewer.
-        const nested_report = engineResult.nested ?? null;
+        const nested_report: NestedReport | null = (engineResult.nested as NestedReport) ?? null;
         const persistedConfigJson = sanitizeJsonForPostgres(configJson);
 
         // Replay the processing_logs progressively
@@ -214,6 +242,25 @@ export async function POST(
 
         let savedRecordId: string | null = null;
 
+        // For SQL reports, build a wrapper object that includes both
+        // report_structure_json and nested_report so reload can restore the full state.
+        // Cap flat SQL reports (no groups, flatRows present) to 3000 rows.
+        const nestedToSave: NestedReport | null = (() => {
+          if (!nested_report) return null;
+          if (
+            nested_report.flatRows &&
+            nested_report.groups.length === 0 &&
+            nested_report.flatRows.length > 3000
+          ) {
+            return { ...nested_report, flatRows: nested_report.flatRows.slice(0, 3000) };
+          }
+          return nested_report;
+        })();
+
+        const templateDataToSave = nestedToSave
+          ? { report_structure_json, nested_report: nestedToSave }
+          : report_structure_json;
+
         if (persist_to_template) {
           // ── ADMIN CONFIGURATOR: persist preview + create a template version ──
           // 1. Update the template preview data
@@ -221,7 +268,7 @@ export async function POST(
             .from("report_templates")
             .update({
               report_template_config_json: persistedConfigJson,
-              report_template_data_json: report_structure_json,
+              report_template_data_json: templateDataToSave,
               updated_on: new Date().toISOString(),
             })
             .eq("report_template_id", template_id)
@@ -253,7 +300,7 @@ export async function POST(
               company_id: targetCompanyId,
               version_number: nextVersion,
               config_json: persistedConfigJson,
-              preview_data_json: report_structure_json,
+              preview_data_json: templateDataToSave,
               changed_by_user_id: generatedByUserId,
             })
             .select("version_id")
@@ -275,13 +322,14 @@ export async function POST(
           }));
         } else {
           // ── USER GENERATE: create a reports record ──────────────────────────
+          const userGenerateTemplateData = nestedToSave
+            ? { report_structure_json, stitch_result, nested_report: nestedToSave }
+            : { report_structure_json, stitch_result };
+
           const { data: persistedTemplate, error: persistTemplateError } = await supabase
             .from("report_templates")
             .update({
-              report_template_data_json: {
-                report_structure_json,
-                stitch_result,
-              },
+              report_template_data_json: userGenerateTemplateData,
               updated_on: new Date().toISOString(),
             })
             .eq("report_template_id", template_id)
@@ -294,6 +342,10 @@ export async function POST(
             throw new Error(persistTemplateError?.message || "Failed to save generated report data to template.");
           }
 
+          const reportDataToSave = nestedToSave
+            ? { report_structure_json, nested_report: nestedToSave }
+            : report_structure_json;
+
           const { data: saved, error: saveError } = await supabase
             .from("reports")
             .insert({
@@ -301,7 +353,7 @@ export async function POST(
               report_template_id: template_id,
               report_name: reportHeading,
               report_config_json: persistedConfigJson,
-              report_data_json: report_structure_json,
+              report_data_json: reportDataToSave,
               generated_by_user_id: generatedByUserId,
             })
             .select("report_id")

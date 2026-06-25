@@ -183,6 +183,19 @@ export interface NestedReport {
   grandTotalFields: string[];
   /** Total row count across all groups. */
   grandTotalCount: number;
+  /**
+   * Flat (no-group) rows — populated when totalLevels === 0 and the report
+   * has no group_by_fields.  Rows are already label-keyed (same keys as
+   * fieldOrder).  When present, the UI should render a plain table instead
+   * of the nested group tree.
+   */
+  flatRows?: Record<string, unknown>[];
+  /**
+   * Full DB-level row count for the query (before any LIMIT).  Set by the
+   * engine for flat reports so the UI can show "Showing X of Y rows" even
+   * when flatRows is capped.
+   */
+  totalRowCount?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -988,6 +1001,7 @@ export function buildExpandedNestedReport(
   levelRows: Record<string, unknown>[][],
   detailRows: Record<string, unknown>[],
   grandRow: Record<string, unknown> | null,
+  totalRowCount?: number,
 ): NestedReport {
   // ── 1. Build the group tree (headers + totals) exactly like collapsed mode ──
   const roots = buildNestedGroupTree(config, setup, levelRows);
@@ -1011,6 +1025,17 @@ export function buildExpandedNestedReport(
     const aliasLabelMap = buildAliasLabelMap(setup);
     const fullAliasToLabel = buildFullAliasToLabelMap(config, aliasLabelMap);
     distributeRowsToLeaves(report.groups, groups, [], fullAliasToLabel, totalLevels);
+  } else if (detailRows.length > 0) {
+    // No group levels — the full result is a flat table.  Map alias keys to
+    // human-readable labels and store on the report so the UI can render a
+    // plain table instead of the (empty) group tree.
+    const aliasLabelMap = buildAliasLabelMap(setup);
+    const fullAliasToLabel = buildFullAliasToLabelMap(config, aliasLabelMap);
+    report.flatRows = detailRows.map((row) => mapAliasRowToLabels(row, fullAliasToLabel));
+  }
+
+  if (totalRowCount !== undefined) {
+    report.totalRowCount = totalRowCount;
   }
 
   return report;

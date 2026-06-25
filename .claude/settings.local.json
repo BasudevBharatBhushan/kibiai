@@ -12,14 +12,15 @@
       "Bash(git checkout *)",
       "Bash(npx eslint *)",
       "mcp__supabase__get_project_url",
-      "mcp__supabase__list_tables"
+      "mcp__supabase__list_tables",
+      "Bash(npx graphify *)",
+      "Bash(kill %1)",
+      "Bash(npm view *)"
     ]
   },
-  "enableAllProjectMcpServers": true,
+  "enableAllProjectMcpServers": false,
   "enabledMcpjsonServers": [
+    "graphify",
     "supabase"
-  ],
-  "disabledMcpjsonServers": [
-    "code-review-graph"
   ]
 }

@@ -464,11 +464,16 @@ export function ClassicReportView({
   // ── Collapse state ────────────────────────────────────────────────────────
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  // Reset per-group overrides whenever the global collapseBody default changes.
+  // Using useEffect instead of a render-time setState avoids React strict mode
+  // warnings about updating state during render.
   const prevCollapseBody = React.useRef(collapseBody);
-  if (prevCollapseBody.current !== collapseBody) {
-    prevCollapseBody.current = collapseBody;
-    setCollapsedGroups(new Set());
-  }
+  useEffect(() => {
+    if (prevCollapseBody.current !== collapseBody) {
+      prevCollapseBody.current = collapseBody;
+      setCollapsedGroups(new Set());
+    }
+  }, [collapseBody]);
 
   const isCollapsed = useCallback(
     (id: string) => {
