@@ -743,7 +743,12 @@ export function ClassicReportView({
     const walk = (nodes: NestedGroupNode[], level: number, parentId: string) => {
       for (const node of nodes) {
         const labelStr = String(node.value ?? "").trim() || "(blank)";
-        const groupId = `${parentId}|${node.field}:${labelStr}`;
+        // Use the raw DB value (groupKeyValue) as the filter key encoded in
+        // groupId so that when the user drills down the WHERE clause receives
+        // the same value the SQL engine produced (e.g. "2024-01-15" ISO date),
+        // not the human-formatted display string (e.g. "01/15/2024").
+        const filterVal = String(node.groupKeyValue ?? node.value ?? "").trim() || "(blank)";
+        const groupId = `${parentId}|${node.field}:${filterVal}`;
         const hasChildren = !!node.children && node.children.length > 0;
         const hasBodyRows = !!node.bodyRows && node.bodyRows.length > 0;
         const drillState = drilledGroups.get(groupId);
