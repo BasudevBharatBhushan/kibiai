@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
     view_mode,
     group_path,
     confirm_large,
+    group_offset,
+    group_limit,
   } = body as Record<string, unknown>;
 
   // 3. Validate required fields
@@ -122,6 +124,8 @@ export async function POST(req: NextRequest) {
       groupPath: resolvedGroupPath,
       confirmLarge:
         confirm_large === true || confirm_large === "true" ? true : undefined,
+      groupOffset: typeof group_offset === "number" ? group_offset : undefined,
+      groupLimit: typeof group_limit === "number" ? group_limit : undefined,
     });
 
     // 9. Return envelope matching what the orchestration routes expect.
@@ -138,6 +142,7 @@ export async function POST(req: NextRequest) {
         // group_rows is present for drilldown mode when warn_large is false.
         group_rows: result.group_rows ?? null,
         processing_logs: result.processing_logs,
+        sql_steps: result.sql_steps,
       },
       { status: 200 }
     );

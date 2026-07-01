@@ -48,6 +48,11 @@ interface ClassicReportViewProps {
   nestedData?: NestedReport;
   /** Async drill-down handler invoked for collapsed drillable leaf groups (nested mode). */
   onDrillDown?: (req: DrillRequest) => Promise<DrillResult>;
+  /** Group pagination info for capped nested SQL reports. */
+  groupCountInfo?: { label: string; loaded: number; total: number; capped: boolean };
+  /** Triggered when the user clicks "Load more groups". */
+  onLoadMore?: () => void;
+  loadMoreLoading?: boolean;
 }
 
 interface SubsummaryDef {
@@ -92,7 +97,10 @@ function fmtCell(
   const s = String(raw).trim();
   if (s === "" || s === "--") return s;
   const num = parseFloat(s);
-  if (!isNaN(num) && (prefix === "$" || /total|sum|price|cost|amount/i.test(field))) {
+  // Apply 2-decimal formatting when the field has any prefix/suffix (currency,
+  // percentage, etc.) — these come from the setup definition and only appear on
+  // explicitly typed numeric fields. Also cover name-pattern fallback for FM flat mode.
+  if (!isNaN(num) && isFinite(num) && (prefix !== "" || suffix !== "" || /total|sum|price|cost|amount/i.test(field))) {
     return (
       prefix +
       num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
@@ -293,6 +301,9 @@ export function ClassicReportView({
   mode = "flat",
   nestedData,
   onDrillDown,
+  groupCountInfo,
+  onLoadMore,
+  loadMoreLoading = false,
 }: ClassicReportViewProps) {
   const isNested = mode === "nested" && !!nestedData;
   // ── Parse JSON structure ──────────────────────────────────────────────────
@@ -492,36 +503,91 @@ export function ClassicReportView({
     });
   }, []);
 
-  // ── Drill-down state ──────────────────────────────────────────────────────
+  // ── Flat-mode drill modal (nested mode uses inline expansion instead) ────────
   const [drillModal, setDrillModal] = useState<{
     title: string;
     rows: Record<string, unknown>[];
     totalFields: string[];
-    /** Nested mode only: per-drill field order, totals, loading and error states. */
     fieldOrder?: string[];
     totals?: Record<string, number>;
     loading?: boolean;
     error?: string;
   } | null>(null);
 
-  // Monotonic token to ignore stale async drill results (e.g. user re-clicks).
-  const drillReqId = React.useRef(0);
+  // ── Nested-mode inline drill state ───────────────────────────────────────────
+  // Keyed by groupId. Tracks loading / loaded / error for each drilled group.
+  type DrillState = {
+    loading: boolean;
+    rows: Record<string, unknown>[];
+    fieldOrder: string[];
+    totals: Record<string, number>;
+    totalFields: string[];
+    error?: string;
+  };
+  const [drilledGroups, setDrilledGroups] = React.useState<Map<string, DrillState>>(
+    () => new Map()
+  );
 
-  // ── Nested-mode async drill-down ────────────────────────────────────────────
-  // Reconstructs groupPath from groupId ("root|field:label|field:label"),
-  // optionally confirms for very large groups, then fetches detail rows.
-  const handleNestedDrill = useCallback(
-    async (groupId: string, count: number, title: string, totalFields: string[]) => {
+  // Reset inline-drilled rows whenever the underlying nested data changes
+  // (new report generated).
+  const prevNestedDataRef = React.useRef(nestedData);
+  if (prevNestedDataRef.current !== nestedData) {
+    prevNestedDataRef.current = nestedData;
+    if (drilledGroups.size > 0) setDrilledGroups(new Map());
+  }
+
+  // ── Nested-mode inline drill handler (kept for skeleton retry button) ────────
+  const handleDrillInline = useCallback(
+    async (groupId: string, count: number, totalFields: string[]) => {
+      if (!onDrillDown) return;
+      const groupPath = groupId
+        .split("|")
+        .slice(1)
+        .map((seg) => {
+          const idx = seg.indexOf(":");
+          return idx === -1
+            ? { field: seg, label: "" }
+            : { field: seg.slice(0, idx), label: seg.slice(idx + 1) };
+        });
+      setDrilledGroups((prev) => {
+        const next = new Map(prev);
+        next.set(groupId, { loading: true, rows: [], fieldOrder: [], totals: {}, totalFields });
+        return next;
+      });
+      if (isCollapsed(groupId)) toggleGroup(groupId);
+      try {
+        const result = await onDrillDown({ groupPath, count });
+        setDrilledGroups((prev) => {
+          const next = new Map(prev);
+          next.set(groupId, { loading: false, rows: result.bodyRows, fieldOrder: result.fieldOrder, totals: result.totals, totalFields: result.totalFields });
+          return next;
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to load records.";
+        setDrilledGroups((prev) => {
+          const next = new Map(prev);
+          next.set(groupId, { loading: false, rows: [], fieldOrder: [], totals: {}, totalFields, error: message });
+          return next;
+        });
+      }
+    },
+    [onDrillDown, isCollapsed, toggleGroup]
+  );
+
+  // ── Nested-mode modal drill handler ──────────────────────────────────────────
+  // Opens the shared DrillModal with a loading spinner immediately, fetches rows
+  // via onDrillDown, then populates the modal — same UX as flat (FM) mode.
+  const handleDrillModal = useCallback(
+    async (groupId: string, title: string, count: number, totalFields: string[]) => {
       if (!onDrillDown) return;
 
       if (count > LARGE_ROW_THRESHOLD) {
         const proceed = window.confirm(
-          `This group has ${count.toLocaleString("en-US")} rows and may freeze the view. Load anyway?`
+          `This group has ${count.toLocaleString("en-US")} rows and may take a moment to load. Continue?`
         );
         if (!proceed) return;
       }
 
-      // Reconstruct groupPath: skip the leading "root" segment, parse "field:label".
       const groupPath = groupId
         .split("|")
         .slice(1)
@@ -532,23 +598,21 @@ export function ClassicReportView({
             : { field: seg.slice(0, idx), label: seg.slice(idx + 1) };
         });
 
-      const reqId = ++drillReqId.current;
       setDrillModal({ title, rows: [], totalFields, loading: true });
 
       try {
         const result = await onDrillDown({ groupPath, count });
-        if (drillReqId.current !== reqId) return; // stale — a newer drill superseded this one
         setDrillModal({
           title,
           rows: result.bodyRows,
-          totalFields: result.totalFields,
           fieldOrder: result.fieldOrder,
           totals: result.totals,
+          totalFields: result.totalFields,
+          loading: false,
         });
       } catch (err) {
-        if (drillReqId.current !== reqId) return;
         const message = err instanceof Error ? err.message : "Failed to load records.";
-        setDrillModal({ title, rows: [], totalFields, error: message });
+        setDrillModal({ title, rows: [], totalFields, loading: false, error: message });
       }
     },
     [onDrillDown]
@@ -594,6 +658,7 @@ export function ClassicReportView({
         drillable?: boolean;
       }
     | { kind: "det"; groupId: string; row: Record<string, unknown> }
+    | { kind: "skel"; groupId: string; count: number }
     | { kind: "gs" };
 
   const buildRows = useCallback(
@@ -652,12 +717,16 @@ export function ClassicReportView({
     const walk = (nodes: NestedGroupNode[], level: number, parentId: string) => {
       for (const node of nodes) {
         const labelStr = String(node.value ?? "").trim() || "(blank)";
-        // field segment uses the node label (mirrors flat where field === group label).
         const groupId = `${parentId}|${node.label}:${labelStr}`;
         const hasChildren = !!node.children && node.children.length > 0;
         const hasBodyRows = !!node.bodyRows && node.bodyRows.length > 0;
-        // A leaf without children and without body rows stays drillable.
-        const drillable = !hasChildren && !hasBodyRows;
+        const drillState = drilledGroups.get(groupId);
+        const isDrillLoading = drillState?.loading === true;
+        const hasDrillError = !isDrillLoading && !!drillState?.error;
+        const hasDrilledRows = !isDrillLoading && (drillState?.rows?.length ?? 0) > 0;
+        // Drillable: leaf with no rows yet (not loading, not loaded, no error).
+        // Error state is retriable — treat as drillable so click retries.
+        const drillable = !hasChildren && !hasBodyRows && !hasDrilledRows && !isDrillLoading;
 
         out.push({
           kind: "ss",
@@ -676,12 +745,18 @@ export function ClassicReportView({
 
         if (hasChildren) {
           walk(node.children as NestedGroupNode[], level + 1, groupId);
+        } else if (isDrillLoading || hasDrillError) {
+          out.push({ kind: "skel", groupId, count: node.count });
+        } else if (hasDrilledRows) {
+          for (const row of drillState!.rows) {
+            out.push({ kind: "det", groupId, row });
+          }
         } else if (hasBodyRows) {
           for (const row of node.bodyRows!) {
             out.push({ kind: "det", groupId, row });
           }
         }
-        // drillable leaf: emit no det rows.
+        // undrilled drillable leaf: emit no rows yet.
       }
     };
 
@@ -691,7 +766,7 @@ export function ClassicReportView({
       out.push({ kind: "gs" });
     }
     return out;
-  }, [isNested, nestedData]);
+  }, [isNested, nestedData, drilledGroups]);
 
   const rows = useMemo(
     () => (isNested ? nestedRows : flatRows),
@@ -704,9 +779,9 @@ export function ClassicReportView({
       if (spec.kind === "gs") return true;
       const groupId = spec.groupId;
       const parts = groupId.split("|");
-      // For detail rows, groupId is the parent's group ID, so we check all ancestors.
+      // For detail/skeleton rows, groupId is the parent's group ID, so we check all ancestors.
       // For subsummary rows, groupId is the row's own group ID, so we check ancestors excluding the last part (itself).
-      const checkLimit = spec.kind === "det" ? parts.length : parts.length - 1;
+      const checkLimit = spec.kind === "det" || spec.kind === "skel" ? parts.length : parts.length - 1;
       // We start i from 2 to skip "root" which is at parts[0]
       for (let i = 2; i <= checkLimit; i++) {
         const ancestorId = parts.slice(0, i).join("|");
@@ -804,7 +879,36 @@ export function ClassicReportView({
           const suffix = suffixMap[f] ?? suffixMap[f.trim()] ?? "";
           return { f, value, prefix, suffix };
         });
-        return (
+        const remaining = groupCountInfo
+          ? groupCountInfo.total - groupCountInfo.loaded
+          : 0;
+        const rows: React.ReactElement[] = [];
+        // When groups are capped, inject a visual separator before the grand total
+        // so the user understands the total is for all data, not just the visible groups.
+        if (groupCountInfo?.capped && !isPrintView) {
+          rows.push(
+            <tr key="load-more-marker" className="no-print">
+              <td colSpan={visibleFieldOrder.length} className="px-4 py-2">
+                <div className="flex items-center gap-3 text-xs text-slate-400">
+                  <span className="flex-1 h-px bg-slate-200" />
+                  <span className="text-slate-500">
+                    {remaining.toLocaleString()} more group{remaining !== 1 ? "s" : ""} not loaded
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onLoadMore}
+                    disabled={loadMoreLoading}
+                    className="text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loadMoreLoading ? "Loading…" : "Load more groups"}
+                  </button>
+                  <span className="flex-1 h-px bg-slate-200" />
+                </div>
+              </td>
+            </tr>
+          );
+        }
+        rows.push(
           <tr key={`gs-${isPrintView ? "print" : "normal"}`} className="cv-gs">
             <td colSpan={visibleFieldOrder.length}>
               <div className="cv-ss-row">
@@ -823,6 +927,47 @@ export function ClassicReportView({
                   ))}
                 </div>
               </div>
+            </td>
+          </tr>
+        );
+        return rows;
+      }
+
+      // ── Skeleton / Error Row (nested inline drill loading) ──
+      if (spec.kind === "skel") {
+        const drillState = drilledGroups.get(spec.groupId);
+        const isError = drillState && !drillState.loading && !!drillState.error;
+        return (
+          <tr key={`skel-${isPrintView ? "print-" : ""}${spec.groupId}`} className="cv-det">
+            <td colSpan={visibleFieldOrder.length} style={{ padding: "10px 16px" }}>
+              {isError ? (
+                <span style={{ color: "#dc2626", fontSize: "13px" }}>
+                  {drillState!.error}
+                  {" "}
+                  <button
+                    style={{ marginLeft: "8px", fontSize: "12px", color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                    onClick={() => handleDrillInline(spec.groupId, spec.count, drillState!.totalFields)}
+                  >
+                    Retry
+                  </button>
+                </span>
+              ) : (
+                <span style={{ display: "flex", alignItems: "center", gap: "8px", color: "#78716c", fontSize: "13px" }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: "14px",
+                      height: "14px",
+                      border: "2px solid #d4d4d4",
+                      borderTopColor: "#78716c",
+                      borderRadius: "50%",
+                      animation: "cv-spin 0.7s linear infinite",
+                      flexShrink: 0,
+                    }}
+                  />
+                  {`Loading ${spec.count.toLocaleString("en-US")} record${spec.count !== 1 ? "s" : ""}…`}
+                </span>
+              )}
             </td>
           </tr>
         );
@@ -866,21 +1011,23 @@ export function ClassicReportView({
       // A nested drillable leaf is an ss node with no rendered children/body rows.
       const isNestedDrillLeaf = isNested && spec.drillable === true;
 
+      const displayTitle = spec.field.trim() === "_date_breakdown"
+        ? spec.label
+        : `${spec.field}: ${spec.label}`;
+
       const handleSsClick = () => {
         if (isPrintView) return;
-        const displayTitle = spec.field.trim() === "_date_breakdown"
-          ? spec.label
-          : `${spec.field}: ${spec.label}`;
         if (isNested) {
-          // Drillable leaf → async fetch. Non-leaf (has children) → toggle.
+          // Drillable leaf → open DrillModal (same design as flat/FM mode).
+          // Non-leaf (has children) → toggle expand/collapse.
           if (isNestedDrillLeaf) {
-            handleNestedDrill(spec.groupId, count, displayTitle, spec.totalFields);
+            handleDrillModal(spec.groupId, displayTitle, count, spec.totalFields);
           } else {
             toggleGroup(spec.groupId);
           }
           return;
         }
-        // Flat mode: behave exactly as today (in-memory DrillModal).
+        // Flat mode: unchanged — data already in memory.
         if (collapsed) {
           setDrillModal({ title: displayTitle, rows: spec.rows, totalFields: spec.totalFields });
         } else {
@@ -891,7 +1038,11 @@ export function ClassicReportView({
       const handleSsChevronClick = (e: React.MouseEvent) => {
         if (isPrintView) return;
         e.stopPropagation();
-        toggleGroup(spec.groupId);
+        if (isNestedDrillLeaf) {
+          handleDrillModal(spec.groupId, displayTitle, count, spec.totalFields);
+        } else {
+          toggleGroup(spec.groupId);
+        }
       };
 
       const ssItems = spec.totalFields
@@ -939,7 +1090,7 @@ export function ClassicReportView({
                     <><strong>{spec.field.trim()}:</strong>&nbsp;</>
                   )}
                   {spec.label}
-                  {collapsed && (
+                  {(collapsed || isNestedDrillLeaf) && (
                     <span style={{ color: "#78716c", fontWeight: "normal", fontSize: "11px", marginLeft: "6px" }}>
                       {isNested
                         ? `(${count} record${count !== 1 ? "s" : ""})`
@@ -998,7 +1149,10 @@ export function ClassicReportView({
     setDrillModal,
     effectiveSubsummaries,
     isNested,
-    handleNestedDrill,
+    handleDrillModal,
+    groupCountInfo,
+    onLoadMore,
+    loadMoreLoading,
   ]);
 
   // ── Render subtotal cells ─────────────────────────────────────────────────
@@ -1090,37 +1244,46 @@ export function ClassicReportView({
           <span className="cv-meta-chip">
             <strong>{grandTotalCount}</strong> record{grandTotalCount !== 1 ? "s" : ""}
           </span>
+          {groupCountInfo?.capped && (
+            <span className="cv-meta-chip text-slate-500">
+              {groupCountInfo.label}:{" "}
+              <strong className="text-slate-700">{groupCountInfo.loaded.toLocaleString()}</strong>
+              {" of "}
+              <strong className="text-slate-700">{groupCountInfo.total.toLocaleString()}</strong>
+              {" groups"}
+            </span>
+          )}
           <span className="cv-meta-chip">
             {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
           </span>
-          <button 
+          {paginate && totalPages > 1 && (
+            <span className="no-print flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="text-[11px] font-semibold text-slate-600 tabular-nums">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </span>
+          )}
+          <button
             onClick={handlePrint}
             className="no-print flex items-center gap-1 px-2 py-1 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors ml-auto shadow-sm"
           >
             <Printer size={12} /> Print
           </button>
         </div>
-        {paginate && totalPages > 1 && (
-          <div className="flex items-center gap-2 mt-3 no-print justify-end">
-            <button 
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="text-[11px] font-semibold text-slate-600">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button 
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── Table ─────────────────────────────────────────────────────────── */}

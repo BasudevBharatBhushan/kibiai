@@ -13,6 +13,37 @@ npm run test:api     # API tests via Vitest + Supertest
 npm run test:e2e     # Playwright end-to-end tests
 ```
 
+## Knowledge Graph — Use Graphify First
+
+This project has a live knowledge graph in `graphify-out/graph.json` served via the `graphify` MCP server (7 tools available). **Always query the graph before reading files or grepping**, unless you already know the exact location.
+
+### When to use graphify tools
+
+| Situation | Tool to call |
+|-----------|-------------|
+| Finding which files/functions relate to a feature | `query_graph` with a keyword (BFS/DFS over nodes) |
+| Looking up a specific function, component, or module | `get_node` by label |
+| Understanding what a function calls / what calls it | `get_neighbors` |
+| Exploring all code in a subsystem (SQL engine, report gen, etc.) | `get_community` with the community ID |
+| Identifying the most critical shared abstractions | `god_nodes` |
+| Tracing how two concepts are connected | `shortest_path` |
+| Quick orientation — node/edge/community counts | `graph_stats` |
+
+### Protocol
+
+1. **Before any exploration task** (finding relevant files, understanding a subsystem, impact analysis) — call `query_graph` or `get_node` first. Use the returned file paths and node IDs to target your `Read`/`Grep` calls instead of broad directory scans.
+2. **Before writing or editing** — call `get_neighbors` on the function/component you're about to touch to understand its callers and dependencies. This prevents unintended breakage.
+3. **For cross-cutting changes** (renaming, refactoring, interface changes) — call `shortest_path` between the entry point and affected leaf nodes to map the full call chain before touching anything.
+4. **Never skip the graph for "quick" lookups** — a `query_graph` call takes milliseconds and often surfaces non-obvious relationships that Grep misses (e.g., semantic edges between doc concepts and code).
+
+### Graph stats (as of last build)
+- **883 nodes, 1170 edges, 137 communities**
+- Top god nodes: `POST()`, `GET()`, `buildBaseCte()`, `SQL Report Engine Module`, `executeV3InsightPlan()`
+- Visualization: `graphify-out/graph.html` (open in browser for interactive exploration)
+- Report: `graphify-out/GRAPH_REPORT.md`
+
+---
+
 ## Mandatory Workflow — Read Before Implementing
 
 Every change must follow this sequence (defined in `.agents/workflows/workflow.md`):

@@ -26,7 +26,7 @@ export interface SqlRelationship {
   joined_table: string;
   source: string;
   target: string;
-  join_type: 'left' | 'inner';
+  join_type?: 'left' | 'inner';
 }
 
 export interface SqlConnection {
@@ -97,11 +97,12 @@ export interface SchemaTable {
 
 /**
  * Shape returned by GET /schema.
- * The server may return additional top-level keys; kept as unknown for
- * forward-compatibility. Callers should narrow what they actually need.
+ * The Bun SQLite server wraps the array under "schema"; kept permissive so
+ * a future "tables" key also works.
  */
 export interface SchemaResponse {
-  tables: SchemaTable[];
+  schema?: SchemaTable[];
+  tables?: SchemaTable[];
   [key: string]: unknown;
 }
 

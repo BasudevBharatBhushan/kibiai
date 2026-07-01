@@ -892,6 +892,32 @@ function ChartBuilderPageContent() {
     return <LoadingSkeleton />;
   }
 
+  // Check if this is a SQL-based report
+  const isSqlReport = pageData.report_template_setup_json?.data_source_type === "sql";
+
+  if (isSqlReport) {
+    return (
+      <div className="flex min-h-[calc(100vh-64px)] w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+        <div className="max-w-md rounded-2xl bg-white p-8 shadow-lg border border-slate-200">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-blue-100 to-blue-50">
+            <BarChart3 size={28} className="text-blue-600" />
+          </div>
+          <h2 className="mb-2 text-2xl font-bold text-slate-900">Charts Coming Soon</h2>
+          <p className="mb-6 text-slate-600">
+            Chart generation for SQL-based reports is coming soon. We're building advanced visualization capabilities that work seamlessly with your SQL data sources.
+          </p>
+          <a
+            href={`/${slug}/templates/${templateId}/configurator`}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-blue-700 active:scale-95"
+          >
+            Back to Report Builder
+            <span>→</span>
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DashboardProvider
       initialSchemas={augmentedSchemas}

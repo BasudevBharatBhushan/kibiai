@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useRef } from "react";
+import { useCallback, useMemo, useState, useRef, startTransition } from "react";
 import { useReport } from "@/context/ReportContext";
 import { useHeader } from "@/context/HeaderContext";
 import DynamicReport from "@/components/DynamicReportPreview";
@@ -8,10 +8,11 @@ import { ClassicReportView } from "@/components/report-viewer/ClassicReportView"
 import type { DrillRequest, DrillResult } from "@/components/report-viewer/ClassicReportView";
 import { buildReportMetadata, type ReportMetadata } from "@/lib/utils/reportMetadata";
 import type { ClassicViewSettings } from "@/components/report-builder/ClassicViewSettingsSection";
-import type { NestedReport } from "@/lib/sql/structureAdapter";
+import type { NestedReport, NestedGroupNode } from "@/lib/sql/structureAdapter";
 import type { DrilldownResult } from "@/lib/sql/structureAdapter";
 import { LARGE_ROW_THRESHOLD } from "@/lib/sql/types";
 import { apiClient } from "@/utils/apiClient";
+import { SqlExecutionFloater, type SqlStep } from "@/components/SqlExecutionFloater";
 
 // ---------------------------------------------------------------------------
 // Shape of the SQL collapsed payload stored in state.reportPreview.
@@ -40,6 +41,7 @@ function isSqlPreviewPayload(raw: unknown): raw is SqlPreviewPayload {
 interface SqlDrilldownApiResponse {
   success: boolean;
   group_rows?: DrilldownResult;
+  sql_steps?: SqlStep[];
   error?: string;
 }
 
@@ -52,6 +54,7 @@ interface SqlExpandApiResponse {
   report_structure_json?: unknown[];
   row_count?: number;
   warn_large?: boolean;
+  sql_steps?: SqlStep[];
   error?: string;
 }
 
@@ -312,7 +315,8 @@ export function ReportPreview({
   if (isNested && (!nestedData || nestedData.groups.length === 0)) {
     const flatRows = nestedData?.flatRows;
     if (flatRows && flatRows.length > 0) {
-      return <FlatRowTable rows={flatRows} fieldOrder={nestedData?.fieldOrder ?? []} totalRowCount={nestedData?.totalRowCount} paginate={classicSettings?.paginate ?? false} title={templateName ?? nestedData?.title} />;
+      const reportHeader = (configToUse as Record<string, unknown>)?.report_header as string | undefined;
+      return <FlatRowTable rows={flatRows} fieldOrder={nestedData?.fieldOrder ?? []} totalRowCount={nestedData?.totalRowCount} paginate={classicSettings?.paginate ?? false} title={reportHeader || nestedData?.title || templateName} />;
     }
     return (
       <div className="flex items-center justify-center h-full text-slate-400 bg-white border border-slate-200 min-h-[600px]">
@@ -339,6 +343,8 @@ export function ReportPreview({
       activeFilters={activeFilters}
       isPrint={isPrint}
       isNested={isNested}
+      setup={state.setup}
+      config={state.config}
     />
   );
 }
@@ -357,7 +363,11 @@ interface InnerProps {
   activeFilters: Record<string, string>;
   isPrint: boolean;
   isNested: boolean;
+  setup: unknown;
+  config: unknown;
 }
+
+const LOAD_MORE_PAGE_SIZE = 1000;
 
 function ReportPreviewInner({
   finalJsonData,
@@ -368,33 +378,64 @@ function ReportPreviewInner({
   activeFilters,
   isPrint,
   isNested,
+  setup,
+  config,
 }: InnerProps) {
   const { state } = useReport();
 
   // ---------------------------------------------------------------------------
-  // Expand-all state (nested SQL only).
-  //
-  // expandedNestedData: NestedReport with bodyRows populated on every leaf.
-  //   null = not yet fetched; undefined = irrelevant (flat mode).
-  // expandLoading: button disabled + spinner text while fetching.
-  // expandError: last error message (cleared on next fetch attempt).
-  //
-  // The cache key tracks the config identity so a new report generation
-  // invalidates the cached expanded data automatically.
+  // Load-more state — appends additional group pages to the nested view.
   // ---------------------------------------------------------------------------
-  const [expandedNestedData, setExpandedNestedData] = useState<NestedReport | null>(null);
-  const [expandLoading, setExpandLoading] = useState(false);
-  const [expandError, setExpandError] = useState<string | null>(null);
-  // Tracks the config JSON at fetch time so config changes invalidate the cache.
-  const expandCacheKeyRef = useRef<string | null>(null);
+  const [additionalGroups, setAdditionalGroups] = useState<NestedGroupNode[]>([]);
+  const [loadMoreLoading, setLoadMoreLoading] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
-  // ---------------------------------------------------------------------------
-  // Print nested data state — separately cached from expand-all so switching
-  // between classic-expanded and print-expanded doesn't cross-contaminate.
-  // ---------------------------------------------------------------------------
-  const [printNestedData, setPrintNestedData] = useState<NestedReport | null>(null);
-  const [printLoading, setPrintLoading] = useState(false);
-  const printCacheKeyRef = useRef<string | null>(null);
+  // Merge base groups + any additionally loaded groups for the active view.
+  const mergedNestedData = useMemo<NestedReport | undefined>(() => {
+    if (!nestedData) return undefined;
+    if (additionalGroups.length === 0) return nestedData;
+    return { ...nestedData, groups: [...nestedData.groups, ...additionalGroups] };
+  }, [nestedData, additionalGroups]);
+
+  // Reset additional groups when the base nestedData changes (new report generated).
+  const nestedDataRef = useRef<NestedReport | undefined>(undefined);
+  if (nestedDataRef.current !== nestedData) {
+    nestedDataRef.current = nestedData;
+    if (additionalGroups.length > 0) setAdditionalGroups([]);
+    if (loadMoreError !== null) setLoadMoreError(null);
+  }
+
+  const handleLoadMore = useCallback(async () => {
+    if (!nestedData || loadMoreLoading) return;
+    const currentOffset = nestedData.groups.length + additionalGroups.length;
+    setLoadMoreLoading(true);
+    setLoadMoreError(null);
+    setIsDrillFetching(true);
+    try {
+      const response = await apiClient.post<SqlExpandApiResponse>("/api/sql-report/generate", {
+        report_setup: setup,
+        report_config: config,
+        view_mode: "collapsed",
+        group_offset: currentOffset,
+        group_limit: LOAD_MORE_PAGE_SIZE,
+      });
+      for (const step of response.sql_steps ?? []) {
+        setDrillSqlStep(step);
+        await new Promise<void>((r) => setTimeout(r, 180));
+      }
+      if (!response.success || !response.nested) {
+        throw new Error(response.error ?? "Load more returned no data.");
+      }
+      startTransition(() => {
+        setAdditionalGroups((prev) => [...prev, ...response.nested!.groups]);
+      });
+    } catch (err) {
+      setLoadMoreError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadMoreLoading(false);
+      setIsDrillFetching(false);
+    }
+  }, [nestedData, additionalGroups, loadMoreLoading, setup, config]);
 
   // Derive the config cache key (stable JSON so config changes bust the cache).
   const configCacheKey = useMemo(
@@ -402,140 +443,145 @@ function ReportPreviewInner({
     [state.config],
   );
 
-  // Invalidate caches when config changes.
-  if (expandCacheKeyRef.current !== null && expandCacheKeyRef.current !== configCacheKey) {
-    expandCacheKeyRef.current = null;
-    setExpandedNestedData(null);
-    setExpandError(null);
-  }
-  if (printCacheKeyRef.current !== null && printCacheKeyRef.current !== configCacheKey) {
-    printCacheKeyRef.current = null;
-    setPrintNestedData(null);
-  }
-
   // ---------------------------------------------------------------------------
-  // fetchExpandAll — fetches expand_all from the SQL engine.
-  // Handles the 30k warn→confirm flow.
-  // Returns the NestedReport on success, null on cancel/error.
+  // Shared helper: fetch expand_all or print data from the SQL engine.
+  // Returns { nested } on success, { warnLarge, rowCount } when rows > 30k,
+  // or throws on error.
   // ---------------------------------------------------------------------------
-  const fetchExpandAll = useCallback(
-    async (viewMode: "expand_all" | "print", confirmLarge?: boolean): Promise<NestedReport | null> => {
-      const body: Record<string, unknown> = {
-        report_setup: state.setup,
-        report_config: state.config,
-        view_mode: viewMode,
-        ...(confirmLarge ? { confirm_large: true } : {}),
-      };
-
-      const response = await apiClient.post<SqlExpandApiResponse>(
-        "/api/sql-report/generate",
-        body,
-      );
-
-      if (!response.success) {
-        throw new Error(response.error ?? "Expand-all returned an error.");
-      }
-
-      if (response.warn_large) {
-        const rowCount = response.row_count ?? 0;
-        const proceed = window.confirm(
-          `This report has ${rowCount.toLocaleString("en-US")} rows and may freeze the view. Load all anyway?`,
+  const fetchExpandData = useCallback(
+    async (
+      viewMode: "expand_all" | "print",
+      confirmLarge = false,
+    ): Promise<{ nested?: NestedReport; warnLarge?: boolean; rowCount?: number }> => {
+      setIsDrillFetching(true);
+      try {
+        const response = await apiClient.post<SqlExpandApiResponse>(
+          "/api/sql-report/generate",
+          {
+            report_setup: setup,
+            report_config: config,
+            view_mode: viewMode,
+            ...(confirmLarge ? { confirm_large: true } : {}),
+          },
         );
-        if (!proceed) return null;
-        // Re-call with confirmLarge=true.
-        return fetchExpandAll(viewMode, true);
+        for (const step of response.sql_steps ?? []) {
+          setDrillSqlStep(step);
+          await new Promise<void>((r) => setTimeout(r, 180));
+        }
+        if (!response.success) throw new Error(response.error ?? "Engine error");
+        if (response.warn_large) return { warnLarge: true, rowCount: response.row_count };
+        if (response.nested) return { nested: response.nested };
+        throw new Error("Engine returned no data");
+      } finally {
+        setIsDrillFetching(false);
       }
-
-      if (!response.nested) {
-        throw new Error("Expand-all response missing nested data.");
-      }
-
-      return response.nested;
     },
-    [state.setup, state.config],
+    [setup, config],
   );
 
   // ---------------------------------------------------------------------------
-  // handleExpandAll — click handler for the "See all data" button.
+  // Print nested data state — lazily fetches full expand data for print view.
   // ---------------------------------------------------------------------------
-  const handleExpandAll = useCallback(async () => {
-    // If already expanded, toggle back to collapsed.
-    if (expandedNestedData !== null) {
-      setExpandedNestedData(null);
-      expandCacheKeyRef.current = null;
-      return;
-    }
+  const [printNestedData, setPrintNestedData] = useState<NestedReport | null>(null);
+  const [printLoading, setPrintLoading] = useState(false);
+  const [printWarnLarge, setPrintWarnLarge] = useState<{ rowCount: number } | null>(null);
+  const printCacheKeyRef = useRef<string | null>(null);
+  const printFetchTriggeredRef = useRef<string | null>(null);
 
-    setExpandLoading(true);
-    setExpandError(null);
+  // Invalidate print cache when config changes.
+  if (printCacheKeyRef.current !== null && printCacheKeyRef.current !== configCacheKey) {
+    printCacheKeyRef.current = null;
+    setPrintNestedData(null);
+    setPrintWarnLarge(null);
+  }
 
-    try {
-      const nested = await fetchExpandAll("expand_all");
-      if (nested) {
-        setExpandedNestedData(nested);
-        expandCacheKeyRef.current = configCacheKey;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load all data.";
-      setExpandError(msg);
-    } finally {
-      setExpandLoading(false);
-    }
-  }, [expandedNestedData, fetchExpandAll, configCacheKey]);
-
-  // ---------------------------------------------------------------------------
-  // fetchPrintNestedData — fetches print/expand_all data lazily when entering
-  // print mode for a nested SQL report (if not already cached).
-  // ---------------------------------------------------------------------------
-  const fetchPrintNestedData = useCallback(async () => {
-    if (printCacheKeyRef.current === configCacheKey && printNestedData !== null) {
-      // Already cached for current config — nothing to do.
-      return;
-    }
-
-    // If we already fetched expand-all data, reuse it for print too.
-    if (expandCacheKeyRef.current === configCacheKey && expandedNestedData !== null) {
-      setPrintNestedData(expandedNestedData);
-      printCacheKeyRef.current = configCacheKey;
-      return;
-    }
-
+  const fetchPrintNestedData = useCallback(async (confirmLarge = false) => {
+    if (!confirmLarge && printCacheKeyRef.current === configCacheKey && printNestedData !== null) return;
     setPrintLoading(true);
-
+    setPrintWarnLarge(null);
     try {
-      const nested = await fetchExpandAll("print");
-      if (nested) {
-        setPrintNestedData(nested);
+      const result = await fetchExpandData("print", confirmLarge);
+      if (result.warnLarge) {
+        setPrintWarnLarge({ rowCount: result.rowCount ?? 0 });
+      } else if (result.nested) {
+        setPrintNestedData(result.nested);
         printCacheKeyRef.current = configCacheKey;
       }
     } catch (err) {
-      // Non-fatal: print will fall back to the flat scaffold.
-      console.warn("[ReportPreview] Failed to fetch nested print data:", err);
+      console.warn("[ReportPreview] Failed to fetch print data:", err);
     } finally {
       setPrintLoading(false);
     }
-  }, [configCacheKey, printNestedData, expandedNestedData, fetchExpandAll]);
+  }, [configCacheKey, printNestedData, fetchExpandData]);
 
-  // Trigger print data fetch when entering print mode for a nested SQL report.
-  // Use a ref to avoid calling on every render in print mode.
-  const printFetchTriggeredRef = useRef<string | null>(null);
+  // Trigger print fetch when entering print mode.
   if (isNested && isPrint && printFetchTriggeredRef.current !== configCacheKey && !printLoading) {
     printFetchTriggeredRef.current = configCacheKey;
     void fetchPrintNestedData();
   }
 
-  // The nested data to pass to ClassicReportView — prefer expanded if loaded.
-  const activeNestedData =
-    isNested && expandedNestedData !== null ? expandedNestedData : nestedData;
+  // ---------------------------------------------------------------------------
+  // Drilldown SQL floater state
+  const [drillSqlStep, setDrillSqlStep] = useState<SqlStep | null>(null);
+  const [isDrillFetching, setIsDrillFetching] = useState(false);
 
-  // The nested data to pass to DynamicReport for print — prefer print-specific
-  // data (bodyRows populated), then expand-all data, then collapsed (no body rows).
+  // Expand-all state — fetches full body rows for classic view when
+  // collapseBody is false. Mirrors print flow but uses "expand_all" mode.
+  // ---------------------------------------------------------------------------
+  const [expandedNestedData, setExpandedNestedData] = useState<NestedReport | null>(null);
+  const [expandLoading, setExpandLoading] = useState(false);
+  const [expandWarnLarge, setExpandWarnLarge] = useState<{ rowCount: number } | null>(null);
+  const expandCacheKeyRef = useRef<string | null>(null);
+  const expandFetchTriggeredRef = useRef<string | null>(null);
+
+  const wantsExpand = isNested && !effectiveSettings.collapseBody;
+
+  // Invalidate expand cache when config changes.
+  if (expandCacheKeyRef.current !== null && expandCacheKeyRef.current !== configCacheKey) {
+    expandCacheKeyRef.current = null;
+    setExpandedNestedData(null);
+    setExpandWarnLarge(null);
+  }
+
+  const fetchExpandAll = useCallback(async (confirmLarge = false) => {
+    if (!confirmLarge && expandCacheKeyRef.current === configCacheKey && expandedNestedData !== null) return;
+    setExpandLoading(true);
+    setExpandWarnLarge(null);
+    try {
+      const result = await fetchExpandData("expand_all", confirmLarge);
+      if (result.warnLarge) {
+        setExpandWarnLarge({ rowCount: result.rowCount ?? 0 });
+      } else if (result.nested) {
+        setExpandedNestedData(result.nested);
+        expandCacheKeyRef.current = configCacheKey;
+      }
+    } catch (err) {
+      console.warn("[ReportPreview] Failed to fetch expand-all data:", err);
+    } finally {
+      setExpandLoading(false);
+    }
+  }, [configCacheKey, expandedNestedData, fetchExpandData]);
+
+  // Trigger expand-all fetch when collapseBody is turned off.
+  if (wantsExpand && expandFetchTriggeredRef.current !== configCacheKey && !expandLoading) {
+    expandFetchTriggeredRef.current = configCacheKey;
+    void fetchExpandAll();
+  }
+  // Reset trigger when collapseBody is turned back on.
+  if (!wantsExpand && expandFetchTriggeredRef.current !== null) {
+    expandFetchTriggeredRef.current = null;
+  }
+
+  // Classic view uses merged (base + load-more) nested data, or fully expanded data.
+  const activeNestedData = wantsExpand && expandedNestedData !== null
+    ? expandedNestedData
+    : mergedNestedData;
+
+  // Print view uses the lazily-fetched print data with bodyRows populated.
   const printNestedForDynamic =
     isNested && printNestedData !== null
       ? printNestedData
-      : isNested && expandedNestedData !== null
-        ? expandedNestedData
-        : nestedData;
+      : nestedData;
 
   // ---------------------------------------------------------------------------
   // handleDrillDown — async drill-down callback for ClassicReportView nested mode.
@@ -580,10 +626,26 @@ function ReportPreviewInner({
         ...(req.count > LARGE_ROW_THRESHOLD ? { confirm_large: true } : {}),
       };
 
-      const response = await apiClient.post<SqlDrilldownApiResponse>(
-        "/api/sql-report/generate",
-        body
-      );
+      setIsDrillFetching(true);
+
+      let response: SqlDrilldownApiResponse;
+      try {
+        response = await apiClient.post<SqlDrilldownApiResponse>(
+          "/api/sql-report/generate",
+          body
+        );
+      } catch (err) {
+        setIsDrillFetching(false);
+        throw err;
+      }
+
+      // Replay sql_steps sequentially with brief delays so the floater shows
+      // each query that ran (non-streaming, so we animate after the response).
+      for (const step of response.sql_steps ?? []) {
+        setDrillSqlStep(step);
+        await new Promise<void>((r) => setTimeout(r, 180));
+      }
+      setIsDrillFetching(false);
 
       if (!response.success || !response.group_rows) {
         throw new Error(response.error ?? "Drill-down returned no data.");
@@ -594,6 +656,15 @@ function ReportPreviewInner({
     [state.config, state.setup]
   );
 
+  // Derived values for the group count info passed to ClassicReportView.
+  const loadedGroupCount = activeNestedData?.groups.length ?? 0;
+  const totalGroupCount = nestedData?.totalGroupCount ?? loadedGroupCount;
+  const groupsCapped = nestedData?.groupsCapped ?? false;
+  const groupFieldLabel = nestedData?.groups[0]?.label ?? "Group";
+  const groupCountInfo = isNested && groupsCapped
+    ? { label: groupFieldLabel, loaded: loadedGroupCount, total: totalGroupCount, capped: true }
+    : undefined;
+
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
       {/*
@@ -601,29 +672,42 @@ function ReportPreviewInner({
       */}
       {!isPrint && (
         <div className="flex-1 overflow-auto p-4">
-          {/* Expand-all control — nested SQL reports only. Lets the user load
-              every body row (group→subgroup→rows) instead of the collapsed
-              headers+totals view. fetchExpandAll handles the >30k warn→confirm. */}
-          {isNested && (
-            <div className="w-full flex items-center justify-end gap-3 mb-3">
-              {expandError && (
-                <span className="text-xs text-red-500">{expandError}</span>
-              )}
-              <button
-                type="button"
-                onClick={handleExpandAll}
-                disabled={expandLoading}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {expandLoading
-                  ? "Loading all data…"
-                  : expandedNestedData !== null
-                    ? "Collapse"
-                    : "See all data"}
-              </button>
+          {/* Expand-all loading / warn-large banner for collapseBody=false */}
+          {wantsExpand && expandedNestedData === null && (
+            <div className="mb-3 px-4 py-3 rounded-lg border flex items-center gap-3 text-sm
+              bg-amber-50 border-amber-200 text-amber-800">
+              {expandLoading ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity={0.25} />
+                    <path d="M21 12a9 9 0 00-9-9" />
+                  </svg>
+                  <span>Loading all row data…</span>
+                </>
+              ) : expandWarnLarge ? (
+                <>
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  <span className="flex-1">
+                    This report has <strong>{expandWarnLarge.rowCount.toLocaleString()}</strong> rows. Loading all body data will likely freeze the UI — the browser must render a very large number of elements at once. Proceed only if necessary.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => fetchExpandAll(true)}
+                    className="px-3 py-1 text-xs font-semibold rounded bg-amber-700 text-white hover:bg-amber-800 shrink-0"
+                  >
+                    Load anyway
+                  </button>
+                </>
+              ) : null}
             </div>
           )}
+
           <div className="w-full bg-white rounded-lg border border-slate-200 shadow-sm p-4">
+            {loadMoreError && (
+              <p className="text-xs text-red-600 mb-2">{loadMoreError}</p>
+            )}
             <ClassicReportView
               jsonData={finalJsonData as Record<string, unknown>[]}
               showAvg={effectiveSettings.showAvg}
@@ -635,6 +719,9 @@ function ReportPreviewInner({
               mode={reportMode}
               nestedData={activeNestedData}
               onDrillDown={handleDrillDown}
+              groupCountInfo={groupCountInfo}
+              onLoadMore={handleLoadMore}
+              loadMoreLoading={loadMoreLoading}
             />
           </div>
         </div>
@@ -643,20 +730,50 @@ function ReportPreviewInner({
       {/*
         Print View — DynamicReport is ALWAYS kept mounted (even when in Classic mode)
         by placing it in an absolutely-positioned, off-screen container.
-        This means pagination is calculated once on first load and cached in
-        DynamicReport's own state. Switching to Print view is instant — no recalculation.
-
-        We use position:absolute + visibility:hidden (NOT display:none) so that
-        DynamicReport can still read element.offsetHeight during pagination.
-
-        Nested SQL print (Ticket 3): when entering print mode for a nested report,
-        fetchPrintNestedData loads the expand-all nested tree (bodyRows populated)
-        and we pass it as nestedData with mode="nested". Until it resolves we pass
-        the collapsed nested tree (headers+totals); flat reports are unaffected.
       */}
+      {/* Print loading / warn-large overlay — only visible when isPrint */}
+      {isPrint && isNested && printNestedData === null && (
+        <div className="flex-1 flex items-center justify-center bg-white">
+          {printLoading ? (
+            <div className="flex flex-col items-center gap-3 text-slate-500">
+              <svg className="w-8 h-8 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity={0.2} />
+                <path d="M21 12a9 9 0 00-9-9" />
+              </svg>
+              <span className="text-sm font-medium">Loading all row data for print…</span>
+            </div>
+          ) : printWarnLarge ? (
+            <div className="flex flex-col items-center gap-4 max-w-sm text-center p-8">
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800">Large report</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  This report has <strong>{printWarnLarge.rowCount.toLocaleString()}</strong> rows.
+                  Loading all body data for print will render a very large number of elements and may freeze the UI temporarily.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchPrintNestedData(true)}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+              >
+                Load all rows for print
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* SQL Execution Floater — shows queries executed during drilldown */}
+      <SqlExecutionFloater currentStep={drillSqlStep} isGenerating={isDrillFetching} />
+
       <div
         style={
-          isPrint
+          isPrint && (!isNested || printNestedData !== null)
             ? { flex: 1, overflow: "auto", padding: "16px" }
             : {
                 position: "absolute",
@@ -674,6 +791,7 @@ function ReportPreviewInner({
           metadata={derivedMetadata}
           mode={isNested ? "nested" : "flat"}
           nestedData={isNested ? printNestedForDynamic : undefined}
+          active={isPrint}
         />
       </div>
     </div>

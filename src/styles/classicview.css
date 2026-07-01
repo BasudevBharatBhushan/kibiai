@@ -374,8 +374,8 @@ tr.cv-gs .cv-avg-line {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  backdrop-filter: blur(2px);
   animation: cv-fade-in 0.15s ease;
+  pointer-events: none;
 }
 @keyframes cv-fade-in {
   from { opacity: 0; }
@@ -392,10 +392,14 @@ tr.cv-gs .cv-avg-line {
   flex-direction: column;
   overflow: hidden;
   animation: cv-slide-up 0.2s ease;
+  pointer-events: auto;
 }
 @keyframes cv-slide-up {
   from { transform: translateY(16px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes cv-spin {
+  to { transform: rotate(360deg); }
 }
 .cv-dd-head {
   display: flex;

@@ -23,6 +23,7 @@ import {
   Trash2,
   Check,
   X,
+  Database,
 } from "lucide-react";
 import { useHeader } from "@/context/HeaderContext";
 import { useAccessControl } from "@/context/AccessControlContext";
@@ -160,6 +161,7 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedModule, setSelectedModule] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("active_draft");
+  const [selectedSource, setSelectedSource] = useState("all");
   const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
 
   // Rename and Delete states
@@ -314,7 +316,9 @@ export default function TemplatesPage() {
         selectedStatus === "all" ? true
         : selectedStatus === "active_draft" ? (t.report_template_status === "Active" || t.report_template_status === "Draft")
         : t.report_template_status === selectedStatus;
-      if (!matchesSearch || !matchesModule || !matchesStatus) return false;
+      const matchesSource =
+        selectedSource === "all" || t.source_type === selectedSource;
+      if (!matchesSearch || !matchesModule || !matchesStatus || !matchesSource) return false;
       if (activeView === "user" && !isSuperAdmin) {
         const perm = templatePermissions.find(
           (p) => p.report_template_id === t.report_template_id
@@ -323,7 +327,7 @@ export default function TemplatesPage() {
       }
       return true;
     });
-  }, [templates, searchQuery, selectedModule, selectedStatus, activeView, isSuperAdmin, templatePermissions]);
+  }, [templates, searchQuery, selectedModule, selectedStatus, selectedSource, activeView, isSuperAdmin, templatePermissions]);
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
 
@@ -443,6 +447,19 @@ export default function TemplatesPage() {
             </select>
             <ChevronRight size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
           </div>
+          <div className="relative flex-shrink-0">
+            <Database className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+            <select
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+              className="pl-9 pr-9 py-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 transition-all text-sm appearance-none cursor-pointer shadow-sm min-w-[140px]"
+            >
+              <option value="all">All Sources</option>
+              <option value="sql">SQL Only</option>
+              <option value="filemaker">FileMaker Only</option>
+            </select>
+            <ChevronRight size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
+          </div>
         </div>
 
         {/* ── Split Layout ─────────────────────────────────────────────────── */}
@@ -525,13 +542,20 @@ export default function TemplatesPage() {
                           {/* Template name + meta */}
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-3">
-                              <div className={clsx(
-                                "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200",
-                                isSelected
-                                  ? "bg-indigo-600 text-white"
-                                  : "bg-indigo-50 text-indigo-500 group-hover:bg-indigo-600 group-hover:text-white"
-                              )}>
-                                <FileText size={15} />
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 bg-indigo-50 group-hover:bg-indigo-100">
+                                {template.source_type ? (
+                                  <img
+                                    src={
+                                      template.source_type === "sql"
+                                        ? "https://www.sqlite.org/images/sqlite370_banner.gif"
+                                        : "https://www.productivecomputing.com/wp-content/uploads/2024/05/Claris-Filemaker-icon-color-dark_1200.png"
+                                    }
+                                    alt={template.source_type === "sql" ? "SQLite" : "FileMaker"}
+                                    className="h-5 w-5 object-contain"
+                                  />
+                                ) : (
+                                  <FileText size={15} className="text-indigo-500" />
+                                )}
                               </div>
                               {editingTemplateId === template.report_template_id ? (
                                 <div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>

@@ -217,6 +217,11 @@ export async function POST(
         }
 
         const { processing_logs = [] } = engineResult;
+        // SQL engine emits sql_steps for client-side transparency (the floater).
+        // Only present for SQL reports; undefined for FM reports.
+        const sql_steps: Array<{ label: string; sql: string }> = isSql
+          ? (engineResult.sql_steps ?? [])
+          : [];
         const report_structure_json = sanitizeJsonForPostgres(engineResult.report_structure_json);
         const stitch_result = engineResult.stitch_result ?? null; // cached for client-side soft reloads
         // SQL collapsed engine also emits a nested NestedReport payload.
@@ -224,9 +229,18 @@ export async function POST(
         const nested_report: NestedReport | null = (engineResult.nested as NestedReport) ?? null;
         const persistedConfigJson = sanitizeJsonForPostgres(configJson);
 
-        // Replay the processing_logs progressively
+        // Replay the processing_logs progressively, interleaving sql_step events
+        // just before each "Executing" log so the client floater shows the live SQL.
         const logDelay = Math.max(60, Math.min(200, 1500 / Math.max(processing_logs.length, 1)));
+        let sqlStepIdx = 0;
         for (const msg of processing_logs as string[]) {
+          if (
+            (msg as string).toLowerCase().includes("executing") &&
+            sqlStepIdx < sql_steps.length
+          ) {
+            enqueue(sseEvent("sql_step", sql_steps[sqlStepIdx] as Record<string, unknown>));
+            sqlStepIdx++;
+          }
           enqueue(sseEvent("log", { message: msg }));
           await delay(logDelay);
         }
@@ -244,7 +258,9 @@ export async function POST(
 
         // For SQL reports, build a wrapper object that includes both
         // report_structure_json and nested_report so reload can restore the full state.
-        // Cap flat SQL reports (no groups, flatRows present) to 3000 rows.
+        // Cap flat reports at 3000 rows; cap grouped reports at 1000 groups so that
+        // Supabase writes stay small and the configurator reloads quickly.
+        const MAX_PREVIEW_GROUPS = 1000;
         const nestedToSave: NestedReport | null = (() => {
           if (!nested_report) return null;
           if (
@@ -254,7 +270,16 @@ export async function POST(
           ) {
             return { ...nested_report, flatRows: nested_report.flatRows.slice(0, 3000) };
           }
-          return nested_report;
+          const totalGroupCount = nested_report.groups.length;
+          if (totalGroupCount > MAX_PREVIEW_GROUPS) {
+            return {
+              ...nested_report,
+              groups: nested_report.groups.slice(0, MAX_PREVIEW_GROUPS),
+              totalGroupCount,
+              groupsCapped: true,
+            };
+          }
+          return { ...nested_report, totalGroupCount, groupsCapped: false };
         })();
 
         const templateDataToSave = nestedToSave
@@ -315,7 +340,7 @@ export async function POST(
           enqueue(sseEvent("done", {
             report_structure_json,
             stitch_result,
-            nested_report,
+            nested_report: nestedToSave,
             report_name: reportHeading,
             version_id: savedRecordId,
             report_id: null,
@@ -368,7 +393,7 @@ export async function POST(
           enqueue(sseEvent("done", {
             report_structure_json,
             stitch_result,
-            nested_report,
+            nested_report: nestedToSave,
             report_name: reportHeading,
             report_id: savedRecordId,
             version_id: null,

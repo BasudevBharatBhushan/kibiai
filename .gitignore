@@ -50,6 +50,7 @@ openspec/
 tests/
 test-results/
 graphify-out/
+.graphify_*
 html_designs/
 agent-code/
 .agents/

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, startTransition } from "react";
 import "../styles/reportConfig.css"; 
 import { useReport } from "@/context/ReportContext";
 import { useToast } from "@/context/ToastContext";
@@ -20,6 +20,7 @@ import { ReportFiltersSection } from "@/components/report-builder/ReportFiltersS
 import { GrandSummarySection } from "@/components/report-builder/GrandSummarySection";
 import { ClassicViewSettingsSection, type ClassicViewSettings, type FilterField } from "@/components/report-builder/ClassicViewSettingsSection";
 import { Modal } from "@/components/ui/Modal";
+import { SqlExecutionFloater, type SqlStep } from "@/components/SqlExecutionFloater";
 
 interface ReportConfiguratorProps {
   classicSettings?: ClassicViewSettings;
@@ -47,6 +48,7 @@ export function ReportConfigurator({
   const { state, dispatch } = useReport();
   const [showJson, setShowJson] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [currentSqlStep, setCurrentSqlStep] = useState<SqlStep | null>(null);
   const { addToast } = useToast();
   const params = useParams();
   const slug = params?.company_slug as string | undefined;
@@ -119,33 +121,32 @@ export function ReportConfigurator({
           if (event.type === "log") {
             logs.push(event.message as string);
             dispatch({ type: "SET_PROCESSING_LOGS", payload: [...logs] });
+          } else if (event.type === "sql_step") {
+            setCurrentSqlStep({ label: event.label as string, sql: event.sql as string });
           } else if (event.type === "done") {
             const structured = event.report_structure_json;
             if (structured) {
-              // SQL engine also emits nested_report — wrap both so ReportPreview
-              // can detect nested mode while still having the FM scaffold.
-              if (event.nested_report) {
-                dispatch({
-                  type: "SET_REPORT_PREVIEW",
-                  payload: {
-                    report_structure_json: structured,
-                    nested_report: event.nested_report,
-                  },
-                });
-                // SQL grouped reports always load collapsed — auto-set collapseBody
-                // so the toggle reflects the actual visual state from the start.
-                if (
-                  event.nested_report.groups &&
-                  event.nested_report.groups.length > 0
-                ) {
+              const isGrouped =
+                event.nested_report &&
+                event.nested_report.groups &&
+                event.nested_report.groups.length > 0;
+              // Use startTransition so rendering hundreds of group rows doesn't block the UI.
+              startTransition(() => {
+                if (event.nested_report) {
                   dispatch({
-                    type: "UPDATE_CLASSIC_SETTINGS",
-                    payload: { collapseBody: true },
+                    type: "SET_REPORT_PREVIEW",
+                    payload: {
+                      report_structure_json: structured,
+                      nested_report: event.nested_report,
+                    },
                   });
+                  if (isGrouped) {
+                    dispatch({ type: "UPDATE_CLASSIC_SETTINGS", payload: { collapseBody: true } });
+                  }
+                } else {
+                  dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
                 }
-              } else {
-                dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
-              }
+              });
             }
             // Snapshot the config so future soft reloads have a baseline
             dispatch({ type: "SET_LAST_GENERATED_CONFIG", payload: state.config });
@@ -339,6 +340,9 @@ export function ReportConfigurator({
          {/* 7. Grand Summary */}
          <GrandSummarySection/>
       </div>
+
+      {/* SQL Execution Floater — glass overlay showing live SQL during generation */}
+      <SqlExecutionFloater currentStep={currentSqlStep} isGenerating={isSaving} />
 
       {/* JSON Modal */}
       <Modal

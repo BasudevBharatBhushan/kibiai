@@ -14,30 +14,36 @@ interface CollapsibleCardProps {
   icon?: React.ReactNode;
 }
 
-export function CollapsibleCard({ 
-  title, 
-  children, 
-  defaultOpen = false, 
+export function CollapsibleCard({
+  title,
+  children,
+  defaultOpen = false,
   className = "",
-  action ,
+  action,
   icon
 }: CollapsibleCardProps) {
 
-  // State to manage open/close
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
     <div className={`card-base ${className}`}>
       {/* Header */}
-      <div 
-        className="card-header-wrapper"
-        onClick={() => setIsOpen(!isOpen)}
-      >
+      <div className="card-header-wrapper">
+        {/* Arrow — toggles expand/collapse */}
         <div className="card-title">
-          <span className="text-indigo-600 transition-transform duration-200">
+          <span
+            className="text-indigo-600 transition-transform duration-200 cursor-pointer"
+            onClick={() => setIsOpen(!isOpen)}
+          >
             {isOpen ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
           </span>
-          <h2>{title}</h2>
+          {/* Title — toggles expand/collapse */}
+          <h2
+            className="cursor-pointer hover:text-indigo-600 transition-colors"
+            onClick={() => setIsOpen(!isOpen)}
+          >
+            {title}
+          </h2>
         </div>
 
         <div className="flex items-center gap-3">
@@ -46,7 +52,7 @@ export function CollapsibleCard({
               {icon}
             </span>
           )}
-          
+
           {/* Action Button (Prevent bubble up) */}
           {action && (
             <div onClick={(e) => e.stopPropagation()}>
@@ -56,7 +62,7 @@ export function CollapsibleCard({
         </div>
       </div>
 
-      {/* Content */}
+      {/* Inline expanded content */}
       {isOpen && (
         <div className="card-content">
           {children}

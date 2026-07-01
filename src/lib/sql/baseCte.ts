@@ -254,7 +254,7 @@ export function resolveBareField(
 // WHERE clause — FileMaker operator semantics → parameterized SQL
 //
 // Mirrors convertOperator() in src/lib/utils/utility.ts:
-//   A...B   → col BETWEEN ? AND ?
+//   A...B   → col BETWEEN ? AND ?  (date fields: converts to Excel serial integers)
 //   !=v     → col <> ?
 //   >=v     → col >= ?
 //   >v      → col > ?
@@ -272,12 +272,57 @@ interface Predicate {
   params: unknown[];
 }
 
-function translateFilter(col: string, rawValue: unknown): Predicate {
+/**
+ * Normalise a filter date string (MM/DD/YYYY or YYYY-MM-DD) to ISO YYYY-MM-DD.
+ * Returns null when the format is unrecognised.
+ */
+function toIsoDate(dateStr: string): string | null {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  // Accept both zero-padded (MM/DD/YYYY) and non-padded (M/D/YYYY)
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+    const [m, d, y] = dateStr.split('/');
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  return null;
+}
+
+/**
+ * Build a SQL expression that normalises a date column to ISO YYYY-MM-DD
+ * regardless of how the value is physically stored:
+ *
+ *   ISO string  ("2025-01-02")  → used as-is (matches GLOB pattern)
+ *   Excel serial ("45294")      → converted via SQLite date() from the
+ *                                  Excel epoch (1899-12-30)
+ *
+ * This lets a single query handle both storage formats transparently, so
+ * switching the ETL pipeline from Excel serials to ISO dates requires no
+ * engine changes.
+ */
+function normalizeDateCol(col: string): string {
+  return (
+    `CASE WHEN ${col} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'` +
+    ` THEN ${col}` +
+    ` ELSE date('1899-12-30', '+' || CAST(${col} AS INTEGER) || ' days')` +
+    ` END`
+  );
+}
+
+function translateFilter(col: string, rawValue: unknown, fieldType?: string): Predicate {
   const value = rawValue == null ? '' : String(rawValue);
 
   // Date / numeric range: A...B
   if (value.includes('...')) {
     const [a, b] = value.split('...').map((v) => v.trim());
+    // For date fields, normalise the stored value to ISO at query time so the
+    // comparison works whether the DB stores Excel serials ("45293") or ISO
+    // strings ("2025-01-02"). Filter params are always normalised to ISO too.
+    if (fieldType === 'date') {
+      const iso1 = toIsoDate(a);
+      const iso2 = toIsoDate(b);
+      if (iso1 !== null && iso2 !== null) {
+        return { sql: `${normalizeDateCol(col)} BETWEEN ? AND ?`, params: [iso1, iso2] };
+      }
+    }
     return { sql: `${col} BETWEEN ? AND ?`, params: [a, b] };
   }
 
@@ -337,7 +382,16 @@ function buildWhere(
       const fields = group[table];
       for (const field of Object.keys(fields)) {
         const col = qualifiedColumn(setup, table, field);
-        const pred = translateFilter(col, fields[field]);
+        // Pass the field's declared type so translateFilter can choose the right
+        // comparison strategy (e.g. Excel serial conversion for 'date' fields).
+        let fieldType: string | undefined;
+        try {
+          fieldType = resolveField(setup, table, field).def.type;
+        } catch {
+          // Unknown field — resolveField will throw again during SELECT building;
+          // leave fieldType undefined and let translateFilter fall through to default.
+        }
+        const pred = translateFilter(col, fields[field], fieldType);
         clauses.push(pred.sql);
         params.push(...pred.params);
       }

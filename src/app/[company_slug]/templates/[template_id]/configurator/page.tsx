@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, Suspense, useState, useCallback, useMemo } from "react";
+import { useEffect, useLayoutEffect, Suspense, useState, useCallback, useMemo, startTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ReportProvider, useReport } from "@/context/ReportContext";
 import "@/styles/reportConfig.css";
@@ -21,6 +21,7 @@ import { REPORTS_SYSTEM_INSTRUCTION } from "@/constants/reportsSystemInstruction
 import { SQL_REPORTS_SYSTEM_INSTRUCTION } from "@/constants/sqlReportsSystemInstruction";
 import { apiClient } from "@/utils/apiClient";
 import { sanitizeReportConfig } from "@/lib/utils/sanitizeReportConfig";
+import { SqlExecutionFloater, type SqlStep } from "@/components/SqlExecutionFloater";
 import type { ClassicViewSettings } from "@/components/report-builder/ClassicViewSettingsSection";
 import type { FilterField } from "@/components/report-builder/ClassicViewSettingsSection";
 
@@ -115,6 +116,8 @@ function ConfiguratorPageContent({
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [templateName, setTemplateName] = useState("");
   const [hasPreviewData, setHasPreviewData] = useState(false);
+  const [sqlFloaterStep, setSqlFloaterStep] = useState<SqlStep | null>(null);
+  const [isSqlFetching, setIsSqlFetching] = useState(false);
 
   // Classic view display settings — shared between preview and configurator panels
   const [classicSettings, setClassicSettings] = useState<ClassicViewSettings>({
@@ -135,17 +138,15 @@ function ConfiguratorPageContent({
 
   const handleClassicSettingsChange = useCallback(
     (key: keyof ClassicViewSettings, value: boolean) => {
-      setClassicSettings((prev) => {
-        const next = { ...prev, [key]: value };
-        if (state.templateId) {
-          dispatch({ type: "UPDATE_CLASSIC_SETTINGS", payload: { [key]: value } });
-          const newConfig = { ...state.config, classic_settings: next };
-          apiClient.post(`/api/templates/${state.templateId}/config`, { config_json: newConfig }).catch(console.error);
-        }
-        return next;
-      });
+      const next = { ...classicSettings, [key]: value };
+      setClassicSettings(next);
+      if (state.templateId) {
+        dispatch({ type: "UPDATE_CLASSIC_SETTINGS", payload: { [key]: value } });
+        const newConfig = { ...state.config, classic_settings: next };
+        apiClient.post(`/api/templates/${state.templateId}/config`, { config_json: newConfig }).catch(console.error);
+      }
     },
-    [state.templateId, state.config, dispatch]
+    [classicSettings, state.templateId, state.config, dispatch]
   );
 
   // View mode — classic (default) or print — shared between preview and configurator
@@ -307,11 +308,14 @@ function ConfiguratorPageContent({
           },
         });
 
+        // Check if this is a SQL-based report
+        const isSqlReport = data.setup_json?.data_source_type === "sql";
+
         setBreadcrumbs([
           { label: "Report Templates", href: `/${slug}/templates` },
           { label: "Setup", href: `/${slug}/templates/${templateId}/setup` },
           { label: "Report Builder" },
-          ...(slug !== "equiparts" ? [{ label: "Chart Builder", href: `/${slug}/templates/${templateId}/charts` }] : []),
+          ...(slug !== "equiparts" && !isSqlReport ? [{ label: "Chart Builder", href: `/${slug}/templates/${templateId}/charts` }] : []),
         ]);
         setBackHref(`/${slug}/templates`);
 
@@ -325,25 +329,25 @@ function ConfiguratorPageContent({
             const previewPayload = pvd.nested_report
               ? { report_structure_json: pvd.report_structure_json, nested_report: pvd.nested_report }
               : pvd.report_structure_json;
-            dispatch({ type: "SET_REPORT_PREVIEW", payload: previewPayload });
-            if (pvd.stitch_result) {
-              dispatch({ type: "SET_STITCH_RESULT", payload: pvd.stitch_result });
-            }
-            // SQL grouped reports always load in collapsed mode — auto-set collapseBody
-            // so the toggle checkbox reflects the actual visual state on initial load.
-            if (
+            const isGrouped =
               pvd.nested_report &&
               Array.isArray((pvd.nested_report as Record<string, unknown>).groups) &&
-              ((pvd.nested_report as Record<string, unknown>).groups as unknown[]).length > 0
-            ) {
-              setClassicSettings((prev) => ({ ...prev, collapseBody: true }));
-              dispatch({
-                type: "UPDATE_CLASSIC_SETTINGS",
-                payload: { collapseBody: true },
-              });
-            }
+              ((pvd.nested_report as Record<string, unknown>).groups as unknown[]).length > 0;
+            // Use startTransition so rendering hundreds of group rows doesn't block the UI.
+            startTransition(() => {
+              dispatch({ type: "SET_REPORT_PREVIEW", payload: previewPayload });
+              if (pvd.stitch_result) {
+                dispatch({ type: "SET_STITCH_RESULT", payload: pvd.stitch_result });
+              }
+              if (isGrouped) {
+                setClassicSettings((prev) => ({ ...prev, collapseBody: true }));
+                dispatch({ type: "UPDATE_CLASSIC_SETTINGS", payload: { collapseBody: true } });
+              }
+            });
           } else {
-            dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
+            startTransition(() => {
+              dispatch({ type: "SET_REPORT_PREVIEW", payload: data.preview_data_json });
+            });
           }
         } else if (data.config_json && data.setup_json) {
           setHasPreviewData(false);
@@ -365,6 +369,8 @@ function ConfiguratorPageContent({
 
     dispatch({ type: "SET_PROCESSING_LOGS", payload: [] });
     dispatch({ type: "SET_LOADING", payload: true });
+    setSqlFloaterStep(null);
+    setIsSqlFetching(true);
 
     try {
       const response = await fetch(`/api/templates/${templateId}/generate/stream`, {
@@ -408,41 +414,37 @@ function ConfiguratorPageContent({
           if (event.type === "log") {
             logs.push(event.message as string);
             dispatch({ type: "SET_PROCESSING_LOGS", payload: [...logs] });
+          } else if (event.type === "sql_step") {
+            setSqlFloaterStep({ label: event.label as string, sql: event.sql as string });
           } else if (event.type === "done") {
             const structured = event.report_structure_json;
             if (structured) {
               setHasPreviewData(true);
-              // SQL collapsed engine also emits nested_report (NestedReport).
-              // When present, wrap both so ReportPreview can detect nested mode
-              // while still having the FM scaffold available.
-              if (event.nested_report) {
-                dispatch({
-                  type: "SET_REPORT_PREVIEW",
-                  payload: {
-                    report_structure_json: structured,
-                    nested_report: event.nested_report,
-                  },
-                });
-                // SQL grouped reports always load in collapsed mode (body rows are
-                // fetched on demand). Auto-set collapseBody so the toggle reflects
-                // the actual visual state from the start.
-                if (
-                  event.nested_report.groups &&
-                  event.nested_report.groups.length > 0
-                ) {
-                  setClassicSettings((prev) => ({ ...prev, collapseBody: true }));
+              const isGrouped =
+                event.nested_report &&
+                event.nested_report.groups &&
+                event.nested_report.groups.length > 0;
+              // Use startTransition so rendering hundreds of group rows doesn't block the UI.
+              startTransition(() => {
+                if (event.nested_report) {
                   dispatch({
-                    type: "UPDATE_CLASSIC_SETTINGS",
-                    payload: { collapseBody: true },
+                    type: "SET_REPORT_PREVIEW",
+                    payload: {
+                      report_structure_json: structured,
+                      nested_report: event.nested_report,
+                    },
                   });
+                  if (isGrouped) {
+                    setClassicSettings((prev) => ({ ...prev, collapseBody: true }));
+                    dispatch({ type: "UPDATE_CLASSIC_SETTINGS", payload: { collapseBody: true } });
+                  }
+                } else {
+                  dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
                 }
-              } else {
-                dispatch({ type: "SET_REPORT_PREVIEW", payload: structured });
-              }
-              // Cache raw stitch rows so soft-reloads can re-run generateReportStructure client-side
-              if (event.stitch_result) {
-                dispatch({ type: "SET_STITCH_RESULT", payload: event.stitch_result });
-              }
+                if (event.stitch_result) {
+                  dispatch({ type: "SET_STITCH_RESULT", payload: event.stitch_result });
+                }
+              });
             }
           } else if (event.type === "warn_large") {
             reader.cancel();
@@ -465,6 +467,7 @@ function ConfiguratorPageContent({
       addToast("error", "Generation Failed", e.message || "Failed to generate report preview.");
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
+      setIsSqlFetching(false);
     }
   }, [dispatch, templateId, addToast]);
 
@@ -574,6 +577,7 @@ function ConfiguratorPageContent({
   return (
     // No extra header here — panel toggles live in the global Header via HeaderContext
     <div className="flex flex-1 overflow-hidden relative">
+      <SqlExecutionFloater currentStep={sqlFloaterStep} isGenerating={isSqlFetching} />
 
       {/* COLUMN 1: AI Copilot (Left) — has its own skeleton; independent of preview calc */}
       <div

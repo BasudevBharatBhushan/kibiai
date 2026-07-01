@@ -104,6 +104,8 @@ export function buildGroupAggregationQuery(
   config: ReportConfig,
   setup: SqlSetup,
   level: number,
+  groupLimit?: number,
+  groupOffset?: number,
 ): SqlQuery {
   const base = buildBaseCte(config, setup);
   const levels = groupLevels(config);
@@ -125,10 +127,14 @@ export function buildGroupAggregationQuery(
 
   for (const g of selected) {
     const gc = baseCol(g.table, g.field);
-    selectParts.push(gc);
-    groupByParts.push(gc);
+    // Normalize NULL → '' so that NULL and empty-string group values
+    // are merged into a single group, preventing duplicate React keys
+    // when ClassicReportView renders "(blank)" for both.
+    const gcCoalesced = `COALESCE(${gc}, '')`;
+    selectParts.push(`${gcCoalesced} AS ${gc}`);
+    groupByParts.push(gcCoalesced);
     const dir = g.sort_order === 'desc' ? 'DESC' : 'ASC';
-    orderByParts.push(`${gc} ${dir}`);
+    orderByParts.push(`${gcCoalesced} ${dir}`);
   }
 
   // Display columns for the selected levels (aggregated via MIN so they are
@@ -149,11 +155,19 @@ export function buildGroupAggregationQuery(
     selectParts.push(`COALESCE(SUM(${tc}), 0) AS ${tc}`);
   }
 
-  const sql =
+  let sql =
     `${base.cteSql} ` +
     `SELECT ${selectParts.join(', ')} FROM base ` +
     `GROUP BY ${groupByParts.join(', ')} ` +
     `ORDER BY ${orderByParts.join(', ')}`;
+
+  // Apply pagination when fetching a specific groups page.
+  if (groupLimit !== undefined && groupLimit > 0) {
+    sql += ` LIMIT ${groupLimit}`;
+    if (groupOffset !== undefined && groupOffset > 0) {
+      sql += ` OFFSET ${groupOffset}`;
+    }
+  }
 
   return { sql, params: [...base.params] };
 }

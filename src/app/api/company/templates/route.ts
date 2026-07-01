@@ -137,10 +137,18 @@ export async function GET(req: Request) {
     // Compute has_setup / has_config flags — strip raw JSON blobs before returning
     const templatesWithFlags = (templates || []).map((t: any) => {
       const { report_template_setup_json, report_template_config_json, ...rest } = t;
+
+      // Determine source type based on setup JSON
+      let source_type: "filemaker" | "sql" | null = null;
+      if (report_template_setup_json && Object.keys(report_template_setup_json).length > 0) {
+        source_type = report_template_setup_json.data_source_type === "sql" ? "sql" : "filemaker";
+      }
+
       return {
         ...rest,
         has_setup: (t.setup_id !== null) || (report_template_setup_json !== null && Object.keys(report_template_setup_json || {}).length > 0),
         has_config: report_template_config_json !== null && Object.keys(report_template_config_json || {}).length > 0,
+        source_type,
       };
     });
 

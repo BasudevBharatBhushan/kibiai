@@ -22,6 +22,7 @@ import {
   Maximize2, Minimize2,
 } from "lucide-react";
 import React from "react";
+import { SqlExecutionFloater, type SqlStep } from "@/components/SqlExecutionFloater";
 
 import { FILTER_OPERATORS } from "@/constants/reportOptions";
 
@@ -402,6 +403,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationLogs, setGenerationLogs] = useState<string[]>([]);
+  const [currentSqlStep, setCurrentSqlStep] = useState<SqlStep | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [configJson, setConfigJson] = useState<any>(null);
   const [reportData, setReportData] = useState<any[] | null>(null);
@@ -657,6 +659,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
     setGenerationLogs([]);
     setReportData(null);
 
+    setCurrentSqlStep(null);
     try {
       const response = await fetch(`/api/templates/${templateId}/generate/stream`, {
         method: "POST",
@@ -695,6 +698,8 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
 
           if (event.type === "log") {
             setGenerationLogs(prev => [...prev, event.message as string]);
+          } else if (event.type === "sql_step") {
+            setCurrentSqlStep({ label: event.label as string, sql: event.sql as string });
           } else if (event.type === "done") {
             const structured = event.report_structure_json;
             const heading = event.report_name ?? templateName ?? "Report";
@@ -880,6 +885,7 @@ function GeneratePageContent({ templateId, slug }: { templateId: string; slug: s
 
   return (
     <>
+      <SqlExecutionFloater currentStep={currentSqlStep} isGenerating={isGenerating} />
       <div className="-mx-4 sm:-mx-6 lg:-mx-8 flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50">
 
         {/* ── LEFT: Configuration Panel ─────────────────────────────── */}

@@ -196,6 +196,17 @@ export interface NestedReport {
    * when flatRows is capped.
    */
   totalRowCount?: number;
+  /**
+   * Total number of distinct root-level groups in the database (before any
+   * preview cap). Set by the stream route so the UI can display
+   * "X of Y groups" and decide whether to show "Load more groups".
+   */
+  totalGroupCount?: number;
+  /**
+   * True when the groups array has been capped and more groups exist on the
+   * server. Use this to show the "Load more groups" control.
+   */
+  groupsCapped?: boolean;
 }
 
 // ---------------------------------------------------------------------------

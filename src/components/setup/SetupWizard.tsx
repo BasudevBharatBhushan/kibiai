@@ -6,6 +6,9 @@ import { Save, Loader2, CheckCircle, AlertCircle, Database, Network, FileJson, P
 import Link from "next/link";
 import { HostConfigSection } from "@/components/setup/HostConfigSection";
 import { AddDatabaseSection } from "@/components/setup/AddDatabaseSection";
+import { AddSqlDatabaseSection } from "@/components/setup/AddSqlDatabaseSection";
+import { UpdateSqlFieldsModal } from "@/components/setup/UpdateSqlFieldsModal";
+import { SqlSetup } from "@/lib/sql/types";
 import { TableCard } from "@/components/setup/TableCard";
 import { RelationshipsPanel } from "@/components/setup/RelationshipsPanel";
 import { SetupJsonPreview } from "@/components/setup/SetupJsonPreview";
@@ -339,6 +342,17 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
     }
   };
 
+  const handleDbTypeChange = (newIsSql: boolean) => {
+    if (newIsSql === isSql) return;
+    if (tableNames.length > 0 && !window.confirm("Switching database type will clear all tables. Continue?")) return;
+    setIsSql(newIsSql);
+    setSqlApiKey("");
+    dispatch({ type: "SET_CONFIG", payload: EMPTY_CONFIG });
+    setSelectedView("");
+  };
+
+  const handleApiKeyChange = (key: string) => setSqlApiKey(key);
+
   // Clean empty optional fields before saving
   const cleanConfig = useCallback((cfg: SetupConfig): SetupConfig => {
     const cleaned = JSON.parse(JSON.stringify(cfg)) as SetupConfig;
@@ -353,11 +367,47 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
     return cleaned;
   }, []);
 
+  const buildSqlSetup = useCallback((cfg: SetupConfig, apiKey: string): SqlSetup => ({
+    data_source_type: "sql",
+    connection_type: "sqlite",
+    connection: { host: cfg.host, apiKey },
+    tables: Object.fromEntries(
+      Object.entries(cfg.tables).map(([name, tc]) => [
+        name,
+        { physical: tc.layout ?? name, fields: tc.fields },
+      ])
+    ),
+    relationships: cfg.relationships.map(({ primary_table, joined_table, source, target }) => ({
+      primary_table, joined_table, source, target,
+    })),
+  }), []);
+
+  const sqlSetupToReducerConfig = useCallback((setup: SqlSetup): SetupConfig => ({
+    host: setup.connection?.host ?? "",
+    data_fetching_protocol: "data-api",
+    tables: Object.fromEntries(
+      Object.entries(setup.tables ?? {}).map(([name, td]) => [
+        name,
+        { file: "", username: "", password: "", layout: td.physical ?? name, fields: td.fields },
+      ])
+    ),
+    relationships: (setup.relationships ?? []).map(({ primary_table, joined_table, source, target }) => ({
+      primary_table, joined_table, source, target,
+    })),
+  }), []);
+
   const handleSave = async () => {
     setSaveStatus("saving");
     setSaveError(null);
     try {
-      const payload = cleanConfig(config);
+      let payload: SetupConfig | SqlSetup;
+      if (isSql) {
+        const raw = config as unknown as SqlSetup;
+        // If user pasted a full SqlSetup JSON via the preview editor, use it directly
+        payload = raw.data_source_type === "sql" ? raw : buildSqlSetup(cleanConfig(config), sqlApiKey);
+      } else {
+        payload = cleanConfig(config);
+      }
       const res = await fetch(`/api/company/templates/${templateId}/setup`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -540,6 +590,8 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
             disabled={tableNames.length > 0}
             isSql={isSql}
             apiKey={sqlApiKey}
+            onDbTypeChange={handleDbTypeChange}
+            onApiKeyChange={handleApiKeyChange}
           />
 
           {/* Dynamic detail view */}
@@ -624,10 +676,21 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
       </div>
 
       <SetupJsonPreview
-        config={cleanConfig(config)}
+        config={isSql
+          ? (buildSqlSetup(cleanConfig(config), sqlApiKey) as unknown as SetupConfig)
+          : cleanConfig(config)}
         show={showJsonPreview}
         onToggle={() => setShowJsonPreview((v) => !v)}
-        onSave={(newConfig) => dispatch({ type: "SET_CONFIG", payload: newConfig })}
+        onSave={(newConfig) => {
+          const asAny = newConfig as unknown as SqlSetup;
+          if (asAny.data_source_type === "sql") {
+            setIsSql(true);
+            setSqlApiKey(asAny.connection?.apiKey ?? "");
+            dispatch({ type: "SET_CONFIG", payload: sqlSetupToReducerConfig(asAny) });
+          } else {
+            dispatch({ type: "SET_CONFIG", payload: newConfig });
+          }
+        }}
       />
 
       {showSaveAsModal && (
@@ -638,7 +701,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
         />
       )}
 
-      {showAddDatabaseModal && (
+      {showAddDatabaseModal && !isSql && (
         <AddDatabaseSection
           host={config.host}
           protocol={config.data_fetching_protocol}
@@ -646,7 +709,7 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           existingTableNames={tableNames}
           initialFile={tableNames.length > 0 ? config.tables[tableNames[tableNames.length - 1]].file : ""}
           initialUsername={tableNames.length > 0 ? config.tables[tableNames[tableNames.length - 1]].username : ""}
-          onTableAdded={(tableName, tableConfig) => 
+          onTableAdded={(tableName, tableConfig) =>
             dispatch({ type: "ADD_TABLE", tableName, tableConfig })
           }
           onHostChange={(val) => dispatch({ type: "SET_HOST", payload: val })}
@@ -655,7 +718,22 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
         />
       )}
 
-      {managingFieldsForTable && config.tables[managingFieldsForTable] && (
+      {showAddDatabaseModal && isSql && (
+        <AddSqlDatabaseSection
+          host={config.host}
+          apiKey={sqlApiKey}
+          tableCount={tableNames.length}
+          existingTableNames={tableNames}
+          onTableAdded={(tableName, tableConfig) =>
+            dispatch({ type: "ADD_TABLE", tableName, tableConfig })
+          }
+          onHostChange={(val) => dispatch({ type: "SET_HOST", payload: val })}
+          onApiKeyChange={handleApiKeyChange}
+          onClose={() => setShowAddDatabaseModal(false)}
+        />
+      )}
+
+      {managingFieldsForTable && config.tables[managingFieldsForTable] && !isSql && (
         <UpdateFieldsModal
           tableName={managingFieldsForTable}
           host={config.host}
@@ -664,6 +742,21 @@ export function SetupWizard({ templateId, companySlug }: SetupWizardProps) {
           layout={config.tables[managingFieldsForTable].layout}
           username={config.tables[managingFieldsForTable].username}
           password={config.tables[managingFieldsForTable].password}
+          existingFields={config.tables[managingFieldsForTable].fields}
+          onConfirm={(mergedFields) => {
+            dispatch({ type: "UPDATE_TABLE_FIELDS", tableName: managingFieldsForTable, newFields: mergedFields });
+            setManagingFieldsForTable(null);
+          }}
+          onCancel={() => setManagingFieldsForTable(null)}
+        />
+      )}
+
+      {managingFieldsForTable && config.tables[managingFieldsForTable] && isSql && (
+        <UpdateSqlFieldsModal
+          tableName={managingFieldsForTable}
+          physicalName={config.tables[managingFieldsForTable].layout ?? managingFieldsForTable}
+          host={config.host}
+          apiKey={sqlApiKey}
           existingFields={config.tables[managingFieldsForTable].fields}
           onConfirm={(mergedFields) => {
             dispatch({ type: "UPDATE_TABLE_FIELDS", tableName: managingFieldsForTable, newFields: mergedFields });

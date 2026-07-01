@@ -40,6 +40,14 @@ import {
 // Result type
 // ---------------------------------------------------------------------------
 
+/** One SQL query executed during report generation, for client-side transparency. */
+export interface SqlStep {
+  /** Short human-readable name for the query (e.g. "Group Aggregation — Level 0"). */
+  label: string;
+  /** Full SQL text including the base CTE, sent to the client for display. */
+  sql: string;
+}
+
 export interface SqlReportResult {
   /** The view mode that was executed. */
   mode: ViewMode;
@@ -82,6 +90,12 @@ export interface SqlReportResult {
    * returned, and any warnings.  Mirrors the FM engine's processing_logs.
    */
   processing_logs: string[];
+
+  /**
+   * Ordered list of SQL queries executed during this run, with labels.
+   * Streamed to the client so users can see exactly what SQL ran.
+   */
+  sql_steps: SqlStep[];
 }
 
 // Re-export for SA-8/SA-9 (frontend) to import the same threshold value.
@@ -103,8 +117,11 @@ function groupLevels(config: ReportConfig): number {
 async function runCollapsed(
   setup: SqlSetup,
   config: ReportConfig,
+  groupOffset?: number,
+  groupLimit?: number,
 ): Promise<SqlReportResult> {
   const logs: string[] = [];
+  const sql_steps: SqlStep[] = [];
   const numLevels = groupLevels(config);
 
   if (numLevels === 0) {
@@ -119,22 +136,35 @@ async function runCollapsed(
       report_structure_json: fmArray,
       nested,
       processing_logs: logs,
+      sql_steps,
     };
   }
 
+  const isPaginated = groupLimit !== undefined && groupLimit > 0;
+  const offset = groupOffset ?? 0;
+
   // Execute one aggregation query per group level.
+  // Level 0 supports optional LIMIT/OFFSET for "load more groups" pagination.
   const levelRows: Record<string, unknown>[][] = [];
 
   for (let level = 0; level < numLevels; level++) {
+    const applyPagination = isPaginated && level === 0;
     let query;
     try {
-      query = buildGroupAggregationQuery(config, setup, level);
+      query = buildGroupAggregationQuery(
+        config,
+        setup,
+        level,
+        applyPagination ? groupLimit : undefined,
+        applyPagination && offset > 0 ? offset : undefined,
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`sqlReportEngine [collapsed, level ${level}]: failed to build aggregation query — ${msg}`);
     }
 
-    logs.push(`[level ${level}] Executing group aggregation query (params: ${query.params.length})`);
+    sql_steps.push({ label: `Group Aggregation — Level ${level}`, sql: query.sql });
+    logs.push(`[level ${level}] Executing group aggregation query (params: ${query.params.length})${applyPagination ? ` [limit=${groupLimit} offset=${offset}]` : ''}`);
 
     let result;
     try {
@@ -157,6 +187,7 @@ async function runCollapsed(
     throw new Error(`sqlReportEngine [collapsed, grandSummary]: failed to build grand summary query — ${msg}`);
   }
 
+  sql_steps.push({ label: 'Grand Summary', sql: grandQuery.sql });
   logs.push(`Executing grand summary query (params: ${grandQuery.params.length})`);
 
   let grandResult;
@@ -188,6 +219,7 @@ async function runCollapsed(
     report_structure_json: fmArray,
     nested,
     processing_logs: logs,
+    sql_steps,
   };
 }
 
@@ -209,6 +241,7 @@ async function runDrilldown(
   confirmLarge: boolean,
 ): Promise<SqlReportResult> {
   const logs: string[] = [];
+  const sql_steps: SqlStep[] = [];
 
   // Map groupPath entries (table/field/value) straight to the groupFilter shape
   // expected by buildCountQuery / buildDetailQuery — they are identical structs.
@@ -231,6 +264,7 @@ async function runDrilldown(
     throw new Error(`sqlReportEngine [drilldown, count]: failed to build count query — ${msg}`);
   }
 
+  sql_steps.push({ label: 'Row Count', sql: countQuery.sql });
   logs.push(`[drilldown] Executing count query (params: ${countQuery.params.length})`);
 
   let countResult;
@@ -260,6 +294,7 @@ async function runDrilldown(
       row_count: rowCount,
       warn_large: true,
       processing_logs: logs,
+      sql_steps,
     };
   }
 
@@ -278,6 +313,7 @@ async function runDrilldown(
     throw new Error(`sqlReportEngine [drilldown, detail]: failed to build detail query — ${msg}`);
   }
 
+  sql_steps.push({ label: 'Detail Rows', sql: detailQuery.sql });
   logs.push(`[drilldown] Executing detail query (params: ${detailQuery.params.length})`);
 
   let detailResult;
@@ -300,6 +336,7 @@ async function runDrilldown(
     warn_large: false,
     group_rows: drilldownResult,
     processing_logs: logs,
+    sql_steps,
   };
 }
 
@@ -325,6 +362,7 @@ async function runExpandAll(
   confirmLarge: boolean,
 ): Promise<SqlReportResult> {
   const logs: string[] = [];
+  const sql_steps: SqlStep[] = [];
   const numLevels = groupLevels(config);
 
   // ── Step 1: global count query (no group filter) ───────────────────────────
@@ -336,6 +374,7 @@ async function runExpandAll(
     throw new Error(`sqlReportEngine [${viewMode}, count]: failed to build count query — ${msg}`);
   }
 
+  sql_steps.push({ label: 'Global Row Count', sql: countQuery.sql });
   logs.push(`[${viewMode}] Executing global count query (params: ${countQuery.params.length})`);
 
   let countResult;
@@ -369,6 +408,7 @@ async function runExpandAll(
       row_count: rowCount,
       warn_large: true,
       processing_logs: logs,
+      sql_steps,
     };
   }
 
@@ -399,6 +439,7 @@ async function runExpandAll(
         );
       }
 
+      sql_steps.push({ label: `Group Aggregation — Level ${level}`, sql: aggQuery.sql });
       logs.push(`[${viewMode}][level ${level}] Executing group aggregation query (params: ${aggQuery.params.length})`);
 
       let aggResult;
@@ -435,6 +476,7 @@ async function runExpandAll(
     );
   }
 
+  sql_steps.push({ label: 'Full Detail Rows', sql: detailQuery.sql });
   logs.push(`[${viewMode}] Executing full detail query (params: ${detailQuery.params.length})`);
 
   let detailResult;
@@ -460,6 +502,7 @@ async function runExpandAll(
     );
   }
 
+  sql_steps.push({ label: 'Grand Summary', sql: grandQuery.sql });
   logs.push(`[${viewMode}] Executing grand summary query (params: ${grandQuery.params.length})`);
 
   let grandResult;
@@ -500,6 +543,7 @@ async function runExpandAll(
     nested,
     report_structure_json: fmArray,
     processing_logs: logs,
+    sql_steps,
   };
 }
 
@@ -522,6 +566,10 @@ export interface RunSqlReportParams {
    * Owned by SA-7 / SA-10; ignored in Ticket 1.
    */
   confirmLarge?: boolean;
+  /** For "load more groups": 0-based offset into the level-0 group result set. */
+  groupOffset?: number;
+  /** For "load more groups": max level-0 groups to return in this page. */
+  groupLimit?: number;
 }
 
 /**
@@ -537,7 +585,7 @@ export async function runSqlReport(params: RunSqlReportParams): Promise<SqlRepor
 
   switch (viewMode) {
     case 'collapsed':
-      return runCollapsed(setup, config);
+      return runCollapsed(setup, config, params.groupOffset, params.groupLimit);
 
     case 'drilldown':
       return runDrilldown(

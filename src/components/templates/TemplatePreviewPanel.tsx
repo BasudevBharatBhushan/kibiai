@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { BarChart3, Loader2, RefreshCw } from "lucide-react";
 import { apiClient } from "@/utils/apiClient";
 import DynamicReport from "@/components/DynamicReportPreview";
+import { ClassicReportView } from "@/components/report-viewer/ClassicReportView";
+import type { NestedReport } from "@/lib/sql/structureAdapter";
 
 interface TemplatePreviewPanelProps {
   template: {
@@ -40,6 +42,20 @@ function normalizePreviewData(rawData: any): any[] | null {
   return null;
 }
 
+function extractNestedReport(rawData: unknown): NestedReport | null {
+  if (typeof rawData !== "object" || rawData === null) return null;
+  const r = rawData as Record<string, unknown>;
+  if (
+    Array.isArray(r.report_structure_json) &&
+    typeof r.nested_report === "object" &&
+    r.nested_report !== null &&
+    (r.nested_report as Record<string, unknown>).mode === "nested"
+  ) {
+    return r.nested_report as NestedReport;
+  }
+  return null;
+}
+
 /**
  * TemplatePreviewPanel
  * Clean preview panel — no toolbar, no pagination controls, no header strip.
@@ -53,12 +69,14 @@ function normalizePreviewData(rawData: any): any[] | null {
  */
 export function TemplatePreviewPanel({ template }: TemplatePreviewPanelProps) {
   const [previewData, setPreviewData] = useState<any[] | null>(null);
+  const [nestedData, setNestedData] = useState<NestedReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lastTemplateId, setLastTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!template) {
       setPreviewData(null);
+      setNestedData(null);
       return;
     }
     if (template.report_template_id === lastTemplateId) return;
@@ -71,9 +89,12 @@ export function TemplatePreviewPanel({ template }: TemplatePreviewPanelProps) {
           `/api/templates/${template.report_template_id}/config`
         );
         if (res.success && res.data?.preview_data_json) {
-          setPreviewData(normalizePreviewData(res.data.preview_data_json));
+          const raw = res.data.preview_data_json;
+          setPreviewData(normalizePreviewData(raw));
+          setNestedData(extractNestedReport(raw));
         } else {
           setPreviewData(null);
+          setNestedData(null);
         }
         setLastTemplateId(template.report_template_id);
       } catch {
@@ -177,7 +198,30 @@ export function TemplatePreviewPanel({ template }: TemplatePreviewPanelProps) {
     );
   }
 
-  /* ── Report preview (previewMode = no toolbar, no pagination controls) ── */
+  /* ── SQL nested report → ClassicReportView collapsed (groups only, no body rows) ── */
+  if (nestedData) {
+    return (
+      <div className="h-full overflow-auto bg-gray-100 relative">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 bg-gray-100/80 backdrop-blur-[1px] flex items-start">
+            <SkeletonBlock />
+          </div>
+        )}
+        <div className="p-4">
+          <ClassicReportView
+            jsonData={(previewData ?? []) as Record<string, unknown>[]}
+            showAvg={false}
+            collapseBody={true}
+            paginate={false}
+            mode="nested"
+            nestedData={nestedData}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  /* ── FM report preview (classic view, same as SQL reports) ── */
   return (
     <div className="h-full overflow-auto bg-gray-100 relative">
       {/* Skeleton overlay while switching templates — old report stays visible */}
@@ -186,7 +230,15 @@ export function TemplatePreviewPanel({ template }: TemplatePreviewPanelProps) {
           <SkeletonBlock />
         </div>
       )}
-      <DynamicReport jsonData={previewData} previewMode={true} />
+      <div className="p-4">
+        <ClassicReportView
+          jsonData={previewData as Record<string, unknown>[]}
+          showAvg={false}
+          collapseBody={false}
+          paginate={false}
+          mode="flat"
+        />
+      </div>
     </div>
   );
 }

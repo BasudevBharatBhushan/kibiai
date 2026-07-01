@@ -8,6 +8,8 @@ interface HostConfigSectionProps {
   disabled?: boolean;
   isSql?: boolean;
   apiKey?: string;
+  onDbTypeChange?: (isSql: boolean) => void;
+  onApiKeyChange?: (key: string) => void;
 }
 
 export function HostConfigSection({
@@ -18,18 +20,30 @@ export function HostConfigSection({
   disabled = false,
   isSql = false,
   apiKey = "",
+  onDbTypeChange,
+  onApiKeyChange,
 }: HostConfigSectionProps) {
   return (
     <div className="hcs-section">
       <div className="hcs-db-selector">
-        <div className={`hcs-db-option ${!isSql ? 'active' : ''}`} title="FileMaker">
+        <div
+          className={`hcs-db-option ${!isSql ? 'active' : ''}`}
+          title="FileMaker"
+          onClick={() => onDbTypeChange?.(false)}
+          style={{ cursor: onDbTypeChange ? 'pointer' : 'default' }}
+        >
           <img
             src="https://www.productivecomputing.com/wp-content/uploads/2024/05/Claris-Filemaker-icon-color-dark_1200.png"
             alt="FileMaker"
             className="hcs-db-logo"
           />
         </div>
-        <div className={`hcs-db-option ${isSql ? 'active' : ''}`} title="SQLite">
+        <div
+          className={`hcs-db-option ${isSql ? 'active' : ''}`}
+          title="SQLite"
+          onClick={() => onDbTypeChange?.(true)}
+          style={{ cursor: onDbTypeChange ? 'pointer' : 'default' }}
+        >
           <img
             src="https://www.sqlite.org/images/sqlite370_banner.gif"
             alt="SQLite"
@@ -80,7 +94,8 @@ export function HostConfigSection({
               className="hcs-input"
               placeholder="API Key"
               value={apiKey}
-              disabled
+              onChange={(e) => onApiKeyChange?.(e.target.value)}
+              disabled={disabled}
             />
           </div>
         ) : (

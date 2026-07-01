@@ -3,6 +3,12 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=cyktaxhjbwdottrailkn"
+    },
+    "graphify": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "graphify.serve", "graphify-out/graph.json"],
+      "cwd": "e:\\Dev\\Next JS\\kibiai"
     }
   }
 }

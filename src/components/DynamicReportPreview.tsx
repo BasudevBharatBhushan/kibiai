@@ -31,6 +31,11 @@ interface DynamicReportProps {
   mode?: "flat" | "nested";
   /** Pre-built nested report tree (required when `mode === 'nested'`). */
   nestedData?: NestedReport;
+  /**
+   * When false (off-screen), HTML is still injected but pagination is skipped
+   * to avoid wasted CPU. Pagination runs once when active becomes true.
+   */
+  active?: boolean;
 }
 
 // --- CONFIGURATION ---
@@ -191,15 +196,21 @@ const ExpandedReportView = ({ htmlContent, onClose }: { htmlContent: string, onC
 
 
 // --- MAIN COMPONENT ---
-const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = false, metadata, mode = "flat", nestedData }) => {
+const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = false, metadata, mode = "flat", nestedData, active = true }) => {
   const [reportHtml, setReportHtml] = useState<string>("");
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // UI State
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [isCalculating, setIsCalculating] = useState(false);
-  
+
+  // Page-map cache: built during runPagination, consumed by updateVisibility.
+  // Avoids re-querying the DOM on every page turn.
+  const pageMapRef = useRef<Map<number, HTMLElement[]>>(new Map());
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
   // Modal State
   const [showExpandedModal, setShowExpandedModal] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
@@ -236,10 +247,11 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
 
   // 2. Inject HTML then schedule pagination.
   //    - innerHTML is injected in a double-RAF so React paints the loading state first.
-  //    - Pagination is deferred via requestIdleCallback (fires only when the browser
-  //      has nothing urgent to do, e.g. the user isn't typing/clicking).
-  //      This keeps chat and configurator fully interactive while the report settles.
-  //    - 2 s timeout forces pagination even if the browser never goes truly idle.
+  //    - Pagination only runs when active=true (component is visible).
+  //      When off-screen (active=false), we inject HTML but skip pagination so the
+  //      browser doesn't burn CPU for a view the user isn't looking at.
+  //    - When active=true, requestIdleCallback defers pagination until the browser
+  //      has nothing urgent to do. 2s timeout forces it if browser never goes idle.
   useEffect(() => {
     if (!reportHtml || !containerRef.current) return;
     let cancelled = false;
@@ -251,8 +263,12 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
       raf2Id = requestAnimationFrame(() => {
         if (cancelled || !containerRef.current) return;
         containerRef.current.innerHTML = reportHtml;
+        pageMapRef.current = new Map(); // invalidate cached page map
         setCurrentPage(1);
         setTotalPages(1);
+
+        // Skip pagination when off-screen — it'll run when active becomes true.
+        if (!activeRef.current) return;
 
         if ('requestIdleCallback' in window) {
           idleId = (window as any).requestIdleCallback(
@@ -276,12 +292,22 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
     };
   }, [reportHtml]);
 
+  // 2b. When the component becomes active (user switches to print view), run
+  //     pagination if the page map is empty (HTML was injected while off-screen).
+  useEffect(() => {
+    if (active && pageMapRef.current.size === 0 && containerRef.current?.querySelector('.dynamic-report')) {
+      runPagination();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   // 3. Handle Resize
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     const handleResize = () => {
-        clearTimeout(timeout);
-        timeout = setTimeout(runPagination, 200);
+      if (!activeRef.current) return; // skip resize repagination when off-screen
+      clearTimeout(timeout);
+      timeout = setTimeout(runPagination, 200);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -366,12 +392,18 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
       let pageIndex = 1;
       let currentHeight = 0;
 
+      // Build the page map while assigning data-page attributes.
+      // Caching this avoids O(n) querySelectorAll on every page turn in updateVisibility.
+      const newPageMap = new Map<number, HTMLElement[]>();
+
       for (let i = 0; i < atomicElements.length; i++) {
         const el = atomicElements[i];
         const h = heights[i];
 
         if (isHeader[i]) {
           el.setAttribute('data-page', '1');
+          if (!newPageMap.has(1)) newPageMap.set(1, []);
+          newPageMap.get(1)!.push(el);
           currentHeight += h;
           continue;
         }
@@ -384,8 +416,11 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
         }
         currentHeight += h;
         el.setAttribute('data-page', pageIndex.toString());
+        if (!newPageMap.has(pageIndex)) newPageMap.set(pageIndex, []);
+        newPageMap.get(pageIndex)!.push(el);
       }
 
+      pageMapRef.current = newPageMap;
       setTotalPages(pageIndex);
 
       // Phase 2 — Frame B: apply visibility and clear spinner in the next frame.
@@ -403,33 +438,59 @@ const DynamicReport: React.FC<DynamicReportProps> = ({ jsonData, previewMode = f
     const reportNode = root.querySelector('.dynamic-report') as HTMLElement;
     if (!reportNode) return;
 
-    const paginated = Array.from(reportNode.querySelectorAll('[data-page]')) as HTMLElement[];
-    paginated.forEach(el => {
+    const pageMap = pageMapRef.current;
+
+    if (pageMap.size > 0) {
+      // Fast path: use the cached page map built during runPagination.
+      // Only touch elements that are changing state — no full-DOM querySelectorAll.
+      pageMap.forEach((elements, page) => {
+        const shouldShow = page === targetPage;
+        elements.forEach(el => {
+          const isFixed = el.classList.contains('title-header') || el.classList.contains('current-date');
+          if (isFixed) {
+            el.style.display = targetPage === 1 ? '' : 'none';
+            return;
+          }
+          if (shouldShow) {
+            el.style.display = el.tagName === 'TR' ? 'table-row' : '';
+          } else {
+            el.style.display = 'none';
+          }
+        });
+      });
+    } else {
+      // Fallback when pageMap is empty (e.g. previewMode or before pagination).
+      const paginated = Array.from(reportNode.querySelectorAll('[data-page]')) as HTMLElement[];
+      paginated.forEach(el => {
         const p = parseInt(el.getAttribute('data-page') || '0');
         const isFixed = el.classList.contains('title-header') || el.classList.contains('current-date');
-        
         if (isFixed) {
-            el.style.display = targetPage === 1 ? '' : 'none';
+          el.style.display = targetPage === 1 ? '' : 'none';
+        } else if (p === targetPage) {
+          el.style.display = el.tagName === 'TR' ? 'table-row' : '';
         } else {
-            if (p === targetPage) {
-                if (el.tagName === 'TR') el.style.display = 'table-row';
-                else el.style.display = '';
-            } else {
-                el.style.display = 'none';
-            }
+          el.style.display = 'none';
         }
-    });
+      });
+    }
 
+    // Show/hide body tables and subsummaries based on whether they have visible children.
+    // Use Set for O(1) parent lookup instead of nested querySelectorAll.
+    const visibleElements = new Set(pageMap.get(targetPage) ?? []);
     const tables = Array.from(reportNode.querySelectorAll('table.body-table')) as HTMLElement[];
     tables.forEach(table => {
-        const visibleRow = Array.from(table.querySelectorAll('tr')).find(r => r.style.display !== 'none');
-        table.style.display = visibleRow ? '' : 'none';
+      const hasVisible = Array.from(table.querySelectorAll('tbody tr')).some(
+        r => visibleElements.has(r as HTMLElement)
+      );
+      table.style.display = hasVisible ? '' : 'none';
     });
-    
+
     const subsummaries = Array.from(reportNode.querySelectorAll('.subsummary')) as HTMLElement[];
     subsummaries.forEach(sub => {
-        const visibleChild = Array.from(sub.querySelectorAll('[data-page]')).find(c => (c as HTMLElement).style.display !== 'none');
-        sub.style.display = visibleChild ? '' : 'none';
+      const hasVisible = Array.from(sub.querySelectorAll('[data-page]')).some(
+        c => visibleElements.has(c as HTMLElement)
+      );
+      sub.style.display = hasVisible ? '' : 'none';
     });
   };
 
@@ -891,8 +952,8 @@ function renderBodyTableHtml(
                 const isDate = !isNaN(Date.parse(cellStr)) && isNaN(Number(cellValue));
                 if (!isDate) {
                     const num = parseFloat(cellStr);
-                    if (!isNaN(num)) {
-                        if (prefix === '$' || /total|sum|price|cost/i.test(field)) {
+                    if (!isNaN(num) && isFinite(num)) {
+                        if (prefix !== '' || suffix !== '' || /total|sum|price|cost/i.test(field)) {
                             cellValue = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         }
                     }
