@@ -315,8 +315,8 @@ export function ReportPreview({
   if (isNested && (!nestedData || nestedData.groups.length === 0)) {
     const flatRows = nestedData?.flatRows;
     if (flatRows && flatRows.length > 0) {
-      const reportHeader = (configToUse as Record<string, unknown>)?.report_header as string | undefined;
-      return <FlatRowTable rows={flatRows} fieldOrder={nestedData?.fieldOrder ?? []} totalRowCount={nestedData?.totalRowCount} paginate={classicSettings?.paginate ?? false} title={reportHeader || nestedData?.title || templateName} />;
+      const reportHeader = configToUse?.report_header;
+      return <FlatRowTable rows={flatRows} fieldOrder={nestedData?.fieldOrder ?? []} totalRowCount={nestedData?.totalRowCount} paginate={classicSettings?.paginate ?? false} title={reportHeader || nestedData?.title || templateName || undefined} />;
     }
     return (
       <div className="flex items-center justify-center h-full text-slate-400 bg-white border border-slate-200 min-h-[600px]">
