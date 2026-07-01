@@ -31,6 +31,18 @@ import {
 } from './dateBreakdown';
 
 // ---------------------------------------------------------------------------
+// Date formatting helper
+// ---------------------------------------------------------------------------
+
+/** Format ISO date string (YYYY-MM-DD) to MM-DD-YYYY display format. */
+function formatIsoDateForDisplay(isoDate: string): string {
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  const [y, m, d] = parts;
+  return `${m}-${d}-${y}`;
+}
+
+// ---------------------------------------------------------------------------
 // Label / prefix / suffix helpers
 // ---------------------------------------------------------------------------
 
@@ -77,6 +89,11 @@ export function buildLabelSuffixMap(setup: SqlSetup): Map<string, string> {
     }
   }
   return map;
+}
+
+/** Get the field type ('text' | 'number' | 'date') for a given table.field. */
+function getFieldType(setup: SqlSetup, table: string, field: string): string | undefined {
+  return setup.tables[table]?.fields[field]?.type;
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +363,18 @@ export function buildNestedGroupTree(
       for (const d of g.display ?? []) {
         const dAlias = displayAliasKey(d);
         const dLabel = resolveLabel(config, aliasLabelMap, d.table, d.field);
-        display[dLabel] = getRowValue(row, `"${dAlias}"`);
+        let displayValue = getRowValue(row, `"${dAlias}"`);
+        // Format date display values
+        if (displayValue !== undefined && displayValue !== null) {
+          const fieldType = getFieldType(setup, d.table, d.field);
+          if (fieldType === 'date') {
+            const strVal = String(displayValue).trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(strVal)) {
+              displayValue = formatIsoDateForDisplay(strVal);
+            }
+          }
+        }
+        display[dLabel] = displayValue;
       }
 
       const count = toNumber(getRowValue(row, '"row_count"'));
@@ -356,9 +384,27 @@ export function buildNestedGroupTree(
       // Row ordering is preserved server-side via ORDER BY, so formatting the
       // display value here is safe.
       const isSynthetic = isSyntheticBreakdownField(g) && dateBreakdown !== undefined;
-      const value = (isSynthetic && rawValue !== undefined)
-        ? formatBucketLabel(String(rawValue), dateBreakdown!.interval)
-        : rawValue;
+      let value: unknown;
+
+      if (isSynthetic && rawValue !== undefined) {
+        value = formatBucketLabel(String(rawValue), dateBreakdown!.interval);
+      } else if (rawValue !== undefined && rawValue !== null) {
+        // Format date group values (non-synthetic date fields).
+        const fieldType = getFieldType(setup, g.table, g.field);
+        if (fieldType === 'date') {
+          const strVal = String(rawValue).trim();
+          // Only format if it looks like an ISO date (YYYY-MM-DD)
+          if (/^\d{4}-\d{2}-\d{2}/.test(strVal)) {
+            value = formatIsoDateForDisplay(strVal);
+          } else {
+            value = rawValue;
+          }
+        } else {
+          value = rawValue;
+        }
+      } else {
+        value = rawValue;
+      }
 
       // Collect totalFields labels for this level so ClassicReportView can
       // render footer columns without needing a local NestedGroupNodeEx alias.
@@ -371,8 +417,9 @@ export function buildNestedGroupTree(
         label: fieldLabel,
         value,
         // Store the raw DB value as groupKeyValue when it differs from the
-        // display value so that distributeRowsToLeaves can match detail rows.
-        ...(isSynthetic && rawValue !== value ? { groupKeyValue: rawValue } : {}),
+        // display value (e.g. formatted dates, synthetic breakdown) so that
+        // distributeRowsToLeaves can match detail rows by the raw DB value.
+        ...(rawValue !== value ? { groupKeyValue: rawValue } : {}),
         count,
         totals,
         display,
