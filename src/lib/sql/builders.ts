@@ -14,11 +14,13 @@
 // Pure / deterministic.
 // ---------------------------------------------------------------------------
 
-import type { ReportConfig, GroupByField, SortField } from '../reportConfigTypes';
+import type { ReportConfig, SortField } from '../reportConfigTypes';
 import type { SqlSetup, SqlQuery } from './types';
 import { columnAlias } from './identifiers';
 import { buildBaseCte, resolveBareField } from './baseCte';
 import { calculatedAlias } from './formulaToSql';
+import type { DateBreakdown } from './dateBreakdown';
+import { effectiveGroupLevels } from './dateBreakdown';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -53,11 +55,6 @@ function resolveBaseColumn(config: ReportConfig, bareField: string): string {
     return baseCalcCol(resolved.calculated);
   }
   return baseCol(resolved.table, resolved.field);
-}
-
-/** Ordered list of group-by levels (object insertion order). */
-function groupLevels(config: ReportConfig): GroupByField[] {
-  return Object.values(config.group_by_fields ?? {});
 }
 
 interface GroupFilterEntry {
@@ -106,9 +103,10 @@ export function buildGroupAggregationQuery(
   level: number,
   groupLimit?: number,
   groupOffset?: number,
+  dateBreakdown?: DateBreakdown,
 ): SqlQuery {
-  const base = buildBaseCte(config, setup);
-  const levels = groupLevels(config);
+  const base = buildBaseCte(config, setup, dateBreakdown);
+  const levels = effectiveGroupLevels(config, dateBreakdown);
 
   if (levels.length === 0) {
     throw new Error('buildGroupAggregationQuery: config has no group_by_fields');
@@ -184,8 +182,9 @@ export function buildCountQuery(
   config: ReportConfig,
   setup: SqlSetup,
   groupFilter?: GroupFilterEntry[],
+  dateBreakdown?: DateBreakdown,
 ): SqlQuery {
-  const base = buildBaseCte(config, setup);
+  const base = buildBaseCte(config, setup, dateBreakdown);
   const gf = buildGroupFilterWhere(groupFilter);
 
   let sql = `${base.cteSql} SELECT COUNT(*) AS "total_rows" FROM base`;
@@ -209,14 +208,16 @@ export function buildDetailQuery(
   groupFilter?: GroupFilterEntry[],
   limit?: number,
   offset?: number,
+  dateBreakdown?: DateBreakdown,
 ): SqlQuery {
-  const base = buildBaseCte(config, setup);
+  const base = buildBaseCte(config, setup, dateBreakdown);
   const gf = buildGroupFilterWhere(groupFilter);
 
   const orderByParts: string[] = [];
 
-  // Group columns first (preserve nesting order).
-  for (const g of groupLevels(config)) {
+  // Group columns first (preserve nesting order, synthetic level 0 first when
+  // a breakdown is active so detail rows are ordered by period then real groups).
+  for (const g of effectiveGroupLevels(config, dateBreakdown)) {
     const dir = g.sort_order === 'desc' ? 'DESC' : 'ASC';
     orderByParts.push(`${baseCol(g.table, g.field)} ${dir}`);
   }
@@ -259,8 +260,12 @@ export function buildDetailQuery(
  * `SELECT COALESCE(SUM(<col>),0) AS <col> [, …] FROM base`.
  * With no summary fields, selects a single `COUNT(*)` so the query is valid.
  */
-export function buildGrandSummaryQuery(config: ReportConfig, setup: SqlSetup): SqlQuery {
-  const base = buildBaseCte(config, setup);
+export function buildGrandSummaryQuery(
+  config: ReportConfig,
+  setup: SqlSetup,
+  dateBreakdown?: DateBreakdown,
+): SqlQuery {
+  const base = buildBaseCte(config, setup, dateBreakdown);
 
   const summaryFields = config.summary_fields ?? [];
   const selectParts: string[] = [];

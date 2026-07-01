@@ -4,6 +4,7 @@ import { isSqlSetup } from "@/lib/sql/types";
 import type { ViewMode } from "@/lib/sql/types";
 import { runSqlReport } from "@/lib/sql/sqlReportEngine";
 import type { ReportConfig } from "@/lib/reportConfigTypes";
+import type { DateBreakdown } from "@/lib/sql/dateBreakdown";
 
 // ---------------------------------------------------------------------------
 // POST /api/sql-report/generate
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
     confirm_large,
     group_offset,
     group_limit,
+    date_breakdown,
   } = body as Record<string, unknown>;
 
   // 3. Validate required fields
@@ -115,7 +117,37 @@ export async function POST(req: NextRequest) {
     resolvedGroupPath = group_path as GroupPathEntry[];
   }
 
-  // 8. Run the SQL report engine
+  // 8. Validate and resolve date_breakdown
+  let resolvedDateBreakdown: DateBreakdown | undefined;
+  if (date_breakdown !== undefined) {
+    if (
+      typeof date_breakdown !== "object" ||
+      date_breakdown === null ||
+      typeof (date_breakdown as Record<string, unknown>).table !== "string" ||
+      typeof (date_breakdown as Record<string, unknown>).field !== "string" ||
+      !["Month", "Quarter"].includes(
+        String((date_breakdown as Record<string, unknown>).interval ?? ""),
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'date_breakdown must be an object with string "table", string "field", ' +
+            'and "interval" equal to "Month" or "Quarter"',
+        },
+        { status: 400 },
+      );
+    }
+    const raw = date_breakdown as Record<string, unknown>;
+    resolvedDateBreakdown = {
+      table: raw.table as string,
+      field: raw.field as string,
+      interval: raw.interval as "Month" | "Quarter",
+    };
+  }
+
+  // 9. Run the SQL report engine
   try {
     const result = await runSqlReport({
       setup: setupParsed,
@@ -126,9 +158,10 @@ export async function POST(req: NextRequest) {
         confirm_large === true || confirm_large === "true" ? true : undefined,
       groupOffset: typeof group_offset === "number" ? group_offset : undefined,
       groupLimit: typeof group_limit === "number" ? group_limit : undefined,
+      dateBreakdown: resolvedDateBreakdown,
     });
 
-    // 9. Return envelope matching what the orchestration routes expect.
+    // 10. Return envelope matching what the orchestration routes expect.
     //    Keys mirror /api/generate-report's success response so that the
     //    downstream handling (saving preview, streaming logs) works unchanged.
     return NextResponse.json(

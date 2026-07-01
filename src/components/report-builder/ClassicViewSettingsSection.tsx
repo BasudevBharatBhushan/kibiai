@@ -21,7 +21,7 @@ interface ClassicViewSettingsSectionProps {
   /** Filter fields computed from live report data, provided by ConfiguratorPageContent */
   filterFields?: FilterField[];
   /** Date fields computed from live report data */
-  dateFields?: string[];
+  dateFields?: Array<{ value: string; label: string }>;
   /** Current active filter selections */
   activeFilters?: Record<string, string>;
   /** Called when user changes a filter value */
@@ -150,7 +150,7 @@ export function ClassicViewSettingsSection({
                 >
                   <option value="">None</option>
                   {dateFields.map((f) => (
-                    <option key={f} value={f}>{f}</option>
+                    <option key={f.value} value={f.value}>{f.label}</option>
                   ))}
                 </select>
 

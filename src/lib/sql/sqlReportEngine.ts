@@ -35,6 +35,8 @@ import {
   type FmStructureBlock,
   type DrilldownResult,
 } from './structureAdapter';
+import type { DateBreakdown } from './dateBreakdown';
+import { effectiveGroupLevels } from './dateBreakdown';
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -101,13 +103,17 @@ export interface SqlReportResult {
 // Re-export for SA-8/SA-9 (frontend) to import the same threshold value.
 export { LARGE_ROW_THRESHOLD };
 
-// ---------------------------------------------------------------------------
-// Group-level helpers
-// ---------------------------------------------------------------------------
-
-/** Ordered array of GroupByField values (preserves Record insertion order). */
-function groupLevels(config: ReportConfig): number {
-  return Object.values(config.group_by_fields ?? {}).length;
+/**
+ * Returns true when `table` (a logical table key) participates in the report's
+ * JOIN graph — i.e. it appears as a `primary_table` or `joined_table` in any
+ * `db_defination` entry. A date breakdown may only bucket columns from such
+ * tables, since only they are present in the base CTE's FROM/JOIN clause.
+ */
+function isBreakdownTableJoined(config: ReportConfig, table: string): boolean {
+  for (const def of config.db_defination ?? []) {
+    if (def.primary_table === table || def.joined_table === table) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,18 +125,20 @@ async function runCollapsed(
   config: ReportConfig,
   groupOffset?: number,
   groupLimit?: number,
+  dateBreakdown?: DateBreakdown,
 ): Promise<SqlReportResult> {
   const logs: string[] = [];
   const sql_steps: SqlStep[] = [];
-  const numLevels = groupLevels(config);
+  // Use effective levels so the synthetic breakdown level is counted when active.
+  const numLevels = effectiveGroupLevels(config, dateBreakdown).length;
 
   if (numLevels === 0) {
     // No group levels — emit an empty structure with a warning.
     logs.push('WARNING: config has no group_by_fields; returning empty collapsed structure');
-    const emptyGroups = buildNestedGroupTree(config, setup, []);
+    const emptyGroups = buildNestedGroupTree(config, setup, [], dateBreakdown);
     const emptyGrand = extractGrandTotals(config, setup, null);
     const nested = buildNestedReport(config, setup, emptyGroups, emptyGrand);
-    const fmArray = buildCollapsedStructure(config, setup, [], null);
+    const fmArray = buildCollapsedStructure(config, setup, [], null, dateBreakdown);
     return {
       mode: 'collapsed',
       report_structure_json: fmArray,
@@ -157,6 +165,7 @@ async function runCollapsed(
         level,
         applyPagination ? groupLimit : undefined,
         applyPagination && offset > 0 ? offset : undefined,
+        dateBreakdown,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -181,7 +190,7 @@ async function runCollapsed(
   // Execute grand-summary query.
   let grandQuery;
   try {
-    grandQuery = buildGrandSummaryQuery(config, setup);
+    grandQuery = buildGrandSummaryQuery(config, setup, dateBreakdown);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`sqlReportEngine [collapsed, grandSummary]: failed to build grand summary query — ${msg}`);
@@ -202,7 +211,7 @@ async function runCollapsed(
   logs.push(`Grand summary row received (${grandResult.rowCount} row(s))`);
 
   // Build nested group tree.
-  const nestedGroups = buildNestedGroupTree(config, setup, levelRows);
+  const nestedGroups = buildNestedGroupTree(config, setup, levelRows, dateBreakdown);
   logs.push(`Built nested group tree: ${nestedGroups.length} root group(s)`);
 
   // Extract grand totals.
@@ -210,7 +219,7 @@ async function runCollapsed(
 
   // Build both output shapes.
   const nested = buildNestedReport(config, setup, nestedGroups, grandTotals);
-  const fmArray = buildCollapsedStructure(config, setup, levelRows, grandRow);
+  const fmArray = buildCollapsedStructure(config, setup, levelRows, grandRow, dateBreakdown);
 
   logs.push('Collapsed structure assembled successfully');
 
@@ -239,12 +248,17 @@ async function runDrilldown(
   config: ReportConfig,
   groupPath: GroupPathEntry[],
   confirmLarge: boolean,
+  dateBreakdown?: DateBreakdown,
 ): Promise<SqlReportResult> {
   const logs: string[] = [];
   const sql_steps: SqlStep[] = [];
 
   // Map groupPath entries (table/field/value) straight to the groupFilter shape
   // expected by buildCountQuery / buildDetailQuery — they are identical structs.
+  // When a date breakdown is active the first entry may be the synthetic period
+  // entry { table: '__breakdown', field: 'period', value: '2025-01' }; because
+  // the bucket is a real base column alias, buildGroupFilterWhere resolves it
+  // correctly without any special handling here.
   const groupFilter = groupPath.map((entry) => ({
     table: entry.table,
     field: entry.field,
@@ -258,7 +272,7 @@ async function runDrilldown(
   // ── Step 1: count query ────────────────────────────────────────────────────
   let countQuery;
   try {
-    countQuery = buildCountQuery(config, setup, groupFilter);
+    countQuery = buildCountQuery(config, setup, groupFilter, dateBreakdown);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`sqlReportEngine [drilldown, count]: failed to build count query — ${msg}`);
@@ -307,7 +321,7 @@ async function runDrilldown(
   // ── Step 3: detail query ───────────────────────────────────────────────────
   let detailQuery;
   try {
-    detailQuery = buildDetailQuery(config, setup, groupFilter);
+    detailQuery = buildDetailQuery(config, setup, groupFilter, undefined, undefined, dateBreakdown);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`sqlReportEngine [drilldown, detail]: failed to build detail query — ${msg}`);
@@ -327,7 +341,7 @@ async function runDrilldown(
   logs.push(`[drilldown] Received ${detailResult.rowCount} detail row(s)`);
 
   // ── Step 4: adapt rows → label-keyed DrilldownResult ──────────────────────
-  const drilldownResult = buildDrilldownResult(config, setup, detailResult.rows);
+  const drilldownResult = buildDrilldownResult(config, setup, detailResult.rows, dateBreakdown);
   logs.push('[drilldown] Drill-down result assembled successfully');
 
   return {
@@ -360,15 +374,17 @@ async function runExpandAll(
   config: ReportConfig,
   viewMode: 'expand_all' | 'print',
   confirmLarge: boolean,
+  dateBreakdown?: DateBreakdown,
 ): Promise<SqlReportResult> {
   const logs: string[] = [];
   const sql_steps: SqlStep[] = [];
-  const numLevels = groupLevels(config);
+  // Use effectiveGroupLevels so the synthetic breakdown level is counted when active.
+  const numLevels = effectiveGroupLevels(config, dateBreakdown).length;
 
   // ── Step 1: global count query (no group filter) ───────────────────────────
   let countQuery;
   try {
-    countQuery = buildCountQuery(config, setup);
+    countQuery = buildCountQuery(config, setup, undefined, dateBreakdown);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`sqlReportEngine [${viewMode}, count]: failed to build count query — ${msg}`);
@@ -431,7 +447,7 @@ async function runExpandAll(
     for (let level = 0; level < numLevels; level++) {
       let aggQuery;
       try {
-        aggQuery = buildGroupAggregationQuery(config, setup, level);
+        aggQuery = buildGroupAggregationQuery(config, setup, level, undefined, undefined, dateBreakdown);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new Error(
@@ -468,6 +484,8 @@ async function runExpandAll(
       setup,
       undefined,
       isFlatReport ? LARGE_ROW_THRESHOLD : undefined,
+      undefined,
+      dateBreakdown,
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -494,7 +512,7 @@ async function runExpandAll(
   // ── Step 5: grand summary ──────────────────────────────────────────────────
   let grandQuery;
   try {
-    grandQuery = buildGrandSummaryQuery(config, setup);
+    grandQuery = buildGrandSummaryQuery(config, setup, dateBreakdown);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -526,13 +544,14 @@ async function runExpandAll(
     detailResult.rows,
     grandRow,
     rowCount,
+    dateBreakdown,
   );
   logs.push(`[${viewMode}] Expanded nested report assembled (${nested.groups.length} root group(s))`);
 
   // ── Step 7: FM-shaped scaffold (for compatibility with ClassicReportView) ──
   // Reuse buildCollapsedStructure which produces the header/subsummary/body
   // metadata without any actual body rows (BodyField stays []).
-  const fmArray = buildCollapsedStructure(config, setup, levelRows, grandRow);
+  const fmArray = buildCollapsedStructure(config, setup, levelRows, grandRow, dateBreakdown);
 
   logs.push(`[${viewMode}] Assembly complete`);
 
@@ -570,6 +589,12 @@ export interface RunSqlReportParams {
   groupOffset?: number;
   /** For "load more groups": max level-0 groups to return in this page. */
   groupLimit?: number;
+  /**
+   * Optional date breakdown configuration.  When present, the SQL engine
+   * injects a synthetic outermost GROUP BY level that buckets a date column
+   * by the specified interval (Month or Quarter).
+   */
+  dateBreakdown?: DateBreakdown;
 }
 
 /**
@@ -583,9 +608,29 @@ export async function runSqlReport(params: RunSqlReportParams): Promise<SqlRepor
   const { setup, config, viewMode } = params;
   const logs: string[] = [`runSqlReport called with viewMode="${viewMode}"`];
 
+  // Guard: a date breakdown can only bucket a column from a table that is part
+  // of this report's JOIN graph (config.db_defination). If it points elsewhere
+  // (e.g. a stale/mismatched view setting), the generated CTE would reference an
+  // un-joined table and SQLite would fail with "no such column". Rather than
+  // 400, drop the breakdown so the report degrades to its normal, unbroken form.
+  let dateBreakdown = params.dateBreakdown;
+  if (dateBreakdown && !isBreakdownTableJoined(config, dateBreakdown.table)) {
+    console.warn(
+      `runSqlReport: ignoring date breakdown — table "${dateBreakdown.table}" is not in ` +
+        `this report's db_defination (JOIN graph); cannot bucket by "${dateBreakdown.field}".`,
+    );
+    dateBreakdown = undefined;
+  }
+
   switch (viewMode) {
     case 'collapsed':
-      return runCollapsed(setup, config, params.groupOffset, params.groupLimit);
+      return runCollapsed(
+        setup,
+        config,
+        params.groupOffset,
+        params.groupLimit,
+        dateBreakdown,
+      );
 
     case 'drilldown':
       return runDrilldown(
@@ -593,13 +638,26 @@ export async function runSqlReport(params: RunSqlReportParams): Promise<SqlRepor
         config,
         params.groupPath ?? [],
         params.confirmLarge ?? false,
+        dateBreakdown,
       );
 
     case 'expand_all':
-      return runExpandAll(setup, config, 'expand_all', params.confirmLarge ?? false);
+      return runExpandAll(
+        setup,
+        config,
+        'expand_all',
+        params.confirmLarge ?? false,
+        dateBreakdown,
+      );
 
     case 'print':
-      return runExpandAll(setup, config, 'print', params.confirmLarge ?? false);
+      return runExpandAll(
+        setup,
+        config,
+        'print',
+        params.confirmLarge ?? false,
+        dateBreakdown,
+      );
 
     default: {
       // Exhaustiveness guard — TypeScript will catch unknown ViewMode values at

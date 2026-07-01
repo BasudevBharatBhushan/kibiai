@@ -23,6 +23,12 @@
 
 import type { ReportConfig, GroupByField } from '../reportConfigTypes';
 import type { SqlSetup } from './types';
+import type { DateBreakdown } from './dateBreakdown';
+import {
+  effectiveGroupLevels,
+  isSyntheticBreakdownField,
+  formatBucketLabel,
+} from './dateBreakdown';
 
 // ---------------------------------------------------------------------------
 // Label / prefix / suffix helpers
@@ -142,8 +148,20 @@ export interface NestedGroupNode {
   field: string;
   /** Human-readable label of the group field. */
   label: string;
-  /** The raw group value for this node. */
+  /**
+   * Display value for this node.  For regular group levels this is the raw
+   * DB value.  For the synthetic date-breakdown level it is the
+   * human-readable label (e.g. "January 2025", "Q1 2025") produced by
+   * `formatBucketLabel`.  Consumers should render this value directly.
+   */
   value: unknown;
+  /**
+   * Raw DB group-key value — set ONLY when it differs from `value` (i.e. for
+   * the synthetic date-breakdown level).  Used internally by
+   * `distributeRowsToLeaves` to match detail rows to leaf nodes.  Consumers
+   * that only display the value should use `value`, not this field.
+   */
+  groupKeyValue?: unknown;
   /** Row count for this group. */
   count: number;
   /** Aggregate totals: label → numeric value. */
@@ -265,6 +283,8 @@ function buildGroupKey(row: Record<string, unknown>, groups: GroupByField[], dep
   for (let i = 0; i <= depth; i++) {
     const g = groups[i];
     if (!g) break;
+    // Use the raw alias key (Table.Field) — the synthetic level uses
+    // "__breakdown.period" which matches the base CTE SELECT alias.
     const v = getRowValue(row, `"${g.table}.${g.field}"`);
     parts.push(String(v ?? ''));
   }
@@ -274,17 +294,20 @@ function buildGroupKey(row: Record<string, unknown>, groups: GroupByField[], dep
 /**
  * Turn per-level aggregation row arrays into a nested NestedGroupNode tree.
  *
- * @param config       - ReportConfig (for group_by_fields / calc field labels).
- * @param setup        - SqlSetup (for field labels).
- * @param levelRows    - levelRows[L] is the full result set for level L aggregation query.
+ * @param config        - ReportConfig (for group_by_fields / calc field labels).
+ * @param setup         - SqlSetup (for field labels).
+ * @param levelRows     - levelRows[L] is the full result set for level L aggregation query.
+ * @param dateBreakdown - Optional active date breakdown; when present, the
+ *                        synthetic breakdown level is prepended as level 0.
  */
 export function buildNestedGroupTree(
   config: ReportConfig,
   setup: SqlSetup,
   levelRows: Record<string, unknown>[][],
+  dateBreakdown?: DateBreakdown,
 ): NestedGroupNode[] {
   const aliasLabelMap = buildAliasLabelMap(setup);
-  const groups = Object.values(config.group_by_fields ?? {});
+  const groups = effectiveGroupLevels(config, dateBreakdown);
 
   if (groups.length === 0 || levelRows.length === 0) return [];
 
@@ -299,7 +322,12 @@ export function buildNestedGroupTree(
     const rows = levelRows[level] ?? [];
 
     const fieldAlias = groupFieldAliasKey(g);
-    const fieldLabel = resolveLabel(config, aliasLabelMap, g.table, g.field);
+    // For the synthetic breakdown level, resolve the label using the REAL date
+    // field carried in dateBreakdown (e.g. "Invoice Date") so the group header
+    // reads "Invoice Date: January 2025" rather than failing on "__breakdown.period".
+    const fieldLabel = isSyntheticBreakdownField(g) && dateBreakdown
+      ? resolveLabel(config, aliasLabelMap, dateBreakdown.table, dateBreakdown.field)
+      : resolveLabel(config, aliasLabelMap, g.table, g.field);
 
     for (const row of rows) {
       const currentKey = buildGroupKey(row, groups, level);
@@ -322,7 +350,15 @@ export function buildNestedGroupTree(
       }
 
       const count = toNumber(getRowValue(row, '"row_count"'));
-      const value = getRowValue(row, `"${fieldAlias}"`);
+      const rawValue = getRowValue(row, `"${fieldAlias}"`);
+      // For the synthetic breakdown level, format the raw bucket key (e.g.
+      // "2025-01") into a human-readable label (e.g. "January 2025").
+      // Row ordering is preserved server-side via ORDER BY, so formatting the
+      // display value here is safe.
+      const isSynthetic = isSyntheticBreakdownField(g) && dateBreakdown !== undefined;
+      const value = (isSynthetic && rawValue !== undefined)
+        ? formatBucketLabel(String(rawValue), dateBreakdown!.interval)
+        : rawValue;
 
       // Collect totalFields labels for this level so ClassicReportView can
       // render footer columns without needing a local NestedGroupNodeEx alias.
@@ -334,6 +370,9 @@ export function buildNestedGroupTree(
         field: fieldAlias,
         label: fieldLabel,
         value,
+        // Store the raw DB value as groupKeyValue when it differs from the
+        // display value so that distributeRowsToLeaves can match detail rows.
+        ...(isSynthetic && rawValue !== value ? { groupKeyValue: rawValue } : {}),
         count,
         totals,
         display,
@@ -472,13 +511,19 @@ export function buildCollapsedStructure(
   setup: SqlSetup,
   _levelRows: Record<string, unknown>[][],
   _grandRow: Record<string, unknown> | null,
+  dateBreakdown?: DateBreakdown,
 ): FmStructureBlock[] {
   const aliasLabelMap = buildAliasLabelMap(setup);
   const labelPrefixMap = buildLabelPrefixMap(setup);
   const labelSuffixMap = buildLabelSuffixMap(setup);
 
-  const getFieldLabel = (table: string, field: string): string =>
-    resolveLabel(config, aliasLabelMap, table, field);
+  // Resolve a field label, with special-casing for the synthetic breakdown level.
+  const getFieldLabel = (table: string, field: string): string => {
+    if (isSyntheticBreakdownField({ table, field }) && dateBreakdown) {
+      return resolveLabel(config, aliasLabelMap, dateBreakdown.table, dateBreakdown.field);
+    }
+    return resolveLabel(config, aliasLabelMap, table, field);
+  };
 
   // BodyFieldOrder — mirrors FM logic exactly
   const bodyFieldOrder: string[] = [];
@@ -492,9 +537,10 @@ export function buildCollapsedStructure(
     if (!bodyFieldOrder.includes(displayLabel)) bodyFieldOrder.push(displayLabel);
   }
 
-  // Exclude group-by main field labels from body (same as FM)
+  // Exclude group-by main field labels from body (same as FM).
+  // Use effectiveGroupLevels so the synthetic level is excluded too.
   const excludeLabelsSet = new Set<string>();
-  const groups = Object.values(config.group_by_fields ?? {});
+  const groups = effectiveGroupLevels(config, dateBreakdown);
   for (const g of groups) {
     excludeLabelsSet.add(getFieldLabel(g.table, g.field));
   }
@@ -735,6 +781,7 @@ export function buildDrilldownResult(
   config: ReportConfig,
   setup: SqlSetup,
   rows: Record<string, unknown>[],
+  dateBreakdown?: DateBreakdown,
 ): DrilldownResult {
   const aliasLabelMap = buildAliasLabelMap(setup);
   const labelPrefixMap = buildLabelPrefixMap(setup);
@@ -780,8 +827,9 @@ export function buildDrilldownResult(
   }
 
   // ── totalFields — group_total of the DEEPEST group level ────────────────────
-  const groups = Object.values(config.group_by_fields ?? {});
-  const deepestGroup = groups.length > 0 ? groups[groups.length - 1] : undefined;
+  // Use effectiveGroupLevels so the synthetic breakdown level is included when active.
+  const drillGroups = effectiveGroupLevels(config, dateBreakdown);
+  const deepestGroup = drillGroups.length > 0 ? drillGroups[drillGroups.length - 1] : undefined;
   const totalFields: string[] = [];
   if (deepestGroup) {
     for (const t of deepestGroup.group_total ?? []) {
@@ -957,9 +1005,11 @@ function distributeRowsToLeaves(
   void visitNode; // suppress unused-variable lint
 
   // Traversal that tracks the running key path so leaves can be keyed
-  // by their full group-key tuple.
+  // by their full group-key tuple.  Use groupKeyValue when present (synthetic
+  // breakdown level) so the key matches the raw DB column value in detail rows.
   function collectLeaves(node: NestedGroupNode, depth: number, pathSoFar: string[]): void {
-    const currentPath = [...pathSoFar, String(node.value ?? '')];
+    const keyVal = node.groupKeyValue !== undefined ? node.groupKeyValue : node.value;
+    const currentPath = [...pathSoFar, String(keyVal ?? '')];
     if (depth === totalLevels - 1) {
       // Leaf node.
       node.bodyRows = [];
@@ -1013,9 +1063,10 @@ export function buildExpandedNestedReport(
   detailRows: Record<string, unknown>[],
   grandRow: Record<string, unknown> | null,
   totalRowCount?: number,
+  dateBreakdown?: DateBreakdown,
 ): NestedReport {
   // ── 1. Build the group tree (headers + totals) exactly like collapsed mode ──
-  const roots = buildNestedGroupTree(config, setup, levelRows);
+  const roots = buildNestedGroupTree(config, setup, levelRows, dateBreakdown);
 
   // ── 2. Extract grand totals ─────────────────────────────────────────────────
   const grandTotals = extractGrandTotals(config, setup, grandRow);
@@ -1024,7 +1075,8 @@ export function buildExpandedNestedReport(
   const report = buildNestedReport(config, setup, roots, grandTotals);
 
   // ── 4. Distribute detail rows into leaf bodyRows ────────────────────────────
-  const groups = Object.values(config.group_by_fields ?? {});
+  // Use effectiveGroupLevels so the synthetic breakdown level is included when active.
+  const groups = effectiveGroupLevels(config, dateBreakdown);
   const totalLevels = groups.length;
 
   if (totalLevels > 0 && detailRows.length > 0) {

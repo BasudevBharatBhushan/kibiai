@@ -96,6 +96,11 @@ function fmtCell(
   const suffix = suffixMap[field] ?? suffixMap[field.trim()] ?? "";
   const s = String(raw).trim();
   if (s === "" || s === "--") return s;
+  // Reformat ISO date strings (YYYY-MM-DD) → MM/DD/YYYY.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split("-");
+    return `${m}-${d}-${y}`;
+  }
   const num = parseFloat(s);
   // Apply 2-decimal formatting when the field has any prefix/suffix (currency,
   // percentage, etc.) — these come from the setup definition and only appear on
@@ -237,7 +242,28 @@ function DrillModal({
         {/* Body */}
         <div className="cv-dd-body">
           {loading ? (
-            <div className="cv-dd-empty">Loading records…</div>
+            <table className="cv-dd-tbl">
+              <thead>
+                <tr>
+                  {(fieldOrder.length > 0 ? fieldOrder : Array.from({ length: 4 }, (_, i) => String(i))).map((f) => (
+                    <th key={f}>
+                      <div className="cv-skel-cell" style={{ width: "80%" }} />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 8 }).map((_, ri) => (
+                  <tr key={ri}>
+                    {(fieldOrder.length > 0 ? fieldOrder : Array.from({ length: 4 }, (_, i) => String(i))).map((f, fi) => (
+                      <td key={f}>
+                        <div className="cv-skel-cell" style={{ width: fi === 0 ? "60%" : "45%" }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : error ? (
             <div className="cv-dd-empty">{error}</div>
           ) : rows.length === 0 ? (
@@ -717,7 +743,7 @@ export function ClassicReportView({
     const walk = (nodes: NestedGroupNode[], level: number, parentId: string) => {
       for (const node of nodes) {
         const labelStr = String(node.value ?? "").trim() || "(blank)";
-        const groupId = `${parentId}|${node.label}:${labelStr}`;
+        const groupId = `${parentId}|${node.field}:${labelStr}`;
         const hasChildren = !!node.children && node.children.length > 0;
         const hasBodyRows = !!node.bodyRows && node.bodyRows.length > 0;
         const drillState = drilledGroups.get(groupId);
@@ -1018,9 +1044,9 @@ export function ClassicReportView({
       const handleSsClick = () => {
         if (isPrintView) return;
         if (isNested) {
-          // Drillable leaf → open DrillModal (same design as flat/FM mode).
-          // Non-leaf (has children) → toggle expand/collapse.
-          if (isNestedDrillLeaf) {
+          // Mirror flat/FM mode: collapsed (or unloaded drillable leaf) → modal,
+          // expanded non-leaf → collapse inline.
+          if (collapsed || isNestedDrillLeaf) {
             handleDrillModal(spec.groupId, displayTitle, count, spec.totalFields);
           } else {
             toggleGroup(spec.groupId);
@@ -1039,7 +1065,7 @@ export function ClassicReportView({
         if (isPrintView) return;
         e.stopPropagation();
         if (isNestedDrillLeaf) {
-          handleDrillModal(spec.groupId, displayTitle, count, spec.totalFields);
+          void handleDrillInline(spec.groupId, count, spec.totalFields);
         } else {
           toggleGroup(spec.groupId);
         }
@@ -1074,7 +1100,7 @@ export function ClassicReportView({
         >
           <td colSpan={visibleFieldOrder.length}>
             <div className="cv-ss-row">
-              <div className="cv-ss-label-side">
+              <div className="cv-ss-label-side" style={spec.level > 0 ? { paddingLeft: `${spec.level * 18}px` } : undefined}>
                 {!isPrintView && (
                   <span
                     className="cv-chv"

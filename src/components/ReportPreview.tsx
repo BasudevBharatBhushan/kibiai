@@ -11,6 +11,12 @@ import type { ClassicViewSettings } from "@/components/report-builder/ClassicVie
 import type { NestedReport, NestedGroupNode } from "@/lib/sql/structureAdapter";
 import type { DrilldownResult } from "@/lib/sql/structureAdapter";
 import { LARGE_ROW_THRESHOLD } from "@/lib/sql/types";
+import {
+  parseBucketLabel,
+  BREAKDOWN_TABLE,
+  BREAKDOWN_FIELD,
+} from "@/lib/sql/dateBreakdown";
+import type { DateBreakdown } from "@/lib/sql/dateBreakdown";
 import { apiClient } from "@/utils/apiClient";
 import { SqlExecutionFloater, type SqlStep } from "@/components/SqlExecutionFloater";
 
@@ -312,6 +318,12 @@ export function ReportPreview({
   }
 
   // In nested mode with no groups, show flat table when rows exist, else empty state.
+  // TODO(T-052): flat SQL + breakdown — a flat SQL report (no group-by) with an active
+  // date breakdown would arrive here and show the FlatRowTable, bypassing the
+  // breakdown re-query in ReportPreviewInner. Supporting this would require moving the
+  // breakdown trigger into the outer ReportPreview or making ReportPreviewInner handle
+  // the no-group case. Deferred for now — nested reports (group-by present) are the
+  // primary use case for Date Breakdown.
   if (isNested && (!nestedData || nestedData.groups.length === 0)) {
     const flatRows = nestedData?.flatRows;
     if (flatRows && flatRows.length > 0) {
@@ -405,6 +417,32 @@ function ReportPreviewInner({
     if (loadMoreError !== null) setLoadMoreError(null);
   }
 
+  // ---------------------------------------------------------------------------
+  // Config cache key and date breakdown mapping — declared early so all
+  // subsequent useCallback hooks that close over them are valid.
+  // ---------------------------------------------------------------------------
+
+  // Derive the config cache key (stable JSON so config changes bust the cache).
+  const configCacheKey = useMemo(
+    () => JSON.stringify(state.config),
+    [state.config],
+  );
+
+  // Map effectiveSettings.dateBreakdown → structured DateBreakdown API param.
+  // Splits "Table.Field" into { table, field } and adds the interval.
+  // Returns null when no breakdown is active or the field has no "." separator.
+  const mappedDateBreakdown = useMemo<DateBreakdown | null>(() => {
+    const db = effectiveSettings.dateBreakdown;
+    if (!db || !db.field || !db.interval) return null;
+    const dotIdx = db.field.indexOf(".");
+    if (dotIdx < 0) return null; // no "." → can't split — skip
+    return {
+      table: db.field.slice(0, dotIdx),
+      field: db.field.slice(dotIdx + 1),
+      interval: db.interval,
+    };
+  }, [effectiveSettings.dateBreakdown]);
+
   const handleLoadMore = useCallback(async () => {
     if (!nestedData || loadMoreLoading) return;
     const currentOffset = nestedData.groups.length + additionalGroups.length;
@@ -418,6 +456,7 @@ function ReportPreviewInner({
         view_mode: "collapsed",
         group_offset: currentOffset,
         group_limit: LOAD_MORE_PAGE_SIZE,
+        ...(mappedDateBreakdown ? { date_breakdown: mappedDateBreakdown } : {}),
       });
       for (const step of response.sql_steps ?? []) {
         setDrillSqlStep(step);
@@ -435,23 +474,20 @@ function ReportPreviewInner({
       setLoadMoreLoading(false);
       setIsDrillFetching(false);
     }
-  }, [nestedData, additionalGroups, loadMoreLoading, setup, config]);
-
-  // Derive the config cache key (stable JSON so config changes bust the cache).
-  const configCacheKey = useMemo(
-    () => JSON.stringify(state.config),
-    [state.config],
-  );
+  }, [nestedData, additionalGroups, loadMoreLoading, setup, config, mappedDateBreakdown]);
 
   // ---------------------------------------------------------------------------
   // Shared helper: fetch expand_all or print data from the SQL engine.
   // Returns { nested } on success, { warnLarge, rowCount } when rows > 30k,
   // or throws on error.
+  // When a date breakdown is active it is threaded into the request body so the
+  // server produces breakdown-aware expanded data.
   // ---------------------------------------------------------------------------
   const fetchExpandData = useCallback(
     async (
       viewMode: "expand_all" | "print",
       confirmLarge = false,
+      dateBreakdown?: DateBreakdown | null,
     ): Promise<{ nested?: NestedReport; warnLarge?: boolean; rowCount?: number }> => {
       setIsDrillFetching(true);
       try {
@@ -462,6 +498,7 @@ function ReportPreviewInner({
             report_config: config,
             view_mode: viewMode,
             ...(confirmLarge ? { confirm_large: true } : {}),
+            ...(dateBreakdown ? { date_breakdown: dateBreakdown } : {}),
           },
         );
         for (const step of response.sql_steps ?? []) {
@@ -500,7 +537,7 @@ function ReportPreviewInner({
     setPrintLoading(true);
     setPrintWarnLarge(null);
     try {
-      const result = await fetchExpandData("print", confirmLarge);
+      const result = await fetchExpandData("print", confirmLarge, mappedDateBreakdown);
       if (result.warnLarge) {
         setPrintWarnLarge({ rowCount: result.rowCount ?? 0 });
       } else if (result.nested) {
@@ -512,7 +549,7 @@ function ReportPreviewInner({
     } finally {
       setPrintLoading(false);
     }
-  }, [configCacheKey, printNestedData, fetchExpandData]);
+  }, [configCacheKey, printNestedData, fetchExpandData, mappedDateBreakdown]);
 
   // Trigger print fetch when entering print mode.
   if (isNested && isPrint && printFetchTriggeredRef.current !== configCacheKey && !printLoading) {
@@ -548,7 +585,7 @@ function ReportPreviewInner({
     setExpandLoading(true);
     setExpandWarnLarge(null);
     try {
-      const result = await fetchExpandData("expand_all", confirmLarge);
+      const result = await fetchExpandData("expand_all", confirmLarge, mappedDateBreakdown);
       if (result.warnLarge) {
         setExpandWarnLarge({ rowCount: result.rowCount ?? 0 });
       } else if (result.nested) {
@@ -560,7 +597,7 @@ function ReportPreviewInner({
     } finally {
       setExpandLoading(false);
     }
-  }, [configCacheKey, expandedNestedData, fetchExpandData]);
+  }, [configCacheKey, expandedNestedData, fetchExpandData, mappedDateBreakdown]);
 
   // Trigger expand-all fetch when collapseBody is turned off.
   if (wantsExpand && expandFetchTriggeredRef.current !== configCacheKey && !expandLoading) {
@@ -572,10 +609,83 @@ function ReportPreviewInner({
     expandFetchTriggeredRef.current = null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Date breakdown re-query state — when a date breakdown is active, re-query
+  // the SQL engine with a `date_breakdown` param so the server injects the
+  // synthetic outermost period group level.
+  // ---------------------------------------------------------------------------
+
+  // Stable cache key: config key + serialised breakdown (null when inactive).
+  const breakdownCacheKey = useMemo(
+    () => configCacheKey + "|" + JSON.stringify(effectiveSettings.dateBreakdown ?? null),
+    [configCacheKey, effectiveSettings.dateBreakdown],
+  );
+
+  const [breakdownNestedData, setBreakdownNestedData] = useState<NestedReport | null>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const breakdownCacheKeyRef = useRef<string | null>(null);
+  const breakdownFetchTriggeredRef = useRef<string | null>(null);
+
+  // Invalidate breakdown cache when the cache key changes (new config or new breakdown setting).
+  if (breakdownCacheKeyRef.current !== null && breakdownCacheKeyRef.current !== breakdownCacheKey) {
+    breakdownCacheKeyRef.current = null;
+    setBreakdownNestedData(null);
+  }
+
+  const fetchBreakdownData = useCallback(async () => {
+    if (!mappedDateBreakdown) return;
+    setBreakdownLoading(true);
+    setIsDrillFetching(true);
+    try {
+      const response = await apiClient.post<SqlExpandApiResponse>("/api/sql-report/generate", {
+        report_setup: setup,
+        report_config: config,
+        view_mode: "collapsed",
+        date_breakdown: mappedDateBreakdown,
+      });
+      for (const step of response.sql_steps ?? []) {
+        setDrillSqlStep(step);
+        await new Promise<void>((r) => setTimeout(r, 180));
+      }
+      if (!response.success || !response.nested) {
+        throw new Error(response.error ?? "Breakdown query returned no data.");
+      }
+      startTransition(() => {
+        setBreakdownNestedData(response.nested!);
+        breakdownCacheKeyRef.current = breakdownCacheKey;
+      });
+    } catch (err) {
+      console.warn("[ReportPreview] Date breakdown fetch failed:", err);
+    } finally {
+      setBreakdownLoading(false);
+      setIsDrillFetching(false);
+    }
+  }, [mappedDateBreakdown, setup, config, breakdownCacheKey]);
+
+  // Trigger breakdown fetch when a breakdown is active and the cache misses.
+  if (
+    isNested &&
+    mappedDateBreakdown !== null &&
+    breakdownFetchTriggeredRef.current !== breakdownCacheKey &&
+    !breakdownLoading
+  ) {
+    breakdownFetchTriggeredRef.current = breakdownCacheKey;
+    void fetchBreakdownData();
+  }
+  // Reset trigger when no breakdown is active.
+  if (mappedDateBreakdown === null && breakdownFetchTriggeredRef.current !== null) {
+    breakdownFetchTriggeredRef.current = null;
+  }
+
   // Classic view uses merged (base + load-more) nested data, or fully expanded data.
-  const activeNestedData = wantsExpand && expandedNestedData !== null
-    ? expandedNestedData
-    : mergedNestedData;
+  // When a breakdown is active, prefer breakdownNestedData (it already has the
+  // synthetic period as the outermost level). Otherwise use the expand/merged path.
+  const activeNestedData: NestedReport | undefined =
+    isNested && mappedDateBreakdown !== null && breakdownNestedData !== null
+      ? breakdownNestedData
+      : wantsExpand && expandedNestedData !== null
+        ? expandedNestedData
+        : mergedNestedData;
 
   // Print view uses the lazily-fetched print data with bodyRows populated.
   const printNestedForDynamic =
@@ -600,19 +710,25 @@ function ReportPreviewInner({
   // ---------------------------------------------------------------------------
   const handleDrillDown = useCallback(
     async (req: DrillRequest): Promise<DrillResult> => {
-      const groups = Object.values(state.config.group_by_fields ?? {});
-
-      // Build logical group_path by zipping req.groupPath with group_by_fields.
-      // req.groupPath[i].label holds the group VALUE (String(node.value)) as
-      // emitted by ClassicReportView's nestedRows walk:
-      //   groupId = `${parentId}|${node.label}:${labelStr}`
-      //   parsed back as { field: node.label, label: labelStr }
-      const group_path = req.groupPath.map((seg, i) => {
-        const g = groups[i];
+      // Build logical group_path from the "table.field" alias encoded in each
+      // groupPath segment's `field` property (set by ClassicReportView's nestedRows
+      // walk as node.field, e.g. "purchase_order_line_item.ProductCategory").
+      // This is order-independent and survives group reordering / REORDER_GROUPS.
+      const group_path = req.groupPath.map((seg) => {
+        // Synthetic breakdown level is encoded as "__breakdown.period".
+        if (seg.field === `${BREAKDOWN_TABLE}.${BREAKDOWN_FIELD}`) {
+          return {
+            table: BREAKDOWN_TABLE,
+            field: BREAKDOWN_FIELD,
+            value: parseBucketLabel(seg.label, mappedDateBreakdown!.interval),
+          };
+        }
+        // Real group: split "table.field" alias to recover the logical table+field.
+        const dotIdx = seg.field.indexOf(".");
         return {
-          table: g?.table ?? "",
-          field: g?.field ?? "",
-          value: seg.label, // seg.label = labelStr = String(node.value)
+          table: dotIdx >= 0 ? seg.field.slice(0, dotIdx) : "",
+          field: dotIdx >= 0 ? seg.field.slice(dotIdx + 1) : seg.field,
+          value: seg.label,
         };
       });
 
@@ -621,6 +737,9 @@ function ReportPreviewInner({
         report_config: state.config,
         view_mode: "drilldown" as const,
         group_path,
+        // Thread date_breakdown so the server's count/detail queries include the
+        // bucket column filter when breakdown is active.
+        ...(mappedDateBreakdown ? { date_breakdown: mappedDateBreakdown } : {}),
         // ClassicReportView already confirmed large groups before calling us.
         // Pass confirm_large so the server returns rows instead of warn_large.
         ...(req.count > LARGE_ROW_THRESHOLD ? { confirm_large: true } : {}),
@@ -653,7 +772,7 @@ function ReportPreviewInner({
 
       return response.group_rows;
     },
-    [state.config, state.setup]
+    [state.setup, mappedDateBreakdown]
   );
 
   // Derived values for the group count info passed to ClassicReportView.

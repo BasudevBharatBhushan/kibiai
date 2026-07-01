@@ -282,10 +282,7 @@ tr.cv-ss.cv-lv2 td {
 tr.cv-ss.cv-lv2:hover td {
   background: #e5e2dd;
 }
-/* Level-2 label gets extra left indent for visual nesting */
-tr.cv-ss.cv-lv2 .cv-ss-label-side {
-  padding-left: 16px;
-}
+/* Per-level indent is applied via inline style (paddingLeft = level * 18px) */
 tr.cv-ss.cv-lv2 td.cv-amt {
   color: #0f766e;
 }
@@ -486,6 +483,19 @@ tr.cv-gs .cv-avg-line {
   text-align: center;
   color: #a8a29e;
   font-size: 12px;
+}
+
+/* Skeleton shimmer for drilldown loading state */
+@keyframes cv-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.cv-skel-cell {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+  background-size: 200% 100%;
+  animation: cv-shimmer 1.4s ease-in-out infinite;
 }
 
 /* Collapsed state */

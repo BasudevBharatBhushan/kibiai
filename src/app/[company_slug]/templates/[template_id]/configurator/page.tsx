@@ -24,6 +24,7 @@ import { sanitizeReportConfig } from "@/lib/utils/sanitizeReportConfig";
 import { SqlExecutionFloater, type SqlStep } from "@/components/SqlExecutionFloater";
 import type { ClassicViewSettings } from "@/components/report-builder/ClassicViewSettingsSection";
 import type { FilterField } from "@/components/report-builder/ClassicViewSettingsSection";
+import { isSqlSetup } from "@/lib/sql/types";
 
 // ── Build predefinedPrompt (DB schema context) ─────────────────────────────────
 // Per REPORTS_SYSTEM_INSTRUCTION TYPE 1/3/4:
@@ -126,12 +127,17 @@ function ConfiguratorPageContent({
     paginate: false,
   });
 
-  // Sync from DB config when loaded
+  // Sync from DB config when loaded.
+  // NOTE: dateBreakdown is a view-time-only control (it reshapes the query and
+  // can reference tables outside the report), so it is NEVER persisted. Strip
+  // any value that may exist in a stale config so it always starts inactive.
   useEffect(() => {
     if (state.config?.classic_settings) {
+      const persisted = { ...state.config.classic_settings } as ClassicViewSettings;
+      delete persisted.dateBreakdown;
       setClassicSettings((prev) => ({
         ...prev,
-        ...state.config.classic_settings,
+        ...persisted,
       }));
     }
   }, [state.config?.classic_settings]);
@@ -140,9 +146,18 @@ function ConfiguratorPageContent({
     (key: keyof ClassicViewSettings, value: boolean) => {
       const next = { ...classicSettings, [key]: value };
       setClassicSettings(next);
+
+      // dateBreakdown is ephemeral (like viewMode): it changes what the report
+      // queries, not just how it renders, so it must never be written to the
+      // template config. Update local state only and stop here.
+      if (key === "dateBreakdown") return;
+
       if (state.templateId) {
         dispatch({ type: "UPDATE_CLASSIC_SETTINGS", payload: { [key]: value } });
-        const newConfig = { ...state.config, classic_settings: next };
+        // Persist display toggles only — never dateBreakdown.
+        const persistedSettings = { ...next };
+        delete persistedSettings.dateBreakdown;
+        const newConfig = { ...state.config, classic_settings: persistedSettings };
         apiClient.post(`/api/templates/${state.templateId}/config`, { config_json: newConfig }).catch(console.error);
       }
     },
@@ -202,36 +217,84 @@ function ConfiguratorPageContent({
     return result;
   }, [state.reportPreview]);
 
-  const dateFields = useMemo<string[]>(() => {
-    const raw: any = state.reportPreview;
+  const dateFields = useMemo<Array<{ value: string; label: string }>>(() => {
+    const raw: unknown = state.reportPreview;
     if (!raw) return [];
+
+    // ── SQL nested payload path ──────────────────────────────────────────────
+    const rawObj = raw as Record<string, unknown>;
+    const isSqlPayload =
+      typeof raw === "object" &&
+      raw !== null &&
+      typeof rawObj.nested_report === "object" &&
+      rawObj.nested_report !== null &&
+      (rawObj.nested_report as Record<string, unknown>).mode === "nested";
+
+    if (isSqlPayload && isSqlSetup(state.setup)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cfg: any = state.config;
+      const setup = state.setup;
+
+      const refs: Array<{ table?: string; field?: string }> = [];
+      for (const col of (cfg?.report_columns ?? []) as Array<{ table?: string; field?: string }>) {
+        refs.push({ table: col?.table, field: col?.field });
+      }
+      for (const g of Object.values(cfg?.group_by_fields ?? {}) as Array<{
+        table?: string;
+        field?: string;
+        display?: Array<{ table?: string; field?: string }>;
+      }>) {
+        refs.push({ table: g?.table, field: g?.field });
+        for (const d of g?.display ?? []) refs.push({ table: d?.table, field: d?.field });
+      }
+
+      const seen = new Set<string>();
+      const result: Array<{ value: string; label: string }> = [];
+      for (const { table, field } of refs) {
+        if (!table || !field) continue;
+        const logicalKey = `${table}.${field}`;
+        if (seen.has(logicalKey)) continue;
+        const fieldDef = setup.tables?.[table]?.fields?.[field];
+        if (fieldDef?.type === "date") {
+          seen.add(logicalKey);
+          result.push({ value: logicalKey, label: fieldDef.label || field });
+        }
+      }
+      return result.sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    // ── FileMaker / flat payload path ────────────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawAny: any = raw;
     let jsonData: unknown[] = [];
     try {
-      if (raw.report_structure_json && Array.isArray(raw.report_structure_json)) {
-        jsonData = raw.report_structure_json;
+      if (rawAny.report_structure_json && Array.isArray(rawAny.report_structure_json)) {
+        jsonData = rawAny.report_structure_json;
       } else if (Array.isArray(raw)) {
-        jsonData = raw;
-      } else if (raw.ReportStructuredData) {
-        const p = typeof raw.ReportStructuredData === "string"
-          ? JSON.parse(raw.ReportStructuredData) : raw.ReportStructuredData;
+        jsonData = raw as unknown[];
+      } else if (rawAny.ReportStructuredData) {
+        const p = typeof rawAny.ReportStructuredData === "string"
+          ? JSON.parse(rawAny.ReportStructuredData) : rawAny.ReportStructuredData;
         jsonData = Array.isArray(p) ? p : [];
       }
     } catch { return []; }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bodyData: Record<string, unknown>[] = (jsonData.find((x: any) => "Body" in x) as any)?.Body?.BodyField ?? [];
     if (!bodyData.length) return [];
-    
-    // Pick the first row with values to test for date types
+
     const sample = bodyData[0];
-    return Object.keys(sample).filter(k => {
-      const v = sample[k];
-      if (typeof v === "string" && v.length > 5 && isNaN(Number(v))) {
-        const ts = Date.parse(v);
-        return !isNaN(ts);
-      }
-      return false;
-    }).sort();
-  }, [state.reportPreview]);
+    return Object.keys(sample)
+      .filter(k => {
+        const v = sample[k];
+        if (typeof v === "string" && v.length > 5 && isNaN(Number(v))) {
+          return !isNaN(Date.parse(v));
+        }
+        return false;
+      })
+      .sort()
+      .map(k => ({ value: k, label: k }));
+  }, [state.reportPreview, state.setup, state.config]);
 
   const toggleChat = useCallback(() => setIsChatOpen((p) => !p), []);
   const toggleConfig = useCallback(() => setIsConfigOpen((p) => !p), []);

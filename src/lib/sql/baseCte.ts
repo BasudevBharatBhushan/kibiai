@@ -36,6 +36,12 @@ import {
   quoteIdent,
 } from './identifiers';
 import { compileFormula, calculatedAlias } from './formulaToSql';
+import type { DateBreakdown } from './dateBreakdown';
+import {
+  BREAKDOWN_TABLE,
+  BREAKDOWN_FIELD,
+  buildBucketExpr,
+} from './dateBreakdown';
 
 // ---------------------------------------------------------------------------
 // Result
@@ -298,7 +304,7 @@ function toIsoDate(dateStr: string): string | null {
  * switching the ETL pipeline from Excel serials to ISO dates requires no
  * engine changes.
  */
-function normalizeDateCol(col: string): string {
+export function normalizeDateCol(col: string): string {
   return (
     `CASE WHEN ${col} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'` +
     ` THEN ${col}` +
@@ -412,7 +418,22 @@ function buildWhere(
 // Public API
 // ---------------------------------------------------------------------------
 
-export function buildBaseCte(config: ReportConfig, setup: SqlSetup): BaseCteResult {
+/**
+ * Build the shared `WITH base AS ( … )` CTE that every other generator
+ * selects from.
+ *
+ * @param config        Full report configuration.
+ * @param setup         SQL allow-list (tables / fields / physical names).
+ * @param dateBreakdown When provided, appends one extra computed SELECT column
+ *                      to `base`: the date-bucket expression aliased as
+ *                      `"__breakdown.period"`.  The physical date column is
+ *                      validated via `resolveField` before use.
+ */
+export function buildBaseCte(
+  config: ReportConfig,
+  setup: SqlSetup,
+  dateBreakdown?: DateBreakdown,
+): BaseCteResult {
   const { fromTable, joinClauses } = buildJoinPlan(config, setup);
 
   // -- SELECT columns ------------------------------------------------------
@@ -421,11 +442,14 @@ export function buildBaseCte(config: ReportConfig, setup: SqlSetup): BaseCteResu
 
   const cols = collectColumns(config);
   for (const { table, field } of cols) {
-    // Validate field exists (throws on unknown — keeps SQL safe).
-    resolveField(setup, table, field);
+    const { def } = resolveField(setup, table, field);
     const qualified = qualifiedColumn(setup, table, field);
     const alias = columnAlias(table, field);
-    selectParts.push(`${qualified} AS ${alias}`);
+    // Date columns are stored as Excel serial numbers in the source DB.
+    // Normalize them to ISO YYYY-MM-DD at query time so consumers always
+    // receive a human-readable string, regardless of storage format.
+    const expr = def.type === 'date' ? normalizeDateCol(qualified) : qualified;
+    selectParts.push(`${expr} AS ${alias}`);
     selectedColumns.push(alias);
   }
 
@@ -435,6 +459,25 @@ export function buildBaseCte(config: ReportConfig, setup: SqlSetup): BaseCteResu
     const alias = calculatedAlias(calc.field_name);
     selectParts.push(`${expr} AS ${alias}`);
     selectedColumns.push(alias);
+  }
+
+  // Date breakdown bucket column — appended after normal columns so it does
+  // not interfere with the existing SELECT order.  The synthetic field is NOT
+  // routed through collectColumns (which would call resolveField on a sentinel
+  // table key that does not exist in setup.tables); instead we resolve the
+  // real date table/field directly here.
+  if (dateBreakdown) {
+    // Validate the date field is a known, allow-listed column.
+    resolveField(setup, dateBreakdown.table, dateBreakdown.field);
+
+    // Build: <bucketExpr(normalizeDateCol(qualifiedColumn))> AS "__breakdown.period"
+    const qualifiedDateCol = qualifiedColumn(setup, dateBreakdown.table, dateBreakdown.field);
+    const normalizedDateCol = normalizeDateCol(qualifiedDateCol);
+    const bucketExpr = buildBucketExpr(normalizedDateCol, dateBreakdown.interval);
+    const bucketAlias = columnAlias(BREAKDOWN_TABLE, BREAKDOWN_FIELD);
+
+    selectParts.push(`${bucketExpr} AS ${bucketAlias}`);
+    selectedColumns.push(bucketAlias);
   }
 
   if (selectParts.length === 0) {
