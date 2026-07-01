@@ -4,24 +4,26 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import kibiaiLogo from "@/assets/kibiai.png";
 import Link from "next/link";
+import { usesPathRouting } from "@/lib/utils/hostRouting";
 
 export default function GlobalLoginPage() {
   const [workspace, setWorkspace] = useState("");
   const [baseDomain, setBaseDomain] = useState("");
-  const [isLocalhost, setIsLocalhost] = useState(false);
+  // `pathBased` is true for localhost, LAN, and preview hosts — anything not
+  // under the base domain. These use path-based routing like local dev.
+  const [pathBased, setPathBased] = useState(false);
+  const [hostPrefix, setHostPrefix] = useState("");
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
     // Only access window on the client side
     if (typeof window !== "undefined") {
-      const localhost = 
-        window.location.hostname.includes("localhost") ||
-        window.location.hostname.includes("127.0.0.1") ||
-        window.location.hostname.startsWith("192.168.");
-      setIsLocalhost(localhost);
       // Extract base domain from env
       const domain = process.env.NEXT_PUBLIC_BASE_DOMAIN || "";
       setBaseDomain(domain);
+      const usePath = usesPathRouting(window.location.hostname, domain);
+      setPathBased(usePath);
+      setHostPrefix(`${window.location.host}/`);
 
       // Check session
       const checkSession = async () => {
@@ -33,19 +35,17 @@ export default function GlobalLoginPage() {
               const { user } = data;
               if (user.accountType === "platform_admin" && !user.company_id) {
                 // Platform Admin without company context
-                if (localhost) {
+                if (usePath) {
                   window.location.href = "/admin";
                 } else {
-                  const targetDomain = domain || window.location.hostname;
-                  window.location.href = `https://admin.${targetDomain}`;
+                  window.location.href = `https://admin.${domain}`;
                 }
                 return; // Keep loading spinner until redirected
               } else if (user.companySlug) {
-                if (localhost) {
+                if (usePath) {
                   window.location.href = `/${user.companySlug}`;
                 } else {
-                  const targetDomain = domain || window.location.hostname;
-                  window.location.href = `https://${user.companySlug}.${targetDomain}`;
+                  window.location.href = `https://${user.companySlug}.${domain}`;
                 }
                 return; // Keep loading spinner until redirected
               }
@@ -66,7 +66,7 @@ export default function GlobalLoginPage() {
     const slug = workspace.trim().toLowerCase();
     if (!slug) return;
 
-    if (isLocalhost) {
+    if (pathBased) {
       window.location.href = `/${slug}/login`;
     } else {
       window.location.href = `https://${slug}.${baseDomain}/login`;
@@ -100,9 +100,9 @@ export default function GlobalLoginPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Workspace URL</label>
             <div className="flex items-center rounded-md shadow-sm">
-              {isLocalhost ? (
+              {pathBased ? (
                 <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
-                  localhost:3000/
+                  {hostPrefix}
                 </span>
               ) : (
                 <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
@@ -117,7 +117,7 @@ export default function GlobalLoginPage() {
                 className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300"
                 autoFocus
               />
-              {!isLocalhost && (
+              {!pathBased && (
                 <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
                   .{baseDomain}
                 </span>

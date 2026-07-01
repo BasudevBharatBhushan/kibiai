@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { usesPathRouting, usesSubdomainRouting } from "@/lib/utils/hostRouting";
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret');
 const COOKIE_NAME = 'kibiai_session';
@@ -104,11 +105,13 @@ async function isValidCompanySlug(slug: string, requestUrl: URL): Promise<boolea
  * This auto-heals browsers with stale subdomain-scoped cookies left from the old
  * login code that set cookies without a domain attribute.
  */
-function clearStaleCookies(response: NextResponse): NextResponse {
-  // Clear without domain (matches subdomain-scoped cookie)
+function clearStaleCookies(response: NextResponse, hostname: string): NextResponse {
+  // Clear without domain (matches host-only / subdomain-scoped cookie)
   response.cookies.set(COOKIE_NAME, '', { path: '/', maxAge: 0 });
-  // Clear with root domain (matches domain-scoped cookie)
-  if (BASE_DOMAIN && !BASE_DOMAIN.includes('localhost')) {
+  // Clear the root-domain-scoped variant ONLY when we're actually on the base
+  // domain. On preview/localhost hosts a `.${BASE_DOMAIN}` cookie was never
+  // set (and would be rejected), so emitting it here is pointless noise.
+  if (usesSubdomainRouting(hostname, BASE_DOMAIN)) {
     response.cookies.set(COOKIE_NAME, '', { path: '/', maxAge: 0, domain: `.${BASE_DOMAIN}` });
   }
   return response;
@@ -140,7 +143,7 @@ export async function middleware(request: NextRequest) {
   // This fixes browsers that still have the old subdomain-scoped cookie.
   if (staleCookie) {
     const response = NextResponse.redirect(new URL(pathname + request.nextUrl.search, request.url));
-    clearStaleCookies(response);
+    clearStaleCookies(response, hostname);
     return response;
   }
 
@@ -151,12 +154,10 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/auth') ||
     pathname === '/invalid-subdomain';
 
-  // ── 1. Skip subdomain logic in dev/localhost environment ──────────────────
-  if (
-    hostname.includes("localhost") ||
-    hostname.includes("127.0.0.1") ||
-    hostname.startsWith("192.168.")
-  ) {
+  // ── 1. Path-based routing for non-base-domain hosts ───────────────────────
+  // Covers localhost, LAN IPs, AND preview deployments (e.g. *.vercel.app).
+  // Subdomain routing is reserved for the base domain and its subdomains.
+  if (usesPathRouting(hostname, BASE_DOMAIN)) {
     if (user) {
       // Rule 3: Login Bypass
       if (pathname.endsWith('/login')) {

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCompany } from "@/components/providers/CompanyProvider";
 import { useAccessControl } from "@/context/AccessControlContext";
+import { usesPathRouting } from "@/lib/utils/hostRouting";
 import kibiaiLogo from "@/assets/kibiai.png";
 import {
   Building2,
@@ -210,15 +211,15 @@ export default function Header() {
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    // On subdomain deployments (production), the slug is already in the subdomain,
+    // On subdomain deployments (base domain), the slug is already in the subdomain,
     // so redirect to /login (not /${slug}/login which creates a double-slug URL).
-    // On localhost, the slug is part of the path, so use /${slug}/login.
-    const isLocalhost = typeof window !== 'undefined' && (
-      window.location.hostname.includes('localhost') ||
-      window.location.hostname.includes('127.0.0.1') ||
-      window.location.hostname.startsWith('192.168.')
-    );
-    window.location.href = isLocalhost ? `/${slug}/login` : '/login';
+    // On path-based hosts (localhost, LAN, preview), the slug is part of the path,
+    // so use /${slug}/login.
+    const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || "";
+    const pathBased =
+      typeof window === 'undefined' ||
+      usesPathRouting(window.location.hostname, baseDomain);
+    window.location.href = pathBased ? `/${slug}/login` : '/login';
   };
 
   const displayName = userName || (userEmail ? firstNameFromEmail(userEmail) : "Admin");

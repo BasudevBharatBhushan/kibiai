@@ -15,6 +15,7 @@ import {
   Upload,
   Loader2
 } from "lucide-react";
+import { usesPathRouting } from "@/lib/utils/hostRouting";
 
 interface Company {
   company_id: string;
@@ -71,22 +72,22 @@ export default function CompanyDetails({
   const companySlug = slugify(company.company_name);
 
   /**
-   * In production: use subdomain URL → https://slug.domain.com/login
-   * In dev/localhost: use path URL   → http://localhost:3000/slug/login
+   * On the base domain: use subdomain URL → https://slug.domain.com/login
+   * Everywhere else (localhost, LAN, preview hosts): use path URL relative to
+   * the current origin → https://<current-host>/slug/login
    */
   const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || "";
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname.startsWith("192.168."));
+  const pathBased =
+    typeof window === "undefined" ||
+    usesPathRouting(window.location.hostname, baseDomain);
 
-  const workspaceUrl = isLocalhost
-    ? `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/${companySlug}/login`
+  const workspaceUrl = pathBased
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/${companySlug}/login`
     : `https://${companySlug}.${baseDomain}/login`;
 
-  // Also provide the raw subdomain URL for display (without /login path)
-  const subdomainUrl = isLocalhost
+  // Also provide the raw subdomain URL for display (without /login path).
+  // Only meaningful on the base domain.
+  const subdomainUrl = pathBased
     ? null
     : `https://${companySlug}.${baseDomain}`;
 
@@ -243,7 +244,7 @@ export default function CompanyDetails({
               <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider">
                 Workspace URL
               </h4>
-              {!isLocalhost && (
+              {!pathBased && (
                 <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">
                   Production
                 </span>

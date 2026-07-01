@@ -3,6 +3,8 @@
  * Automatically handles companyId scoping and standardized error handling.
  */
 
+import { usesPathRouting } from "@/lib/utils/hostRouting";
+
 type ApiOptions = RequestInit & {
   params?: Record<string, string | number | boolean | undefined>;
   companyId?: string;
@@ -59,8 +61,11 @@ class ApiClient {
     if (response.status === 401) {
       // Token likely expired or invalid
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        const isLocalhost = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
-        if (isLocalhost) {
+        const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || '';
+        // On path-based hosts (localhost, LAN, preview) the tenant slug lives in
+        // the path, so preserve it. On the base domain the slug is in the
+        // subdomain, so a bare /login is correct.
+        if (usesPathRouting(window.location.hostname, baseDomain)) {
           const parts = window.location.pathname.split('/');
           const slug = parts[1];
           if (slug && slug !== 'admin' && slug !== 'api') {
