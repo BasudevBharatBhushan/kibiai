@@ -747,7 +747,9 @@ export function ClassicReportView({
         // groupId so that when the user drills down the WHERE clause receives
         // the same value the SQL engine produced (e.g. "2024-01-15" ISO date),
         // not the human-formatted display string (e.g. "01/15/2024").
-        const filterVal = String(node.groupKeyValue ?? node.value ?? "").trim() || "(blank)";
+        // NOTE: do NOT apply the "(blank)" fallback to filterVal — blank groups
+        // have rawValue="" and the SQL filter must send "" not "(blank)".
+        const filterVal = String(node.groupKeyValue ?? node.value ?? "").trim();
         const groupId = `${parentId}|${node.field}:${filterVal}`;
         const hasChildren = !!node.children && node.children.length > 0;
         const hasBodyRows = !!node.bodyRows && node.bodyRows.length > 0;

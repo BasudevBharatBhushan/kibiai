@@ -66,6 +66,11 @@ interface GroupFilterEntry {
 /**
  * Build the optional `WHERE <base col> = ?` clause from a group filter, plus
  * the matching params. Empty array → no clause, no params.
+ *
+ * When a filter value is `""` (empty string) the aggregation query's
+ * `COALESCE(col, '')` has merged both NULL and '' into the same group bucket.
+ * The detail query must therefore match both via `(col IS NULL OR col = '')`
+ * rather than a strict equality, otherwise blank-group drill-downs return 0 rows.
  */
 function buildGroupFilterWhere(groupFilter?: GroupFilterEntry[]): {
   sql: string;
@@ -77,8 +82,15 @@ function buildGroupFilterWhere(groupFilter?: GroupFilterEntry[]): {
   const clauses: string[] = [];
   const params: unknown[] = [];
   for (const gf of groupFilter) {
-    clauses.push(`${baseCol(gf.table, gf.field)} = ?`);
-    params.push(gf.value);
+    const col = baseCol(gf.table, gf.field);
+    if (gf.value === '' || gf.value === null || gf.value === undefined) {
+      // Blank group: COALESCE in the aggregation merges NULL and '' into ''.
+      // Match both so NULL-stored and empty-string-stored rows are returned.
+      clauses.push(`(${col} IS NULL OR ${col} = '')`);
+    } else {
+      clauses.push(`${col} = ?`);
+      params.push(gf.value);
+    }
   }
   return { sql: `WHERE ${clauses.join(' AND ')}`, params };
 }
