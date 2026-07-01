@@ -28,7 +28,7 @@ interface ReportConfiguratorProps {
   viewMode?: "classic" | "print";
   onViewModeChange?: (mode: "classic" | "print") => void;
   filterFields?: FilterField[];
-  dateFields?: string[];
+  dateFields?: Array<{ value: string; label: string }>;
   activeFilters?: Record<string, string>;
   onFilterChange?: (field: string, value: string) => void;
 }
